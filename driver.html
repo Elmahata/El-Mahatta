@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>المحطة — السائق</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0E7566">
+<link rel="manifest" href="/manifest-driver.webmanifest">
+<link rel="icon" href="/assets/icon-driver-192.png">
+<link rel="apple-touch-icon" href="/assets/icon-driver-192.png">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+/* واجهة السائق: أزرار كبيرة، تُستخدم بيد واحدة وهو على التوكتوك */
+.online-card{display:flex;align-items:center;gap:13px;background:var(--surface);border:1px solid var(--line);
+  border-radius:var(--r);padding:14px 16px;box-shadow:var(--shadow)}
+.online-card .txt{flex:1;min-width:0}
+.online-card .st{font-family:var(--display);font-weight:800;font-size:16px}
+.online-card .sub{font-size:12.5px;color:var(--muted)}
+.switch{position:relative;width:58px;height:32px;flex:none}
+.switch input{position:absolute;inset:0;opacity:0;margin:0;cursor:pointer;z-index:2}
+.switch span{position:absolute;inset:0;border-radius:999px;background:var(--inset);transition:background .18s}
+.switch span::after{content:"";position:absolute;top:3px;inset-inline-start:3px;width:26px;height:26px;
+  border-radius:50%;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .18s}
+.switch input:checked+span{background:var(--accent)}
+.switch input:checked+span::after{transform:translateX(-26px)}
+.switch input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+
+.job{background:var(--surface);border:1px solid var(--line);border-inline-start:4px solid var(--accent);
+  border-radius:var(--r);padding:14px 15px;box-shadow:var(--shadow)}
+.job+.job{margin-top:10px}
+.job .head{display:flex;align-items:baseline;gap:10px;margin-bottom:10px}
+.job .price{font-family:var(--display);font-weight:800;font-size:26px;color:var(--fare);
+  font-variant-numeric:tabular-nums;line-height:1}
+.job .price small{font-size:13px;font-weight:700}
+.job .ago{margin-inline-start:auto;font-size:12px;color:var(--muted)}
+.route{display:flex;flex-direction:column;gap:7px;margin-bottom:12px}
+.route .r{display:flex;align-items:flex-start;gap:9px;font-size:14px;line-height:1.45}
+.route .r .d{width:9px;height:9px;border-radius:50%;flex:none;margin-top:6px}
+.route .r .n{font-size:11.5px;color:var(--muted);display:block}
+.btn-take{width:100%;font-size:16px;padding:13px;font-weight:700}
+
+.ride{background:var(--accent-soft);border:1px solid var(--accent);border-radius:var(--r);padding:15px 16px}
+.ride h2{color:var(--accent-ink)}
+.ride .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px}
+@media (max-width:420px){.ride .grid{grid-template-columns:1fr}}
+
+.earn{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.earn .stat{text-align:center}
+
+.pulse{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 0 0 rgba(28,116,73,.5);animation:pl 2s infinite}
+@keyframes pl{70%{box-shadow:0 0 0 9px rgba(28,116,73,0)}100%{box-shadow:0 0 0 0 rgba(28,116,73,0)}}
+@media (prefers-reduced-motion:reduce){.pulse{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <img src="/assets/logo.png" alt="" style="height:38px;width:auto;display:block">
+      <div>
+        <h1>تطبيق السائق</h1>
+        <p class="sub" id="who">المحطة</p>
+      </div>
+      <button class="btn btn-ghost btn-sm" id="out" hidden style="margin-inline-start:auto">خروج</button>
+    </div>
+    <div style="height:14px"></div>
+  </header>
+
+  <!-- تسجيل الدخول -->
+  <section id="gate" class="gate">
+    <div class="card">
+      <h2>دخول السائق</h2>
+      <p class="hint">اكتب رقم موبايلك والكود اللي أخدته من الإدارة.</p>
+      <div style="margin-top:14px">
+        <div class="field"><label for="ph">رقم الموبايل</label><input id="ph" inputmode="tel" placeholder="01xxxxxxxxx"></div>
+        <div class="field"><label for="cd">الكود</label><input id="cd" inputmode="numeric" maxlength="6" placeholder="••••"></div>
+        <button class="btn btn-primary btn-wide" id="go">دخول</button>
+        <p class="hint" id="gateErr" style="margin-top:10px;color:var(--crit)" hidden></p>
+      </div>
+    </div>
+  </section>
+
+  <!-- الشاشة الرئيسية -->
+  <section id="app" class="stack" hidden>
+
+    <div id="subWarn" class="banner b-warn" hidden></div>
+
+    <button class="banner b-note" id="alertsBtn" style="border:0;width:100%;text-align:start;cursor:pointer;font-family:var(--body)">
+      <span>♪</span><span><b>فعّل صوت الطلبات</b> — الموبايل هيرن ويهتز لما يوصل طلب جديد، والشاشة تفضل منوّرة. دوس هنا.</span>
+    </button>
+
+    <div class="online-card">
+      <label class="switch">
+        <input type="checkbox" id="onl" checked aria-label="استقبال المشاوير">
+        <span></span>
+      </label>
+      <div class="txt">
+        <div class="st" id="onlSt">بستقبل مشاوير</div>
+        <div class="sub" id="onlSub">سيب الصفحة مفتوحة علشان توصلك الطلبات</div>
+      </div>
+      <span class="pulse" id="pulse"></span>
+    </div>
+
+    <!-- المشوار الحالي -->
+    <div id="rideWrap" hidden>
+      <div class="ride">
+        <h2>مشوارك الحالي</h2>
+        <div class="route" style="margin-top:10px">
+          <div class="r"><span class="d" style="background:var(--accent)"></span>
+            <div><b id="rFrom">—</b><span class="n">الانطلاق</span></div></div>
+          <div class="r"><span class="d" style="background:var(--fare)"></span>
+            <div><b id="rTo">—</b><span class="n">الوصول</span></div></div>
+        </div>
+        <div class="leg" style="gap:12px">
+          <span class="chip c-accent num" id="rFare">—</span>
+          <span class="num" id="rRider" style="font-weight:600"></span>
+        </div>
+        <div class="grid">
+          <a class="btn btn-ghost" id="rCall" href="#">اتصال بالراكب</a>
+          <a class="btn btn-ghost" id="rWa" target="_blank" rel="noopener" href="#">واتساب</a>
+          <a class="btn btn-ghost" id="rNavA" target="_blank" rel="noopener" href="#">مسار الانطلاق</a>
+          <a class="btn btn-ghost" id="rNavB" target="_blank" rel="noopener" href="#">مسار الوصول</a>
+        </div>
+        <div id="codeGate" style="margin-top:12px;background:var(--surface);border-radius:var(--r-sm);padding:12px">
+          <label for="rCode" style="margin-bottom:6px">اسأل الراكب عن كود الركوب (٤ أرقام)</label>
+          <div style="display:flex;gap:8px">
+            <input id="rCode" inputmode="numeric" maxlength="4" placeholder="••••" style="font-size:22px;letter-spacing:8px;text-align:center;direction:ltr;flex:1">
+            <button class="btn btn-primary" id="rStart">ابدأ الرحلة</button>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-wide" id="rDone" style="margin-top:10px;font-size:16px;padding:13px" hidden>وصلنا — تمّت الرحلة</button>
+        <button class="btn btn-ghost btn-wide" id="rRelease" style="margin-top:8px">سيب المشوار لسائق تاني</button>
+      </div>
+    </div>
+
+    <!-- الطلبات المتاحة -->
+    <div id="feedWrap">
+      <div class="card" style="padding:13px 16px">
+        <h2 style="margin:0">طلبات متاحة <span class="chip c-warn num" id="cnt" hidden></span></h2>
+        <p class="hint" id="feedHint">أول سائق يضغط «خد المشوار» ياخده</p>
+      </div>
+      <div id="jobs" style="margin-top:12px"></div>
+    </div>
+
+    <div class="earn">
+      <div class="stat"><span class="k" id="tRides">0</span><div class="l">رحلة النهارده</div></div>
+      <div class="stat"><span class="k" id="tEarn">0</span><div class="l">جنيه حصّلتها</div></div>
+    </div>
+
+    <div class="banner b-note">
+      <span>◆</span><span>السعر ثابت ومنشور — مفيش مفاصلة مع الراكب. ده اللي بيخلّي الناس تستخدم التطبيق بدل الشارع.</span>
+    </div>
+  </section>
+</div>
+
+<script src="/assets/common.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $ = TT.$;
+  var KEY = "tt-driver";
+  var auth = null, timer = null, busy = false, lastIds = "";
+
+  try{ auth = JSON.parse(localStorage.getItem(KEY) || "null"); }catch(e){}
+
+  function hdr(){
+    return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "content-type": "application/json" };
+  }
+
+  function call(path, opts){
+    opts = opts || {};
+    return fetch("/api/driver/" + path, {
+      method: opts.method || "GET",
+      headers: hdr(),
+      body: opts.body ? JSON.stringify(opts.body) : undefined
+    }).then(function(r){
+      return r.json().catch(function(){ return {}; }).then(function(j){
+        if(!r.ok) throw Object.assign(new Error(j.error || "خطأ"), { status: r.status });
+        return j;
+      });
+    });
+  }
+
+  function navUrl(pt){
+    if(!pt) return "#";
+    var q = (pt.lat != null) ? (pt.lat + "," + pt.lng) : (pt.label + "، كفر صقر، الشرقية");
+    return "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=" + encodeURIComponent(q);
+  }
+
+  /* ---------- دخول ---------- */
+  $("go").addEventListener("click", function(){
+    var phone = $("ph").value.replace(/\D/g,""), code = $("cd").value.replace(/\D/g,"");
+    var e = $("gateErr"); e.hidden = true;
+    if(phone.length < 9 || !code){ e.textContent = "اكتب رقم الموبايل والكود"; e.hidden = false; return; }
+    var b = this; b.disabled = true; b.textContent = "جارٍ الدخول…";
+    fetch("/api/driver/login", {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phone: phone, code: code })
+    }).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "خطأ"); return j; }); })
+      .then(function(j){
+        auth = { phone: phone, code: code, name: j.driver.name };
+        try{ localStorage.setItem(KEY, JSON.stringify(auth)); }catch(x){}
+        start();
+      })
+      .catch(function(err){ e.textContent = err.message; e.hidden = false; })
+      .finally(function(){ b.disabled = false; b.textContent = "دخول"; });
+  });
+  $("cd").addEventListener("keydown", function(e){ if(e.key === "Enter") $("go").click(); });
+
+  $("out").addEventListener("click", function(){
+    if(timer) clearInterval(timer);
+    try{ localStorage.removeItem(KEY); }catch(e){}
+    auth = null;
+    $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true;
+    $("who").textContent = "المحطة";
+  });
+
+  /* ---------- أونلاين ---------- */
+  $("onl").addEventListener("change", function(){
+    var on = this.checked;
+    $("onlSt").textContent = on ? "بستقبل مشاوير" : "مش بستقبل دلوقتي";
+    $("onlSub").textContent = on ? "سيب الصفحة مفتوحة علشان توصلك الطلبات" : "مفيش طلبات هتوصلك";
+    $("pulse").hidden = !on;
+    call("online", { method: "POST", body: { online: on } }).then(tick).catch(function(){});
+  });
+
+  /* ---------- العرض ---------- */
+  function renderJobs(list){
+    var host = $("jobs");
+    var ids = list.map(function(j){ return j.id; }).join(",");
+    $("cnt").hidden = !list.length;
+    $("cnt").textContent = list.length;
+
+    if(!list.length){
+      host.innerHTML = '<div class="empty">مفيش طلبات دلوقتي. سيب الصفحة مفتوحة.</div>';
+      lastIds = ""; return;
+    }
+    /* لو نفس الطلبات، حدّث الوقت بس — إعادة الرسم بتقطع ضغطة السائق */
+    if(ids === lastIds){
+      list.forEach(function(j){
+        var el = host.querySelector('[data-ago="' + j.id + '"]');
+        if(el) el.textContent = TT.timeAgo(j.createdAt);
+      });
+      return;
+    }
+    lastIds = ids;
+
+    host.innerHTML = list.map(function(j){
+      return '<div class="job">'
+        + '<div class="head"><span class="price">' + j.fare + '<small> ج</small></span>'
+        + '<span class="chip c-neutral">' + (j.sameZone ? "داخل المنطقة" : "بين منطقتين") + '</span>'
+        + '<span class="ago" data-ago="' + TT.esc(j.id) + '">' + TT.timeAgo(j.createdAt) + '</span></div>'
+        + '<div class="route">'
+        + '<div class="r"><span class="d" style="background:var(--accent)"></span><div><b>' + TT.esc(j.from.label) + '</b><span class="n">الانطلاق</span></div></div>'
+        + '<div class="r"><span class="d" style="background:var(--fare)"></span><div><b>' + TT.esc(j.to.label) + '</b><span class="n">الوصول</span></div></div>'
+        + '</div>'
+        + '<button class="btn btn-primary btn-take" data-take="' + TT.esc(j.id) + '">خد المشوار</button>'
+        + '</div>';
+    }).join("");
+  }
+
+  function renderRide(r){
+    $("rideWrap").hidden = !r;
+    $("feedWrap").hidden = Boolean(r);
+    if(!r) return;
+    $("rFrom").textContent = r.from.label;
+    $("rTo").textContent = r.to.label;
+    $("rFare").textContent = r.fare + " ج نقداً";
+    $("rRider").textContent = r.riderName + " · " + r.riderPhone;
+    $("rCall").href = "tel:" + r.riderPhone;
+    $("rWa").href = "https://wa.me/" + TT.waNum(r.riderPhone);
+    $("rNavA").href = navUrl(r.from);
+    $("rNavB").href = navUrl(r.to);
+    $("rDone").setAttribute("data-rid", r.id);
+    $("rRelease").setAttribute("data-rid", r.id);
+    $("rStart").setAttribute("data-rid", r.id);
+    $("codeGate").hidden = Boolean(r.startedAt);
+    $("rDone").hidden = !r.startedAt;
+  }
+
+  document.addEventListener("click", function(e){
+    if(!e.target.closest) return;
+
+    var t = e.target.closest("[data-take]");
+    if(t){
+      if(busy) return;
+      busy = true;
+      var id = t.getAttribute("data-take");
+      t.disabled = true; t.textContent = "جارٍ الحجز…";
+      call("claim", { method: "POST", body: { requestId: id } })
+        .then(function(){ TT.toast("المشوار بقى ليك ✓"); })
+        .catch(function(err){ TT.toast(err.message || "تعذّر الحجز"); })
+        .then(function(){ lastIds = ""; return tick(); })
+        .then(function(){ busy = false; }, function(){ busy = false; });
+      return;
+    }
+
+    var d = e.target.closest("#rDone, #rRelease");
+    if(d){
+      var rid = d.getAttribute("data-rid"); if(!rid) return;
+      var rel = (d.id === "rRelease");
+      if(rel && !confirm("تسيب المشوار ويرجع لباقي السواقين؟")) return;
+      d.disabled = true;
+      call("finish", { method: "POST", body: { requestId: rid, status: rel ? "released" : "done" } })
+        .then(function(){ TT.toast(rel ? "رجع للسواقين" : "تمّت الرحلة ✓"); })
+        .catch(function(err){ TT.toast(err.message || "خطأ"); })
+        .then(function(){ lastIds = ""; return tick(); })
+        .then(function(){ d.disabled = false; }, function(){ d.disabled = false; });
+    }
+  });
+
+  /* ---------- تنبيه الطلبات: صوت + اهتزاز + إشعار + شاشة منوّرة ---------- */
+  var actx = null, wake = null, seen = {}, firstFeed = true;
+  function beep(){
+    if(!actx) return;
+    var t = actx.currentTime;
+    [0, 0.28, 0.56].forEach(function(d){
+      var o = actx.createOscillator(), g = actx.createGain();
+      o.type = "square"; o.frequency.value = d === 0.28 ? 660 : 880;
+      g.gain.setValueAtTime(0.0001, t + d); g.gain.exponentialRampToValueAtTime(0.35, t + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.22);
+      o.connect(g); g.connect(actx.destination); o.start(t + d); o.stop(t + d + 0.24);
+    });
+  }
+  function keepAwake(){
+    if(!("wakeLock" in navigator)) return;
+    navigator.wakeLock.request("screen").then(function(w){ wake = w; }).catch(function(){});
+  }
+  function alertNew(job){
+    beep();
+    if(navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 500]);
+    if(document.hidden && "Notification" in window && Notification.permission === "granted"){
+      var t = "طلب جديد — " + job.fare + " ج", o = { body: job.from.label + " ← " + job.to.label, icon: "/assets/icon-driver-192.png", tag: "job", vibrate: [300,120,300] };
+      if(navigator.serviceWorker) navigator.serviceWorker.ready.then(function(reg){ reg.showNotification(t, o); }).catch(function(){});
+      else try{ new Notification(t, o); }catch(e){}
+    }
+  }
+  $("alertsBtn").addEventListener("click", function(){
+    try{ actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); beep(); }catch(e){}
+    if("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+    keepAwake();
+    try{ localStorage.setItem("tt-alerts", "1"); }catch(e){}
+    this.hidden = true;
+    TT.toast("التنبيهات شغالة ✓");
+  });
+  document.addEventListener("visibilitychange", function(){ if(!document.hidden && actx) keepAwake(); });
+  function checkNew(list){
+    list.forEach(function(j){
+      if(!seen[j.id]){ seen[j.id] = 1; if(!firstFeed) alertNew(j); }
+    });
+    firstFeed = false;
+  }
+
+  document.addEventListener("click", function(e){
+    var s = e.target.closest && e.target.closest("#rStart"); if(!s) return;
+    var rid = s.getAttribute("data-rid"), code = $("rCode").value.replace(/\D/g,"");
+    if(code.length !== 4){ TT.toast("الكود ٤ أرقام"); $("rCode").focus(); return; }
+    s.disabled = true;
+    call("start", { method:"POST", body:{ requestId: rid, code: code } })
+      .then(function(){ TT.toast("الرحلة بدأت ✓"); $("rCode").value = ""; })
+      .catch(function(err){ TT.toast(err.message || "خطأ"); })
+      .then(function(){ s.disabled = false; return tick(); });
+  });
+
+  /* ---------- النبض ---------- */
+  function tick(){
+    if(!auth) return Promise.resolve();
+    return call("feed").then(function(j){
+      $("who").textContent = j.me.name + (j.me.plate ? " · لوحة " + j.me.plate : "");
+      $("onl").checked = j.me.online;
+      $("pulse").hidden = !j.me.online;
+      $("onlSt").textContent = j.me.online ? "بستقبل مشاوير" : "مش بستقبل دلوقتي";
+      $("tRides").textContent = j.today.rides;
+      $("tEarn").textContent = j.today.earned;
+
+      var sb = j.sub || {}, W = $("subWarn");
+      function fmt(s){ return s ? new Date(s + "T00:00:00").toLocaleDateString("ar-EG", { day:"numeric", month:"long" }) : ""; }
+      var prices = (sb.week ? sb.week + " ج في الأسبوع" : "") + (sb.week && sb.month ? " أو " : "") + (sb.month ? sb.month + " ج في الشهر" : "");
+      W.hidden = false;
+      if(sb.state === "free" && sb.until){
+        W.className = "banner b-note";
+        W.innerHTML = '<span>★</span><span><b>المحطة مجانية دلوقتي</b> لحد ' + fmt(sb.until) + ' (باقي ' + TT.daysTo(sb.until) + ' يوم). بعدها اشتراك ' + prices + '.</span>';
+      } else if(sb.state === "ok"){
+        var left = TT.daysTo(sb.until);
+        if(left <= 2){ W.className = "banner b-warn"; W.innerHTML = '<span>⚠</span><span>اشتراكك بيخلص ' + (left <= 0 ? "النهارده" : "خلال " + left + " يوم") + ' — جدّده مع الإدارة (' + prices + ').</span>'; }
+        else W.hidden = true;
+      } else if(sb.state === "grace"){
+        W.className = "banner b-warn";
+        W.innerHTML = '<span>⚠</span><span><b>اشتراكك خلص</b> — معاك مهلة لحد ' + fmt(sb.stopOn) + '. بعدها الطلبات هتوقف. جدّد مع الإدارة (' + prices + ').</span>';
+      } else if(sb.state === "stopped"){
+        W.className = "banner b-crit";
+        W.innerHTML = '<span>⚠</span><span><b>الطلبات وقفت</b> — اشتراكك خلص. جدّد مع الإدارة (' + prices + ') وهترجع تشتغل على طول.</span>';
+      } else W.hidden = true;
+
+      renderRide(j.mine);
+      if(!j.mine){ checkNew(j.available); renderJobs(j.available); }
+      $("feedHint").textContent = j.me.online
+        ? "أول سائق يضغط «خد المشوار» ياخده"
+        : "افتح استقبال المشاوير علشان تشوف الطلبات";
+    }).catch(function(err){
+      if(err.status === 401 || err.status === 403){
+        if(timer) clearInterval(timer);
+        try{ localStorage.removeItem(KEY); }catch(e){}
+        auth = null;
+        $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true;
+        $("gateErr").textContent = err.message; $("gateErr").hidden = false;
+      }
+    });
+  }
+
+  function start(){
+    $("gate").hidden = true; $("app").hidden = false; $("out").hidden = false;
+    tick();
+    if(timer) clearInterval(timer);
+    timer = setInterval(function(){ if(!document.hidden) tick(); }, 4000);
+  }
+
+  document.addEventListener("visibilitychange", function(){ if(!document.hidden && auth) tick(); });
+
+  if(auth && auth.phone && auth.code) start();
+})();
+</script>
+<script>if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(function(){});</script>
+</body>
+</html>

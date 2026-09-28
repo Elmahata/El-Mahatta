@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>المحطة — تابع الرحلة</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0E7566">
+<link rel="icon" href="/assets/icon-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+#map{height:46vh;min-height:240px;border-radius:var(--r);border:1px solid var(--line);overflow:hidden}
+.steps{display:flex;flex-direction:column;gap:0}
+.st{display:flex;gap:11px;align-items:flex-start;padding:8px 0;color:var(--muted)}
+.st .b{width:14px;height:14px;border-radius:50%;border:2px solid var(--line);flex:none;margin-top:5px;background:var(--surface)}
+.st.on{color:var(--ink)} .st.on .b{background:var(--accent);border-color:var(--accent)}
+.st small{display:block;font-size:12px;color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <img src="/assets/logo.png" alt="" style="height:36px;width:auto;display:block">
+      <div><h1>المحطة</h1><p class="sub">متابعة رحلة</p></div>
+      <span class="chip c-ok" id="live" style="margin-inline-start:auto">● مباشر</span>
+    </div>
+    <div style="height:14px"></div>
+  </header>
+
+  <section class="stack">
+    <div id="err" class="banner b-crit" hidden></div>
+    <div class="card" id="card" hidden>
+      <h2 id="title" style="font-size:19px">—</h2>
+      <p class="hint" id="drv"></p>
+      <div class="steps" style="margin-top:12px">
+        <div class="st" id="s1"><span class="b"></span><div>طلب توكتوك<small id="t1"></small></div></div>
+        <div class="st" id="s2"><span class="b"></span><div>سائق قبل وجاي<small id="t2"></small></div></div>
+        <div class="st" id="s3"><span class="b"></span><div>ركب — في الطريق<small id="t3"></small></div></div>
+        <div class="st" id="s4"><span class="b"></span><div>وصل بالسلامة<small id="t4"></small></div></div>
+      </div>
+    </div>
+    <div id="map"></div>
+    <p class="hint" style="text-align:center">الصفحة دي مش بتبيّن أي أرقام تليفونات. بتتحدّث لوحدها كل ١٠ ثواني.</p>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/assets/common.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $ = TT.$, q = new URLSearchParams(location.search);
+  var id = q.get("id"), s = q.get("s"), map = null, drawn = false, timer = null;
+  function hm(ts){ return ts ? new Date(ts).toLocaleTimeString("ar-EG", { hour:"numeric", minute:"2-digit" }) : ""; }
+  function load(){
+    fetch("/api/share/" + encodeURIComponent(id || "") + "?s=" + encodeURIComponent(s || ""))
+      .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "خطأ"); return j; }); })
+      .then(function(j){
+        $("card").hidden = false; $("err").hidden = true;
+        var who = j.rider || "الراكب";
+        var st = j.status, started = Boolean(j.startedAt);
+        $("title").textContent =
+          st === "done" ? who + " وصل بالسلامة ✓" :
+          st === "cancelled" ? "الرحلة اتلغت" :
+          st === "assigned" ? (started ? who + " في الطريق لـ " + j.to.label : "السائق جاي لـ " + who) :
+          "بندوّر على سائق لـ " + who;
+        $("drv").textContent = j.driver ? ("مع " + j.driver.name + (j.driver.plate ? " · توكتوك لوحة " + j.driver.plate : "")) : "";
+        var on = [true, Boolean(j.assignedAt) || st === "done", started || st === "done", st === "done"];
+        ["s1","s2","s3","s4"].forEach(function(k, i){ $(k).classList.toggle("on", on[i]); });
+        $("t1").textContent = hm(j.createdAt) + " · من " + j.from.label;
+        $("t2").textContent = hm(j.assignedAt);
+        $("t3").textContent = hm(j.startedAt);
+        $("t4").textContent = st === "done" ? hm(j.finishedAt) + " · " + j.to.label : "";
+        if(st === "done" || st === "cancelled"){ $("live").hidden = true; if(timer){ clearInterval(timer); timer = null; } }
+        if(!drawn && j.from.lat != null && j.to.lat != null){
+          drawn = true;
+          map = TT.initMap("map");
+          var a = [j.from.lat, j.from.lng], b = [j.to.lat, j.to.lng];
+          L.marker(a, { icon: TT.markerIcon("#0E7566", true) }).addTo(map).bindTooltip(j.from.label);
+          L.marker(b, { icon: TT.markerIcon("#BC4E1E", true) }).addTo(map).bindTooltip(j.to.label);
+          var line = L.polyline([a, b], { color:"#0E7566", weight:4 }).addTo(map);
+          map.fitBounds(line.getBounds(), { padding:[40,40], maxZoom:17 });
+        }
+      })
+      .catch(function(e){ $("err").textContent = e.message; $("err").hidden = false; });
+  }
+  load();
+  timer = setInterval(function(){ if(!document.hidden) load(); }, 10000);
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>المحطة — الإدارة</title>
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#0E7566">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.dot-on{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.dot-off{width:8px;height:8px;border-radius:50%;background:var(--line);flex:none}
+.code{font-family:ui-monospace,Menlo,Consolas,monospace;font-weight:700;letter-spacing:2px}
+#pmap{height:300px;border-radius:var(--r);border:1px solid var(--line);overflow:hidden}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <div class="brand">
+      <img src="/assets/logo.png" alt="" style="height:38px;width:auto;display:block">
+      <div>
+        <h1>إدارة المحطة</h1>
+        <p class="sub">مدينة كفر صقر</p>
+      </div>
+      <span class="fare-pill" id="farePill">15–20 ج</span>
+    </div>
+    <nav role="tablist" aria-label="أقسام" id="nav" hidden>
+      <button role="tab" id="tab-live" aria-selected="true">المشاوير <span id="badge"></span></button>
+      <button role="tab" id="tab-drivers" aria-selected="false">السائقون</button>
+      <button role="tab" id="tab-reports" aria-selected="false">البلاغات <span id="repBadge"></span></button>
+      <button role="tab" id="tab-zones" aria-selected="false">المناطق</button>
+      <button role="tab" id="tab-places" aria-selected="false">نقاط الركوب</button>
+      <button role="tab" id="tab-admin" aria-selected="false">المتابعة</button>
+    </nav>
+    <div style="height:14px"></div>
+  </header>
+
+  <!-- بوابة الدخول -->
+  <section id="gate" class="gate">
+    <div class="card">
+      <h2>دخول الإدارة</h2>
+      <p class="hint">اكتب الرقم السرّي اللي ضبطته في Cloudflare.</p>
+      <div class="field" style="margin-top:14px"><label for="pin">الرقم السرّي</label>
+        <input id="pin" type="password" inputmode="numeric" autocomplete="current-password"></div>
+      <button class="btn btn-primary btn-wide" id="enter">دخول</button>
+      <p class="hint" id="gErr" style="margin-top:10px;color:var(--crit)" hidden></p>
+    </div>
+  </section>
+
+  <!-- المشاوير -->
+  <section id="p-live" class="stack" hidden>
+    <div class="stats" id="liveStats"></div>
+    <div class="card" style="padding:13px 16px">
+      <h2 style="margin:0">المشاوير</h2>
+      <p class="hint">السواقين بيقبلوا الطلبات بنفسهم من تطبيق السائق — إنت بس بتتابع وتتدخل لو لزم.</p>
+      <div class="seg" style="margin-top:12px" id="filt">
+        <button aria-pressed="true" data-f="open">الجارية</button>
+        <button aria-pressed="false" data-f="done">المنتهية</button>
+      </div>
+    </div>
+    <div id="rides"></div>
+    <div class="card">
+      <h2>طلب بالتليفون</h2>
+      <p class="hint">للي معندوش سمارت فون: دخّل الطلب وهو معاك على الخط، وهيوصل للسواقين زي أي طلب.</p>
+      <div style="margin-top:12px">
+        <div class="row">
+          <div class="field"><label for="phName">اسم المتصل</label><input id="phName"></div>
+          <div class="field"><label for="phPhone">رقمه</label><input id="phPhone" inputmode="tel" placeholder="01xxxxxxxxx"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="phFrom">من</label><select id="phFrom"></select></div>
+          <div class="field"><label for="phTo">إلى</label><select id="phTo"></select></div>
+        </div>
+        <div class="field"><label for="phNote">علامة مميزة (اختياري)</label><input id="phNote" placeholder="قدام محل الحلويات"></div>
+        <button class="btn btn-primary btn-wide" id="phSend">ابعت للسواقين</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- البلاغات -->
+  <section id="p-reports" class="stack" hidden>
+    <div class="banner b-note"><span>◆</span><span>كل بلاغ بيوصل من الراكب نفسه. كلّم الراكب الأول، وبعدين السائق. لو نفس السائق اتبلّغ عنه مرتين في «سعر أكتر»، وقّفه.</span></div>
+    <div id="reportList"></div>
+  </section>
+
+  <!-- السائقون -->
+  <section id="p-drivers" class="stack" hidden>
+    <div class="card">
+      <h2>إضافة سائق</h2>
+      <p class="hint">التكاتك المرخّصة فقط. الكود ده اللي السائق بيدخل بيه على تطبيقه.</p>
+      <div style="margin-top:14px">
+        <div class="row">
+          <div class="field"><label for="dName">الاسم</label><input id="dName" placeholder="الاسم رباعي"></div>
+          <div class="field"><label for="dPhone">رقم الموبايل</label><input id="dPhone" inputmode="tel" placeholder="01xxxxxxxxx"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="dPlate">رقم اللوحة المعدنية</label><input id="dPlate" placeholder="مطلوب"></div>
+          <div class="field"><label for="dLic">رقم رخصة القيادة</label><input id="dLic"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="dLicExp">انتهاء الرخصة</label><input id="dLicExp" type="date"></div>
+        </div>
+        <div class="row">
+          <div class="field"><label for="dCode">كود الدخول (٤ أرقام)</label><input id="dCode" inputmode="numeric" maxlength="6" placeholder="يتولّد تلقائياً"></div>
+          <div class="field"><label for="dOwner">مالك التوكتوك</label><input id="dOwner" placeholder="لو غير السائق"></div>
+        </div>
+        <button class="btn btn-primary btn-wide" id="addDriver">إضافة السائق</button>
+      </div>
+    </div>
+    <div id="driverList"></div>
+  </section>
+
+  <!-- المناطق -->
+  <section id="p-zones" class="stack" hidden>
+    <div class="banner b-note">
+      <span>◆</span><span>المناطق مبنية على شوارع حقيقية من دليل المدينة — مش تقسيم رسمي. «حي النصر» هو الحي الوحيد المؤكد. عدّلها مع السواقين.</span>
+    </div>
+    <div class="card">
+      <h2>مناطق التسعير</h2>
+      <div style="margin-top:12px;display:flex;gap:9px;flex-wrap:wrap">
+        <input id="newZone" placeholder="اسم منطقة جديدة" style="flex:1;min-width:170px">
+        <button class="btn btn-ghost" id="addZone">إضافة</button>
+      </div>
+    </div>
+    <div id="zoneList"></div>
+  </section>
+
+  <!-- نقاط الركوب -->
+  <section id="p-places" class="stack" hidden>
+    <div class="card">
+      <h2>تحديد الإحداثيات</h2>
+      <p class="hint">اختر نقطة من القائمة تحت، وبعدين اضغط مكانها على الخريطة.</p>
+      <div style="margin-top:12px"><div id="pmap"></div></div>
+      <p class="hint" id="pmapSel" style="margin-top:8px"></p>
+    </div>
+    <div class="card">
+      <div style="display:flex;gap:9px;flex-wrap:wrap">
+        <input id="newPlace" placeholder="اسم نقطة جديدة" style="flex:1;min-width:150px">
+        <select id="newPlaceZone" style="width:auto;min-width:140px"></select>
+        <button class="btn btn-ghost" id="addPlace">إضافة</button>
+      </div>
+    </div>
+    <div id="placeList"></div>
+  </section>
+
+  <!-- المتابعة -->
+  <section id="p-admin" class="stack" hidden>
+    <div class="stats" id="stats"></div>
+    <div class="card">
+      <h2>إعدادات التسعير</h2>
+      <div class="row" style="margin-top:12px">
+        <div class="field"><label for="cSame">داخل نفس المنطقة (ج)</label><input id="cSame" type="number" min="0" step="1" value="15"></div>
+        <div class="field"><label for="cCross">بين منطقتين (ج)</label><input id="cCross" type="number" min="0" step="1" value="20"></div>
+      </div>
+      <div class="banner b-note" style="margin-bottom:12px"><span>★</span><span><b>مجاني الأول، وبعدين اشتراك</b> — السائق يختار أسبوعي أو شهري، ويدفع كاش للإدارة. الراكب مابيدفعش حاجة غير الأجرة.</span></div>
+      <div class="field"><label for="cPaidFrom">الاشتراكات تبدأ من يوم</label>
+        <div style="display:flex;gap:8px"><input id="cPaidFrom" type="date" style="flex:1"><button class="btn btn-ghost btn-sm" id="paid6" type="button">بعد ٦ شهور</button></div>
+        <p class="hint" id="paidHint" style="margin-top:4px"></p></div>
+      <div class="row">
+        <div class="field"><label for="cWeek">أسبوعي (ج)</label><input id="cWeek" type="number" min="0" step="5" value="30"></div>
+        <div class="field"><label for="cMonth">شهري (ج)</label><input id="cMonth" type="number" min="0" step="5" value="100"></div>
+        <div class="field"><label for="cGrace">مهلة بعد الانتهاء (يوم)</label><input id="cGrace" type="number" min="0" step="1" value="3"></div>
+      </div>
+      <button class="btn btn-ghost" id="saveCfg">حفظ</button>
+      <div class="banner b-warn" style="margin-top:14px">
+        <span>⚠</span><span>راجع تعريفة التوكتوك المعتمدة من محافظ الشرقية (قانون المرور ١٧/٢٠٢٤) قبل تثبيت السعر.</span>
+      </div>
+    </div>
+    <div class="card">
+      <h2>رخص على وشك الانتهاء</h2>
+      <div id="expiring" style="margin-top:10px"></div>
+    </div>
+    <div class="card">
+      <h2>الرحلات حسب نوع التسعير</h2>
+      <div id="mix" style="margin-top:10px"></div>
+    </div>
+  </section>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/assets/common.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $ = TT.$;
+  var KEY = "tt-admin";
+  var pin = null, S = { zones:[], places:[], drivers:[], requests:[], cfg:{same:15,cross:20,sub:200} };
+  var filt = "open", timer = null, pmap = null, pLayers = [], selPlace = null;
+
+  try{ pin = localStorage.getItem(KEY); }catch(e){}
+
+  function api(path, opts){ opts = opts || {}; opts.pin = pin; return TT.api(path, opts); }
+  var save = function(kind, id, body){ return api("doc/"+kind+"/"+id, { method:"PUT", body:body }).then(load); };
+  var del  = function(kind, id){ return api("doc/"+kind+"/"+id, { method:"DELETE" }).then(load); };
+  var clone = function(o){ return JSON.parse(JSON.stringify(o)); };
+
+  /* ---------- دخول ---------- */
+  $("enter").addEventListener("click", function(){
+    var v = $("pin").value.trim(); if(!v) return;
+    var b = this; b.disabled = true; b.textContent = "…";
+    TT.api("login", { method:"POST", body:{ pin:v } })
+      .then(function(){ pin = v; try{ localStorage.setItem(KEY, v); }catch(e){} start(); })
+      .catch(function(e){ $("gErr").textContent = e.message; $("gErr").hidden = false; })
+      .then(function(){ b.disabled = false; b.textContent = "دخول"; });
+  });
+  $("pin").addEventListener("keydown", function(e){ if(e.key === "Enter") $("enter").click(); });
+
+  /* ---------- تبويبات ---------- */
+  var tabs = ["live","drivers","reports","zones","places","admin"];
+  tabs.forEach(function(t){
+    $("tab-"+t).addEventListener("click", function(){
+      tabs.forEach(function(o){ $("tab-"+o).setAttribute("aria-selected", String(o===t)); $("p-"+o).hidden = (o!==t); });
+      if(t === "places" && pmap) setTimeout(function(){ pmap.invalidateSize(); drawPlaces(); }, 60);
+    });
+  });
+
+  /* ---------- عرض ---------- */
+  function zOpts(sel){
+    return S.zones.map(function(z){ return '<option value="'+TT.esc(z.id)+'"'+(z.id===sel?' selected':'')+'>'+TT.esc(z.name)+'</option>'; }).join("");
+  }
+
+  function renderRides(){
+    var list = S.requests.filter(function(r){
+      return filt === "open" ? (r.status==="pending"||r.status==="assigned") : (r.status==="done"||r.status==="cancelled");
+    }).sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); }).slice(0,60);
+
+    var waiting = S.requests.filter(function(r){ return r.status==="pending"; }).length;
+    $("badge").innerHTML = waiting ? '<span class="chip c-warn num" style="margin-inline-start:4px">'+waiting+'</span>' : "";
+
+    var online = S.drivers.filter(function(d){ return d.isOnline; }).length;
+    var active = S.requests.filter(function(r){ return r.status==="assigned"; }).length;
+    var doneToday = S.requests.filter(function(r){ return r.status==="done" && r.day===TT.today(); });
+    $("liveStats").innerHTML = [
+      [waiting,'بانتظار سائق'],[active,'مشوار شغّال'],[online,'سائق أونلاين'],
+      [doneToday.reduce(function(s,r){ return s+(r.fare||0); },0),'جنيه النهارده']
+    ].map(function(s){ return '<div class="stat"><span class="k">'+s[0]+'</span><div class="l">'+s[1]+'</div></div>'; }).join("");
+
+    if(!list.length){ $("rides").innerHTML = '<div class="empty">مفيش مشاوير هنا.</div>'; return; }
+
+    $("rides").innerHTML = list.map(function(r){
+      var drv = r.driverId ? TT.byId(S.drivers, r.driverId) : null;
+      var chip = r.status==="pending" ? '<span class="chip c-warn">بانتظار سائق</span>'
+        : r.status==="assigned" ? '<span class="chip c-accent">مع '+TT.esc(drv?drv.name:"سائق")+'</span>'
+        : r.status==="done" ? '<span class="chip c-ok">تمّت</span>' : '<span class="chip c-neutral">أُلغيت</span>';
+      var assign = "";
+      if(r.status === "pending"){
+        assign = '<select data-assign="'+TT.esc(r.id)+'" style="flex:1;min-width:150px;font-size:13px;padding:6px 9px">'
+          + '<option value="">— توزيع يدوي —</option>'
+          + S.drivers.filter(function(d){ return d.active !== false; }).map(function(d){
+              return '<option value="'+TT.esc(d.id)+'">'+TT.esc(d.name)+' · '+TT.esc(d.plate||"")+'</option>'; }).join("")
+          + '</select>';
+      }
+      return '<div class="item '+(r.status==="pending"?"waiting":(r.status==="assigned"?"assigned":""))+'">'
+        + '<div class="item-head"><strong>'+TT.esc(r.riderName||"راكب")+'</strong>'+chip
+        + '<span class="chip c-neutral">'+(r.sameZone?"داخل المنطقة":"بين منطقتين")+'</span>'
+        + (r.source==="phone" ? '<span class="chip c-accent">بالتليفون</span>' : '')
+        + (r.status==="assigned" ? (r.startedAt ? '<span class="chip c-ok">الراكب ركب</span>' : '<span class="chip c-neutral">السائق في الطريق · كود '+TT.esc(r.code||"")+'</span>') : '')
+        + (r.reported ? '<span class="chip c-crit">فيه بلاغ</span>' : '')
+        + '<span class="meta">'+TT.timeAgo(r.createdAt)+'</span></div>'
+        + '<div class="leg"><span class="dot dot-a"></span>'+TT.esc(r.from?r.from.label:"—")
+        + '<span class="arrow">←</span><span class="dot dot-b"></span>'+TT.esc(r.to?r.to.label:"—")
+        + '<span class="chip c-neutral num" style="margin-inline-start:auto">'+r.fare+' ج</span></div>'
+        + '<div class="actions">'
+        + (r.riderPhone ? '<a class="btn btn-ghost btn-sm" href="tel:'+TT.esc(r.riderPhone)+'">اتصال بالراكب</a>'
+            + '<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://wa.me/'+TT.waNum(r.riderPhone)+'">واتساب</a>' : "")
+        + '<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="'+TT.esc(TT.mapsUrl(r.from, r.to))+'">المسار</a>'
+        + assign
+        + (r.status!=="done"&&r.status!=="cancelled" ? '<button class="btn btn-ghost btn-sm" data-cancel="'+TT.esc(r.id)+'">إلغاء</button>' : "")
+        + '</div></div>';
+    }).join("");
+  }
+
+  function renderDrivers(){
+    if(!S.drivers.length){ $("driverList").innerHTML = '<div class="empty">لا يوجد سائقون بعد.</div>'; return; }
+    $("driverList").innerHTML = S.drivers.slice().sort(function(a,b){ return (a.name||"").localeCompare(b.name||"","ar"); })
+      .map(function(d){
+        var lic = TT.daysTo(d.licExpiry);
+        var ss = subOf(d);
+        var sChip = ss.state === "free" ? ""
+          : ss.state === "ok" ? '<span class="chip '+(TT.daysTo(ss.until) <= 2 ? 'c-warn' : 'c-ok')+' num">مشترك لحد '+TT.esc(ss.until.slice(5))+'</span>'
+          : ss.state === "grace" ? '<span class="chip c-warn">في المهلة</span>'
+          : '<span class="chip c-crit">متوقف — ماجدّدش</span>';
+        var lChip = d.licExpiry==null ? '<span class="chip c-warn">رخصة غير مسجّلة</span>'
+          : lic<0 ? '<span class="chip c-crit">رخصة منتهية</span>'
+          : lic<=30 ? '<span class="chip c-warn num">الرخصة تنتهي خلال '+lic+' ي</span>' : "";
+        return '<div class="item"><div class="item-head">'
+          + '<span class="'+(d.isOnline?"dot-on":"dot-off")+'" title="'+(d.isOnline?"أونلاين":"مش متصل")+'"></span>'
+          + '<strong>'+TT.esc(d.name)+'</strong>'+sChip+lChip
+          + (d.ratingCount ? '<span class="chip c-neutral num">★ '+(d.ratingSum/d.ratingCount).toFixed(1)+' ('+d.ratingCount+')</span>' : '')
+          + '<span class="meta">'+(d.active===false?"موقوف":(d.isOnline?"أونلاين":"مش متصل"))+'</span></div>'
+          + '<div class="leg"><span class="num">'+TT.esc(d.phone||"—")+'</span><span class="arrow">·</span>'
+          + 'لوحة <span class="num">'+TT.esc(d.plate||"—")+'</span><span class="arrow">·</span>'
+          + 'كود <span class="code">'+TT.esc(d.code||"—")+'</span></div>'
+          + (d.zoneId ? '<div class="leg"><span class="zchip"><span class="zdot" style="background:'+TT.zoneColor(S.zones,d.zoneId)+'"></span>'+TT.esc(TT.zoneName(S.zones,d.zoneId))+'</span></div>' : "")
+          + '<div class="actions">'
+          + (S.cfg.paidFrom ? '<button class="btn btn-primary btn-sm" data-renew="'+TT.esc(d.id)+'" data-kind="week">+ أسبوع · '+S.cfg.week+' ج</button>'
+            + '<button class="btn btn-primary btn-sm" data-renew="'+TT.esc(d.id)+'" data-kind="month">+ شهر · '+S.cfg.month+' ج</button>' : '')
+          + '<button class="btn btn-ghost btn-sm" data-code="'+TT.esc(d.id)+'">كود جديد</button>'
+          + '<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://wa.me/'+TT.waNum(d.phone)+'?text='
+            + encodeURIComponent("كود دخولك على تطبيق المحطة للسائق: "+(d.code||"")+"\nالرابط: "+location.origin+"/driver.html\nافتحه ودوس «فعّل صوت الطلبات».")+'">ابعتله الكود</a>'
+          + '<button class="btn btn-ghost btn-sm" data-toggle="'+TT.esc(d.id)+'">'+(d.active===false?"تفعيل":"إيقاف")+'</button>'
+          + '<button class="btn btn-ghost btn-sm" data-deld="'+TT.esc(d.id)+'">حذف</button>'
+          + '</div></div>';
+      }).join("");
+  }
+
+  function renderZones(){
+    $("newPlaceZone").innerHTML = zOpts("");
+    if(!S.zones.length){ $("zoneList").innerHTML = '<div class="empty">أضف مناطق التسعير.</div>'; return; }
+    $("zoneList").innerHTML = S.zones.map(function(z){
+      var n = S.places.filter(function(p){ return p.zoneId===z.id; }).length;
+      return '<div class="item"><div class="item-head">'
+        + '<span class="zdot" style="background:'+TT.zoneColor(S.zones,z.id)+'"></span><strong>'+TT.esc(z.name)+'</strong>'
+        + (z.official ? '<span class="chip c-ok">حي مؤكد</span>' : '<span class="chip c-neutral">منطقة تشغيل</span>')
+        + '<span class="meta num">'+n+' نقطة</span></div>'
+        + '<div class="actions">'
+        + '<button class="btn btn-ghost btn-sm" data-renz="'+TT.esc(z.id)+'">إعادة تسمية</button>'
+        + '<button class="btn btn-ghost btn-sm" data-delz="'+TT.esc(z.id)+'">حذف</button></div></div>';
+    }).join("");
+  }
+
+  function renderPlaces(){
+    if(!S.places.length){ $("placeList").innerHTML = '<div class="empty">أضف نقاط الركوب.</div>'; return; }
+    $("placeList").innerHTML = S.places.map(function(p){
+      var has = p.lat != null;
+      return '<div class="item"><div class="item-head"><strong>'+TT.esc(p.name)+'</strong>'
+        + (has ? '<span class="chip c-ok num">'+p.lat.toFixed(4)+', '+p.lng.toFixed(4)+'</span>' : '<span class="chip c-warn">بدون إحداثية</span>')
+        + (selPlace===p.id ? '<span class="chip c-accent">محدّدة — اضغط الخريطة</span>' : '')
+        + '</div>'
+        + '<div class="leg"><label style="margin:0;font-size:12px">المنطقة</label>'
+        + '<select data-pz="'+TT.esc(p.id)+'" style="width:auto;min-width:150px;font-size:13px;padding:5px 9px">'
+        + '<option value="">— بدون —</option>'+zOpts(p.zoneId)+'</select></div>'
+        + '<div class="actions">'
+        + '<button class="btn btn-'+(selPlace===p.id?"primary":"ghost")+' btn-sm" data-sel="'+TT.esc(p.id)+'">'+(selPlace===p.id?"جارٍ التحديد…":"حدّد على الخريطة")+'</button>'
+        + '<button class="btn btn-ghost btn-sm" data-renp="'+TT.esc(p.id)+'">إعادة تسمية</button>'
+        + '<button class="btn btn-ghost btn-sm" data-delp="'+TT.esc(p.id)+'">حذف</button>'
+        + '</div></div>';
+    }).join("");
+    $("pmapSel").textContent = selPlace
+      ? "النقطة المحدّدة: " + (TT.byId(S.places, selPlace)||{}).name + " — اضغط مكانها على الخريطة"
+      : "اختر نقطة بزرار «حدّد على الخريطة»";
+  }
+
+  function drawPlaces(){
+    if(!pmap) return;
+    pLayers.forEach(function(l){ pmap.removeLayer(l); }); pLayers = [];
+    var placed = S.places.filter(function(p){ return p.lat != null; });
+    placed.forEach(function(p){
+      var m = L.marker([p.lat,p.lng], { icon: TT.markerIcon(TT.zoneColor(S.zones,p.zoneId), selPlace===p.id) }).addTo(pmap);
+      m.bindTooltip(p.name, { direction:"top", offset:[0,-8] });
+      pLayers.push(m);
+    });
+    if(placed.length) pmap.fitBounds(L.latLngBounds(placed.map(function(p){ return [p.lat,p.lng]; })), { padding:[34,34], maxZoom:16 });
+  }
+
+  function renderAdmin(){
+    var active = S.drivers.filter(function(d){ return d.active !== false; });
+    var done = S.requests.filter(function(r){ return r.status==="done"; });
+    var todayDone = done.filter(function(r){ return r.day===TT.today(); });
+    $("stats").innerHTML = [
+      [active.length,'سائق نشط'],[todayDone.length,'رحلة اليوم'],
+      [active.filter(function(d){ var st = subOf(d).state; return st === "ok"; }).length,'اشتراك سارٍ'],
+      [S.drivers.reduce(function(s,d){ return s + (d.paidLog||[]).filter(function(p){ return p.at >= monthStart(); }).reduce(function(a,p){ return a+(p.amount||0); },0); },0).toLocaleString("en"),'جنيه اشتراكات الشهر ده']
+    ].map(function(s){ return '<div class="stat"><span class="k">'+s[0]+'</span><div class="l">'+s[1]+'</div></div>'; }).join("");
+
+    var soon = S.drivers.filter(function(d){ var n = TT.daysTo(d.licExpiry); return n != null && n <= 30; })
+      .sort(function(a,b){ return TT.daysTo(a.licExpiry) - TT.daysTo(b.licExpiry); });
+    $("expiring").innerHTML = soon.length
+      ? '<div class="tscroll"><table><thead><tr><th>السائق</th><th>الموبايل</th><th class="num">الرخصة</th><th></th></tr></thead><tbody>'
+        + soon.map(function(d){ var n = TT.daysTo(d.licExpiry);
+            return '<tr><td>'+TT.esc(d.name)+'</td><td class="num">'+TT.esc(d.phone||"—")+'</td><td class="num">'
+              + (n<0 ? '<span class="chip c-crit">متأخر '+(-n)+' ي</span>' : '<span class="chip c-warn">'+n+' ي</span>')
+              + '</td><td><a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://wa.me/'+TT.waNum(d.phone)
+              + '?text='+encodeURIComponent("تذكير من المحطة: رخصة التوكتوك قربت تنتهي — جدّدها علشان تفضل شغال.")+'">تذكير</a></td></tr>';
+          }).join("")+'</tbody></table></div>'
+      : '<div class="empty">مفيش رخص هتنتهي خلال ٣٠ يوم.</div>';
+
+    var inZ = done.filter(function(r){ return r.sameZone; }), cr = done.filter(function(r){ return !r.sameZone; });
+    $("mix").innerHTML = done.length
+      ? '<div class="tscroll"><table><thead><tr><th>النوع</th><th class="num">العدد</th><th class="num">النسبة</th><th class="num">الإجمالي</th></tr></thead><tbody>'
+        + [["داخل المنطقة",inZ],["بين منطقتين",cr]].map(function(g){
+            var pct = Math.round(g[1].length/done.length*100);
+            var sum = g[1].reduce(function(s,r){ return s+(r.fare||0); },0);
+            return '<tr><td>'+g[0]+'</td><td class="num">'+g[1].length+'</td><td class="num">'+pct+'%</td><td class="num">'+sum+' ج</td></tr>';
+          }).join("")+'</tbody></table></div>'
+        + '<p class="hint" style="margin-top:9px">لو نوع منهم أقل من ١٠٪، تقسيم المناطق غلط مش السعر.</p>'
+      : '<div class="empty">مفيش رحلات منتهية بعد.</div>';
+  }
+
+  var RK = { overcharge:"طلب أكتر من السعر", late:"اتأخر أو ماجاش", behaviour:"أسلوب السائق", lost:"حاجة منسية", other:"حاجة تانية" };
+  function renderReports(){
+    var list = (S.reports || []).slice().sort(function(a,b){ return (b.createdAt||0)-(a.createdAt||0); });
+    var open = list.filter(function(r){ return r.status !== "closed"; }).length;
+    $("repBadge").innerHTML = open ? '<span class="chip c-crit num" style="margin-inline-start:4px">'+open+'</span>' : "";
+    if(!list.length){ $("reportList").innerHTML = '<div class="empty">مفيش بلاغات — كويس.</div>'; return; }
+    $("reportList").innerHTML = list.map(function(r){
+      var d = r.driverId ? TT.byId(S.drivers, r.driverId) : null;
+      var sameDrv = d ? list.filter(function(x){ return x.driverId === d.id && x.kind === "overcharge"; }).length : 0;
+      return '<div class="item" style="'+(r.status!=="closed"?"border-inline-start:3px solid var(--crit)":"")+'"><div class="item-head">'
+        + '<strong>'+TT.esc(RK[r.kind]||r.kind)+'</strong>'
+        + (r.kind==="overcharge" && r.asked ? '<span class="chip c-crit num">طلب '+r.asked+' بدل '+r.fare+' ج</span>' : '')
+        + (r.status==="closed" ? '<span class="chip c-ok">اتقفل</span>' : '<span class="chip c-warn">مفتوح</span>')
+        + '<span class="meta">'+TT.timeAgo(r.createdAt)+'</span></div>'
+        + '<div class="leg">الراكب: '+TT.esc(r.riderName||"—")+' · <span class="num">'+TT.esc(r.riderPhone||"")+'</span></div>'
+        + '<div class="leg">السائق: '+TT.esc(d?d.name:"—")+(d?' · لوحة '+TT.esc(d.plate||""):"")+(sameDrv>1?' <span class="chip c-crit">'+sameDrv+' بلاغات سعر</span>':'')+'</div>'
+        + (r.note ? '<div class="leg" style="color:var(--ink)">«'+TT.esc(r.note)+'»</div>' : '')
+        + '<div class="actions">'
+        + '<a class="btn btn-ghost btn-sm" href="tel:'+TT.esc(r.riderPhone)+'">اتصل بالراكب</a>'
+        + (d ? '<a class="btn btn-ghost btn-sm" href="tel:'+TT.esc(d.phone)+'">اتصل بالسائق</a>' : '')
+        + (r.status!=="closed" ? '<button class="btn btn-ghost btn-sm" data-closerep="'+TT.esc(r.id)+'">اتحلّ — اقفل</button>' : '')
+        + '</div></div>';
+    }).join("");
+  }
+
+  function renderPhoneForm(){
+    var opts = '<option value="">— اختار —</option>' + S.places.filter(function(p){ return p.lat != null; })
+      .map(function(p){ return '<option value="'+TT.esc(p.id)+'">'+TT.esc(p.name)+'</option>'; }).join("");
+    ["phFrom","phTo"].forEach(function(id){ var v = $(id).value; if($(id).getAttribute("data-n") !== String(S.places.length)){ $(id).innerHTML = opts; $(id).value = v; $(id).setAttribute("data-n", S.places.length); } });
+  }
+
+  function renderAll(){
+    $("farePill").textContent = S.cfg.same + "–" + S.cfg.cross + " ج";
+    $("cSame").value = S.cfg.same; $("cCross").value = S.cfg.cross;
+    if(document.activeElement !== $("cPaidFrom")) $("cPaidFrom").value = S.cfg.paidFrom || "";
+    if(document.activeElement !== $("cWeek")) $("cWeek").value = S.cfg.week;
+    if(document.activeElement !== $("cMonth")) $("cMonth").value = S.cfg.month;
+    if(document.activeElement !== $("cGrace")) $("cGrace").value = S.cfg.grace;
+    var fd = TT.daysTo(S.cfg.paidFrom);
+    $("paidHint").textContent = !S.cfg.paidFrom ? "مش محدّد — التطبيق مجاني لحد ما تحدد يوم." : fd > 0 ? "مجاني — الاشتراكات هتبدأ بعد " + fd + " يوم. تقدر تسجّل اشتراكات مقدّماً." : "الاشتراكات شغالة.";
+    renderRides(); renderDrivers(); renderReports(); renderPhoneForm(); renderZones(); renderPlaces(); renderAdmin(); drawPlaces();
+  }
+
+  function load(){
+    return api("state").then(function(raw){
+      var s = TT.shape(raw);
+      S.zones = s.zones; S.places = s.places; S.drivers = raw.drivers || []; S.requests = s.requests; S.cfg = s.cfg; S.reports = raw.reports || [];
+      renderAll();
+    }).catch(function(e){
+      if(e.status === 401){ try{ localStorage.removeItem(KEY); }catch(x){} location.reload(); }
+    });
+  }
+
+  /* ---------- أحداث ---------- */
+  $("filt").addEventListener("click", function(e){
+    var b = e.target.closest("button[data-f]"); if(!b) return;
+    filt = b.getAttribute("data-f");
+    Array.prototype.forEach.call(this.querySelectorAll("button"), function(x){ x.setAttribute("aria-pressed", String(x===b)); });
+    renderRides();
+  });
+
+  $("phSend").addEventListener("click", function(){
+    var body = { riderName:$("phName").value.trim(), riderPhone:$("phPhone").value.trim(), fromId:$("phFrom").value, toId:$("phTo").value, note:$("phNote").value.trim() };
+    if(!body.riderName || body.riderPhone.replace(/\D/g,"").length < 9){ TT.toast("الاسم والرقم مطلوبين"); return; }
+    if(!body.fromId || !body.toId || body.fromId === body.toId){ TT.toast("اختار من وإلى"); return; }
+    var b = this; b.disabled = true;
+    api("phone-request", { method:"POST", body:body })
+      .then(function(r){ TT.toast("اتبعت — قوله السعر " + r.fare + " ج"); ["phName","phPhone","phNote"].forEach(function(f){ $(f).value = ""; }); load(); })
+      .catch(function(e){ TT.toast(e.message || "خطأ"); })
+      .then(function(){ b.disabled = false; });
+  });
+
+  $("addDriver").addEventListener("click", function(){
+    var name = $("dName").value.trim();
+    if(!name){ $("dName").focus(); return; }
+    if(!$("dPlate").value.trim()){ TT.toast("رقم اللوحة مطلوب — المرخّصة فقط"); $("dPlate").focus(); return; }
+    if(!$("dPhone").value.replace(/\D/g,"")){ TT.toast("رقم الموبايل مطلوب للدخول"); $("dPhone").focus(); return; }
+    var code = $("dCode").value.replace(/\D/g,"") || String(Math.floor(1000 + Math.random()*9000));
+    var id = TT.uid();
+    save("drivers", id, { id:id, name:name, phone:$("dPhone").value.trim(), plate:$("dPlate").value.trim(),
+      licence:$("dLic").value.trim(), licExpiry:$("dLicExp").value||null,
+      code:code, owner:$("dOwner").value.trim(), active:true, online:false, createdAt:Date.now() })
+      .then(function(){ TT.toast("اتضاف — كوده " + code); });
+    ["dName","dPhone","dPlate","dLic","dLicExp","dCode","dOwner"].forEach(function(f){ $(f).value = ""; });
+  });
+
+  $("addZone").addEventListener("click", function(){
+    var n = $("newZone").value.trim(); if(!n) return;
+    var id = TT.uid(); save("zones", id, { id:id, name:n, official:false, order:S.zones.length });
+    $("newZone").value = "";
+  });
+
+  $("addPlace").addEventListener("click", function(){
+    var n = $("newPlace").value.trim(); if(!n) return;
+    var id = TT.uid();
+    save("places", id, { id:id, name:n, zoneId:$("newPlaceZone").value||"", lat:null, lng:null, order:S.places.length });
+    $("newPlace").value = "";
+  });
+
+  function addDays(s, n){ var d = new Date(s + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0,10); }
+  function monthStart(){ var d = new Date(); d.setDate(1); d.setHours(0,0,0,0); return d.getTime(); }
+  /* نفس منطق الخادم: free | ok | grace | stopped */
+  function subOf(d){
+    var c = S.cfg, today = TT.today();
+    if(!c.paidFrom || today < c.paidFrom) return { state:"free" };
+    var base = addDays(c.paidFrom, -1);
+    var paidTo = d.subUntil && d.subUntil >= base ? d.subUntil : base;
+    if(today <= paidTo) return { state:"ok", until: paidTo };
+    return today < addDays(paidTo, (c.grace||0) + 1) ? { state:"grace", until: paidTo } : { state:"stopped", until: paidTo };
+  }
+
+  $("paid6").addEventListener("click", function(){
+    var d = new Date(); d.setMonth(d.getMonth() + 6);
+    $("cPaidFrom").value = d.toISOString().slice(0,10);
+    TT.toast("دوس «حفظ» علشان يتسجّل");
+  });
+
+  $("saveCfg").addEventListener("click", function(){
+    var a = parseInt($("cSame").value,10), b2 = parseInt($("cCross").value,10);
+    var w = parseInt($("cWeek").value,10), m = parseInt($("cMonth").value,10), g = parseInt($("cGrace").value,10);
+    var body = { id:"pricing", same: isNaN(a)?15:a, cross: isNaN(b2)?20:b2, paidFrom: $("cPaidFrom").value || "", week: isNaN(w)?30:w, month: isNaN(m)?100:m, grace: isNaN(g)?3:g };
+    var btn = this;
+    save("config","pricing", body).then(function(){ btn.textContent = "تم ✓"; setTimeout(function(){ btn.textContent = "حفظ"; }, 1600); });
+  });
+
+  document.addEventListener("click", function(e){
+    if(!e.target.closest) return;
+    var el = e.target.closest("[data-cancel],[data-renew],[data-code],[data-toggle],[data-deld],[data-renz],[data-delz],[data-sel],[data-renp],[data-delp],[data-closerep]");
+    if(!el) return;
+    var id, c;
+    if((id = el.getAttribute("data-renew"))){
+      c = clone(TT.byId(S.drivers,id));
+      var kind = el.getAttribute("data-kind"), amount = kind === "week" ? S.cfg.week : S.cfg.month;
+      if(!confirm("استلمت " + amount + " ج من " + c.name + " (" + (kind === "week" ? "أسبوع" : "شهر") + ")؟")) return;
+      var st = subOf(c), today = TT.today();
+      /* بيبدأ من آخر يوم مدفوع، أو من النهارده لو كان واقف، أو من يوم بداية الاشتراكات لو لسه في الفترة المجانية */
+      var from = st.state === "free" ? addDays(S.cfg.paidFrom, -1) : st.state === "ok" ? st.until : addDays(today, -1);
+      if(st.state === "free" && c.subUntil && c.subUntil > from) from = c.subUntil;
+      c.subUntil = addDays(from, kind === "week" ? 7 : 30);
+      c.paidLog = (c.paidLog || []).concat([{ amount: amount, kind: kind, at: Date.now(), to: c.subUntil }]).slice(-60);
+      save("drivers", id, c).then(function(){ TT.toast("اتجدّد لحد " + c.subUntil); });
+    } else if((id = el.getAttribute("data-closerep"))){
+      c = clone(TT.byId(S.reports,id)); c.status = "closed"; c.closedAt = Date.now(); save("reports", id, c);
+    } else if((id = el.getAttribute("data-cancel"))){
+      if(!confirm("إلغاء المشوار؟")) return;
+      c = clone(TT.byId(S.requests,id)); c.status = "cancelled"; save("requests", id, c);
+    } else if((id = el.getAttribute("data-code"))){
+      c = clone(TT.byId(S.drivers,id)); c.code = String(Math.floor(1000 + Math.random()*9000));
+      save("drivers", id, c).then(function(){ TT.toast("الكود الجديد: " + c.code); });
+    } else if((id = el.getAttribute("data-toggle"))){
+      c = clone(TT.byId(S.drivers,id)); c.active = (c.active === false); save("drivers", id, c);
+    } else if((id = el.getAttribute("data-deld"))){
+      if(confirm("حذف السائق نهائياً؟")) del("drivers", id);
+    } else if((id = el.getAttribute("data-delz"))){
+      if(confirm("حذف المنطقة؟")) del("zones", id);
+    } else if((id = el.getAttribute("data-renz"))){
+      c = clone(TT.byId(S.zones,id)); var zn = prompt("الاسم الجديد:", c.name); if(!zn) return;
+      c.name = zn.trim(); save("zones", id, c);
+    } else if((id = el.getAttribute("data-delp"))){
+      if(confirm("حذف النقطة؟")) del("places", id);
+    } else if((id = el.getAttribute("data-renp"))){
+      c = clone(TT.byId(S.places,id)); var pn = prompt("الاسم الجديد:", c.name); if(!pn) return;
+      c.name = pn.trim(); save("places", id, c);
+    } else if((id = el.getAttribute("data-sel"))){
+      selPlace = (selPlace === id) ? null : id;
+      renderPlaces(); drawPlaces();
+      if(selPlace && pmap) pmap.invalidateSize();
+    }
+  });
+
+  document.addEventListener("change", function(e){
+    var t = e.target; if(!t.getAttribute) return;
+    var id = t.getAttribute("data-assign");
+    if(id && t.value){
+      var r = clone(TT.byId(S.requests,id)); r.driverId = t.value; r.status = "assigned"; r.assignedAt = Date.now();
+      save("requests", id, r); return;
+    }
+    id = t.getAttribute("data-pz");
+    if(id){ var p = clone(TT.byId(S.places,id)); p.zoneId = t.value; save("places", id, p); }
+  });
+
+  /* ---------- الإقلاع ---------- */
+  function start(){
+    $("gate").hidden = true; $("nav").hidden = false; $("p-live").hidden = false;
+    if(!pmap){
+      pmap = TT.initMap("pmap");
+      pmap.on("click", function(e){
+        if(!selPlace){ TT.toast("اختر نقطة من القايمة الأول"); return; }
+        var p = clone(TT.byId(S.places, selPlace));
+        p.lat = +e.latlng.lat.toFixed(6); p.lng = +e.latlng.lng.toFixed(6);
+        save("places", selPlace, p).then(function(){ TT.toast("اتسجّلت ✓"); });
+      });
+    }
+    load();
+    if(timer) clearInterval(timer);
+    timer = setInterval(function(){ if(!document.hidden) load(); }, 6000);
+  }
+
+  if(pin) start();
+})();
+</script>
+</body>
+</html>

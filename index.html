@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>المحطة — اطلب توكتوك في كفر صقر</title>
+<meta name="description" content="اطلب توكتوك في مدينة كفر صقر بسعر ثابت معروف قبل ما السائق يتحرك.">
+<meta name="theme-color" content="#0E7566">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/assets/icon-192.png">
+<link rel="apple-touch-icon" href="/assets/icon-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+html,body{height:100%;overflow:hidden}
+#map{position:fixed;inset:0;z-index:0;background:var(--inset)}
+
+/* دبوس ثابت في نص الشاشة — تسحب الخريطة تحته */
+#pin{position:fixed;left:50%;top:calc(50% - 78px);transform:translate(-50%,-100%);z-index:600;
+  pointer-events:none;transition:transform .12s ease-out}
+#pin.lift{transform:translate(-50%,-100%) translateY(-9px)}
+#pinShadow{position:fixed;left:50%;top:calc(50% - 78px);transform:translate(-50%,-50%);z-index:599;
+  width:12px;height:5px;border-radius:50%;background:rgba(0,0,0,.3);pointer-events:none}
+
+.topbar{position:fixed;top:calc(10px + env(safe-area-inset-top,0px));inset-inline:10px;z-index:700;
+  display:flex;align-items:center;gap:9px}
+.pillbar{background:var(--surface);border-radius:999px;box-shadow:var(--shadow);padding:8px 15px;
+  display:flex;align-items:center;gap:9px;min-width:0}
+.pillbar .mark{width:26px;height:26px;border-radius:7px}
+.pillbar .mark svg{width:16px;height:16px}
+.pillbar b{font-family:var(--display);font-size:14px;white-space:nowrap}
+.fixedfare{margin-inline-start:auto;background:var(--fare-soft);color:var(--fare);border-radius:999px;
+  padding:8px 14px;font-weight:700;font-size:13px;box-shadow:var(--shadow);white-space:nowrap}
+
+.fab{position:fixed;inset-inline-end:14px;bottom:50vh;z-index:650;width:44px;height:44px;border-radius:50%;
+  background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);display:grid;place-items:center;cursor:pointer}
+.fab svg{width:21px;height:21px;stroke:var(--ink-2);fill:none;stroke-width:1.9}
+
+.sheet{position:fixed;inset-inline:0;bottom:0;z-index:800;background:var(--surface);
+  border-radius:20px 20px 0 0;box-shadow:0 -6px 30px -12px rgba(0,0,0,.4);
+  padding:8px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:80vh;overflow-y:auto}
+.grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 12px}
+.sheet h2{font-family:var(--display);font-size:17px;margin:0 0 4px}
+.sheet .hint{margin-bottom:12px}
+
+.legrow{display:flex;align-items:center;gap:10px;padding:9px 0}
+.legrow+.legrow{border-top:1px solid var(--line)}
+.legrow .d{width:10px;height:10px;border-radius:50%;flex:none}
+.legrow .txt{flex:1;min-width:0}
+.legrow .lbl{font-size:11px;color:var(--muted);font-weight:600;line-height:1.3}
+.legrow .val{font-size:14.5px;font-weight:600;line-height:1.4;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.legrow .zn{font-size:11.5px;color:var(--muted)}
+.legrow button{background:none;border:0;color:var(--accent-ink);font-family:var(--body);
+  font-size:13px;font-weight:600;cursor:pointer;padding:5px 7px;border-radius:6px}
+.legrow button:hover{background:var(--accent-soft)}
+
+.bigfare{display:flex;align-items:center;gap:13px;background:var(--fare-soft);border-radius:var(--r);padding:14px 16px;margin:12px 0}
+.bigfare .amt{font-family:var(--display);font-weight:800;font-size:36px;line-height:1;color:var(--fare);font-variant-numeric:tabular-nums}
+.bigfare .cap{font-size:12.5px;color:var(--fare);line-height:1.5}
+.nofare{background:var(--warn-soft)}
+.nofare .amt,.nofare .cap{color:var(--warn)}
+
+.searching{text-align:center;padding:10px 0 4px}
+.radar{width:64px;height:64px;margin:0 auto 12px;border-radius:50%;border:3px solid var(--accent-soft);
+  border-top-color:var(--accent);animation:sp 1.1s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion:reduce){.radar{animation:none}}
+
+.drivercard{display:flex;align-items:center;gap:13px;background:var(--accent-soft);
+  border:1px solid var(--accent);border-radius:var(--r);padding:14px 16px;margin-bottom:12px}
+.drivercard .av{width:46px;height:46px;border-radius:50%;background:var(--accent);color:#fff;flex:none;
+  display:grid;place-items:center;font-family:var(--display);font-weight:800;font-size:19px}
+.drivercard .nm{font-family:var(--display);font-weight:800;font-size:16px;color:var(--accent-ink)}
+.drivercard .pl{font-size:12.5px;color:var(--accent-ink);opacity:.85}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.ridecode{display:flex;align-items:center;gap:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r);padding:11px 14px;margin-bottom:10px}
+.ridecode b{font-family:var(--display);font-size:28px;letter-spacing:7px;color:var(--accent-ink);direction:ltr;font-variant-numeric:tabular-nums}
+.quick{display:flex;flex-direction:column;gap:7px;margin:4px 0 12px}
+.quick button{display:flex;align-items:center;gap:10px;text-align:start;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 12px;font-family:var(--body);font-size:14px;color:var(--ink);cursor:pointer}
+.quick button b{margin-inline-start:auto;color:var(--fare);white-space:nowrap}
+.linkbtn{background:none;border:0;color:var(--crit);font-family:var(--body);font-size:13px;font-weight:600;cursor:pointer;padding:6px;display:block;margin:8px auto 0}
+</style>
+</head>
+<body>
+
+<div id="map"></div>
+<div id="pinShadow" hidden></div>
+<div id="pin" hidden>
+  <svg width="34" height="44" viewBox="0 0 34 44" fill="none" aria-hidden="true">
+    <path id="pinBody" d="M17 43s14-16.2 14-26A14 14 0 1 0 3 17c0 9.8 14 26 14 26Z" fill="#0E7566" stroke="#fff" stroke-width="2.5"/>
+    <circle cx="17" cy="17" r="5" fill="#fff"/>
+  </svg>
+</div>
+
+<div class="topbar">
+  <div class="pillbar">
+    <img src="/assets/logo.png" alt="" style="height:28px;width:auto;display:block">
+    <b>المحطة</b>
+  </div>
+  <span class="fixedfare" id="fixedFare">سعر ثابت</span>
+</div>
+
+<button class="fab" id="locate" title="موقعي الحالي" aria-label="موقعي الحالي">
+  <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg>
+</button>
+
+<div class="sheet" id="sheet">
+  <div class="grab"></div>
+
+  <!-- ١ + ٢ : تحديد النقطتين -->
+  <section id="stPick">
+    <h2 id="pickTitle">فين هتركب؟</h2>
+    <p class="hint">حرّك الخريطة لحد ما الدبوس يبقى على مكانك بالظبط</p>
+    <div class="quick" id="quick" hidden></div>
+    <div class="legrow" style="border:0;padding-top:0">
+      <span class="d" id="pickDot" style="background:var(--accent)"></span>
+      <div class="txt">
+        <div class="lbl">أقرب مكان معروف</div>
+        <div class="val" id="pickVal">—</div>
+        <div class="zn" id="pickZn"></div>
+      </div>
+    </div>
+    <button class="btn btn-primary btn-wide" id="confirmPick" style="margin-top:6px">تأكيد مكان الركوب</button>
+    <button class="btn btn-ghost btn-wide" id="backPick" style="margin-top:8px" hidden>رجوع</button>
+  </section>
+
+  <!-- ٣ : التأكيد -->
+  <section id="stConfirm" hidden>
+    <h2>تأكيد الرحلة</h2>
+    <div class="legrow">
+      <span class="d" style="background:var(--accent)"></span>
+      <div class="txt"><div class="lbl">الانطلاق</div><div class="val" id="cFrom">—</div><div class="zn" id="cFromZ"></div></div>
+      <button data-edit="from">تغيير</button>
+    </div>
+    <div class="legrow">
+      <span class="d" style="background:var(--fare)"></span>
+      <div class="txt"><div class="lbl">الوصول</div><div class="val" id="cTo">—</div><div class="zn" id="cToZ"></div></div>
+      <button data-edit="to">تغيير</button>
+    </div>
+
+    <div class="bigfare" id="fareBox">
+      <span class="amt" id="fareAmt">15</span>
+      <span class="cap" id="fareCap"><b>جنيهاً</b> — سعر ثابت، بلا مفاصلة.<br>يُدفع نقداً عند الوصول.</span>
+    </div>
+
+    <div class="row">
+      <div class="field"><label for="rName">اسمك</label><input id="rName" autocomplete="name" placeholder="الاسم"></div>
+      <div class="field"><label for="rPhone">رقم موبايلك</label><input id="rPhone" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx"></div>
+    </div>
+    <button class="btn btn-primary btn-wide" id="sendReq" style="font-size:16px;padding:13px">اطلب التوكتوك</button>
+  </section>
+
+  <!-- ٤ : بندوّر على سائق -->
+  <section id="stSearch" hidden>
+    <div class="searching">
+      <div class="radar"></div>
+      <h2>بندوّر على سائق قريب</h2>
+      <p class="hint" id="searchSub">الطلب وصل لكل السواقين — أول واحد يقبل هياخده</p>
+    </div>
+    <div class="bigfare" style="margin-top:4px">
+      <span class="amt" id="sFare">—</span>
+      <span class="cap"><b>جنيهاً</b> — السعر مقفول ومش هيتغير.<br>يُدفع نقداً عند الوصول.</span>
+    </div>
+    <button class="btn btn-ghost btn-wide" id="cancelSearch">إلغاء الطلب</button>
+  </section>
+
+  <!-- ٥ : سائق قبل -->
+  <section id="stMatched" hidden>
+    <h2>سائق جاي ليك ✓</h2>
+    <div class="drivercard" style="margin-top:10px">
+      <span class="av" id="dAv">—</span>
+      <div class="txt">
+        <div class="nm" id="dName">—</div>
+        <div class="pl" id="dPlate">—</div>
+      </div>
+      <span class="chip c-accent num" id="dFare">—</span>
+    </div>
+    <div class="ridecode" id="codeBox" hidden>
+      <div style="flex:1"><div style="font-weight:700">كود الركوب</div><div class="hint">قوله للسائق قبل ما تركب — متركبش مع حد ماسألكش عليه</div></div>
+      <b id="dCode">—</b>
+    </div>
+    <div class="grid2">
+      <a class="btn btn-primary" id="dCall" href="#">اتصل بالسائق</a>
+      <a class="btn btn-ghost" id="dWa" target="_blank" rel="noopener" href="#">واتساب</a>
+    </div>
+    <a class="btn btn-ghost btn-wide" id="shareTrip" target="_blank" rel="noopener" href="#" style="margin-top:8px">شارك رحلتك مع أهلك</a>
+    <p class="hint" style="margin-top:12px;text-align:center">استنّى في مكانك، وادفع <b id="dFare2"></b> جنيه نقداً عند الوصول.</p>
+    <button class="btn btn-ghost btn-wide" id="newRide" style="margin-top:10px">اطلب رحلة تانية</button>
+    <button class="linkbtn" data-report>السائق طلب أكتر من السعر؟ بلّغ</button>
+  </section>
+
+  <!-- ٦ : خلصت -->
+  <section id="stEnded" hidden>
+    <h2 id="endTitle">تمّت الرحلة ✓</h2>
+    <p class="hint" id="endMsg"></p>
+    <div id="rateBox" hidden style="margin-top:12px;text-align:center">
+      <div style="font-weight:700">إزاي كانت الرحلة؟</div>
+      <div id="stars" style="display:flex;gap:4px;justify-content:center;direction:ltr;margin:6px 0">
+        <button data-star="1" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="2" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="3" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="4" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="5" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button>
+      </div>
+      <button class="btn btn-primary btn-wide" id="sendRate" disabled>ابعت التقييم</button>
+    </div>
+    <button class="btn btn-primary btn-wide" id="newRide2" style="margin-top:12px">اطلب رحلة تانية</button>
+    <button class="linkbtn" data-report id="endReport">حصلت مشكلة؟ بلّغ الإدارة</button>
+  </section>
+
+  <!-- ٧ : بلاغ -->
+  <section id="stReport" hidden>
+    <h2>بلاغ للإدارة</h2>
+    <p class="hint">الإدارة هتكلّمك خلال ساعة. لو اتكرر من نفس السائق، بيتوقف عن الشغل.</p>
+    <div class="field" style="margin-top:12px"><label for="repKind">المشكلة</label>
+      <select id="repKind">
+        <option value="overcharge">السائق طلب أكتر من السعر</option>
+        <option value="late">اتأخر أو ماجاش</option>
+        <option value="behaviour">أسلوب السائق</option>
+        <option value="lost">نسيت حاجة في التوكتوك</option>
+        <option value="other">حاجة تانية</option>
+      </select></div>
+    <div class="field" id="repAskedF"><label for="repAsked">طلب منك كام؟ (جنيه)</label><input id="repAsked" inputmode="numeric" placeholder="مثلاً 30"></div>
+    <div class="field"><label for="repNote">تفاصيل (اختياري)</label><textarea id="repNote" rows="3"></textarea></div>
+    <button class="btn btn-primary btn-wide" id="sendReport">ابعت البلاغ</button>
+    <button class="btn btn-ghost btn-wide" id="backReport" style="margin-top:8px">رجوع</button>
+  </section>
+
+  <div id="err" class="banner b-crit" hidden style="margin-top:12px"></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/assets/common.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $ = TT.$;
+  var LIVE = "tt-ride";
+  var state = { zones:[], places:[], cfg:{ same:15, cross:20, sub:200 } };
+  var map, step = "from", trip = { from:null, to:null }, layers = [], meMarker = null;
+  var live = null, poll = null, reportFor = null, beforeReport = "ended";
+  var ROUTES = "tt-routes", ME = "tt-me";
+  function getJSON(k, d){ try{ return JSON.parse(localStorage.getItem(k) || "null") || d; }catch(e){ return d; } }
+  function setJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+
+  try{ live = JSON.parse(localStorage.getItem(LIVE) || "null"); }catch(e){}
+
+  /* ---------- هندسة ---------- */
+  function metres(a, b){
+    var R = 6371000, toR = Math.PI/180;
+    var dLa = (b.lat-a.lat)*toR, dLo = (b.lng-a.lng)*toR;
+    var la1 = a.lat*toR, la2 = b.lat*toR;
+    var h = Math.sin(dLa/2)*Math.sin(dLa/2) + Math.cos(la1)*Math.cos(la2)*Math.sin(dLo/2)*Math.sin(dLo/2);
+    return 2*R*Math.asin(Math.sqrt(h));
+  }
+  /* المنطقة تتحدد من أقرب نقطة معروفة — الخادم بيعيد حسابها برضه */
+  function describe(ll){
+    var placed = state.places.filter(function(p){ return p.lat != null && p.lng != null; });
+    if(!placed.length) return { label:"موقع على الخريطة", zone:"", zoneId:"" };
+    var best = null, bd = Infinity;
+    placed.forEach(function(p){
+      var d = metres(ll, { lat:p.lat, lng:p.lng });
+      if(d < bd){ bd = d; best = p; }
+    });
+    var d = Math.round(bd);
+    return {
+      label: d < 45 ? best.name : (d < 1200 ? "جنب " + best.name + " (" + d + " م)" : "مكان بعيد عن النقاط المعروفة"),
+      zone: TT.zoneName(state.zones, best.zoneId),
+      zoneId: best.zoneId
+    };
+  }
+  function fareOf(){
+    var c = state.cfg;
+    if(!trip.from || !trip.to) return { amount:c.same, same:true, known:false };
+    var same = Boolean(trip.from.zoneId && trip.to.zoneId && trip.from.zoneId === trip.to.zoneId);
+    return { amount: same ? c.same : c.cross, same:same, known: Boolean(trip.from.zoneId && trip.to.zoneId) };
+  }
+
+  /* ---------- الخريطة ---------- */
+  function clearLayers(){ layers.forEach(function(l){ map.removeLayer(l); }); layers = []; }
+
+  function drawAll(){
+    clearLayers();
+    state.places.filter(function(p){ return p.lat != null; }).forEach(function(p){
+      var m = L.circleMarker([p.lat, p.lng], {
+        radius:4, color:"#fff", weight:1.5, fillColor:TT.zoneColor(state.zones, p.zoneId), fillOpacity:.85
+      }).addTo(map);
+      m.bindTooltip(p.name, { direction:"top", offset:[0,-6] });
+      layers.push(m);
+    });
+    if(trip.from) layers.push(L.marker([trip.from.lat, trip.from.lng], { icon:TT.markerIcon("#0E7566", true), interactive:false }).addTo(map));
+    if(trip.to)   layers.push(L.marker([trip.to.lat,   trip.to.lng],   { icon:TT.markerIcon("#BC4E1E", true), interactive:false }).addTo(map));
+    if(trip.from && trip.to){
+      var f = fareOf();
+      var line = L.polyline([[trip.from.lat,trip.from.lng],[trip.to.lat,trip.to.lng]], {
+        color: f.same ? "#0E7566" : "#BC4E1E", weight:4, opacity:.9
+      }).addTo(map);
+      layers.push(line);
+      map.fitBounds(line.getBounds(), { paddingTopLeft:[40,90], paddingBottomRight:[40,320], maxZoom:17 });
+    }
+  }
+
+  /* ---------- الخطوات ---------- */
+  function setStep(s){
+    step = s;
+    var picking = (s === "from" || s === "to");
+    ["stPick","stConfirm","stSearch","stMatched","stEnded","stReport"].forEach(function(id){ $(id).hidden = true; });
+    $(picking ? "stPick" : ({ confirm:"stConfirm", search:"stSearch", matched:"stMatched", ended:"stEnded", report:"stReport" })[s]).hidden = false;
+    $("pin").hidden = !picking; $("pinShadow").hidden = !picking;
+    $("locate").hidden = !picking;
+
+    if(picking){
+      $("pickTitle").textContent = (s === "from") ? "فين هتركب؟" : "رايح فين؟";
+      $("pickDot").style.background = (s === "from") ? "var(--accent)" : "var(--fare)";
+      $("confirmPick").textContent = (s === "from") ? "تأكيد مكان الركوب" : "تأكيد الوجهة";
+      $("backPick").hidden = (s === "from");
+      $("pinBody").setAttribute("fill", (s === "from") ? "#0E7566" : "#BC4E1E");
+      renderQuick(s === "from");
+      updatePick();
+    }
+    if(s === "confirm") renderConfirm();
+    drawAll();
+  }
+
+  function updatePick(){
+    var d = describe(map.getCenter());
+    $("pickVal").textContent = d.label;
+    $("pickZn").textContent = d.zone ? ("المنطقة: " + d.zone) : "لسه مفيش نقاط لها إحداثيات — كلّم الإدارة";
+  }
+
+  /* ---------- مشاويرك المعتادة (محفوظة على الموبايل بس) ---------- */
+  function rememberRoute(){
+    var list = getJSON(ROUTES, []);
+    var key = trip.from.label + "|" + trip.to.label;
+    var hit = list.filter(function(r){ return r.key === key; })[0];
+    if(hit){ hit.n++; hit.at = Date.now(); }
+    else list.push({ key:key, from:trip.from, to:trip.to, n:1, at:Date.now() });
+    list.sort(function(a,b){ return b.n - a.n || b.at - a.at; });
+    setJSON(ROUTES, list.slice(0, 8));
+  }
+  function renderQuick(show){
+    var q = $("quick"), list = show ? getJSON(ROUTES, []).slice(0, 3) : [];
+    q.hidden = !list.length;
+    if(!list.length){ q.innerHTML = ""; return; }
+    q.innerHTML = '<div class="lbl" style="font-size:11.5px;font-weight:600;color:var(--muted)">مشاويرك — دوسة واحدة</div>' + list.map(function(r, i){
+      var same = r.from.zoneId && r.from.zoneId === r.to.zoneId;
+      return '<button data-quick="'+i+'"><span>'+TT.esc(r.from.label)+' ← '+TT.esc(r.to.label)+'</span><b>'+(same ? state.cfg.same : state.cfg.cross)+' ج</b></button>';
+    }).join("");
+  }
+
+  function renderConfirm(){
+    var f = fareOf();
+    $("cFrom").textContent = trip.from.label; $("cFromZ").textContent = trip.from.zone;
+    $("cTo").textContent = trip.to.label;     $("cToZ").textContent = trip.to.zone;
+    $("fareAmt").textContent = f.amount;
+    $("fareBox").classList.toggle("nofare", !f.known);
+    $("fareCap").innerHTML = !f.known
+      ? '<b>جنيهاً</b> — تقديري، هيتأكد لما السائق يقبل.'
+      : f.same
+        ? '<b>جنيهاً</b> — داخل ' + TT.esc(trip.from.zone) + '، سعر ثابت بلا مفاصلة.<br>يُدفع نقداً عند الوصول.'
+        : '<b>جنيهاً</b> — من ' + TT.esc(trip.from.zone) + ' إلى ' + TT.esc(trip.to.zone) + '.<br>سعر ثابت، يُدفع نقداً عند الوصول.';
+  }
+
+  /* ---------- متابعة الطلب ---------- */
+  function stopPoll(){ if(poll){ clearInterval(poll); poll = null; } }
+
+  function saveLive(v){
+    live = v;
+    try{ v ? localStorage.setItem(LIVE, JSON.stringify(v)) : localStorage.removeItem(LIVE); }catch(e){}
+  }
+
+  function track(){
+    if(!live) return;
+    fetch("/api/track/" + encodeURIComponent(live.id) + "?token=" + encodeURIComponent(live.token))
+      .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error||"خطأ"); return j; }); })
+      .then(function(j){
+        $("sFare").textContent = j.fare;
+        if(j.status === "assigned" && j.driver){
+          stopPoll();
+          $("dAv").textContent = (j.driver.name || "س").trim().charAt(0);
+          $("dName").textContent = j.driver.name;
+          $("dPlate").textContent = j.driver.plate ? ("لوحة " + j.driver.plate) : "توكتوك مرخّص";
+          $("dFare").textContent = j.fare + " ج نقداً";
+          $("dFare2").textContent = j.fare;
+          $("dCall").href = "tel:" + j.driver.phone;
+          $("dWa").href = "https://wa.me/" + TT.waNum(j.driver.phone);
+          $("codeBox").hidden = !j.code;
+          $("dCode").textContent = j.code || "—";
+          reportFor = { id: live.id, token: live.token };
+          var shareUrl = location.origin + "/track.html?id=" + encodeURIComponent(live.id) + "&s=" + encodeURIComponent(j.shareToken || "");
+          $("shareTrip").href = "https://wa.me/?text=" + encodeURIComponent("تابع رحلتي مع المحطة لحد ما أوصل: " + shareUrl);
+          $("shareTrip").hidden = !j.shareToken;
+          setStep("matched");
+        } else if(j.status === "done"){
+          stopPoll(); saveLive(null);
+          $("endTitle").textContent = "تمّت الرحلة ✓";
+          $("endMsg").textContent = "شكراً لاستخدامك المحطة.";
+          rateFor = reportFor; stars = 0; paintStars(); $("rateBox").hidden = !rateFor;
+          setStep("ended");
+        } else if(j.status === "cancelled"){
+          stopPoll(); saveLive(null);
+          $("endTitle").textContent = "الطلب اتلغى";
+          $("endMsg").textContent = "تقدر تطلب تاني في أي وقت.";
+          setStep("ended");
+        } else {
+          var mins = Math.round((Date.now() - (j.createdAt||Date.now()))/6e4);
+          $("searchSub").textContent = mins < 2
+            ? "الطلب وصل لكل السواقين — أول واحد يقبل هياخده"
+            : "لسه بندوّر… عدّى " + mins + " دقيقة. لو اتأخر، جرّب تلغي وتطلب تاني.";
+        }
+      $("endReport").hidden = !reportFor;
+    }).catch(function(){ /* الشبكة ممكن تقطع — النبضة الجاية تعوّض */ });
+  }
+
+  function startTracking(){
+    setStep("search");
+    track();
+    stopPoll();
+    poll = setInterval(function(){ if(!document.hidden) track(); }, 4000);
+  }
+
+  /* ---------- أحداث ---------- */
+  $("confirmPick").addEventListener("click", function(){
+    var c = map.getCenter(), d = describe(c);
+    var pt = { lat:+c.lat.toFixed(6), lng:+c.lng.toFixed(6), label:d.label, zone:d.zone, zoneId:d.zoneId };
+    if(step === "from"){ trip.from = pt; setStep("to"); }
+    else{
+      if(trip.from && metres(trip.from, pt) < 60){ TT.toast("الوجهة قريبة جداً من مكان الركوب"); return; }
+      trip.to = pt; setStep("confirm");
+    }
+  });
+  $("backPick").addEventListener("click", function(){ setStep("from"); });
+
+  document.addEventListener("click", function(e){
+    if(!e.target.closest) return;
+    var b = e.target.closest("[data-edit]"); if(!b) return;
+    var w = b.getAttribute("data-edit");
+    var pt = (w === "from") ? trip.from : trip.to;
+    if(pt) map.setView([pt.lat, pt.lng], 17);
+    setStep(w);
+  });
+
+  $("sendReq").addEventListener("click", function(){
+    var btn = this;
+    var name = $("rName").value.trim(), phone = $("rPhone").value.trim();
+    if(!name){ $("rName").focus(); return; }
+    if(!/^\d{9,}$/.test(phone.replace(/\D/g,""))){ TT.toast("اكتب رقم موبايل صحيح"); $("rPhone").focus(); return; }
+    btn.disabled = true; btn.textContent = "جارٍ الإرسال…";
+    TT.api("request", { method:"POST", body:{
+      riderName:name, riderPhone:phone,
+      from:{ lat:trip.from.lat, lng:trip.from.lng, label:trip.from.label },
+      to:{ lat:trip.to.lat, lng:trip.to.lng, label:trip.to.label }
+    }}).then(function(r){
+      setJSON(ME, { name:name, phone:phone });
+      rememberRoute();
+      saveLive({ id:r.id, token:r.token });
+      $("sFare").textContent = r.fare;
+      startTracking();
+    }).catch(function(err){
+      TT.toast(err.message || "تعذّر الإرسال");
+    }).then(function(){
+      btn.disabled = false; btn.textContent = "اطلب التوكتوك";
+    });
+  });
+
+  document.addEventListener("click", function(e){
+    if(!e.target.closest) return;
+    var q = e.target.closest("[data-quick]");
+    if(q){
+      var r = getJSON(ROUTES, [])[+q.getAttribute("data-quick")]; if(!r) return;
+      trip.from = r.from; trip.to = r.to; setStep("confirm"); return;
+    }
+    if(e.target.closest("[data-report]")){
+      if(!reportFor){ TT.toast("البلاغ بيبقى متاح بعد ما سائق يقبل"); return; }
+      beforeReport = step; setStep("report");
+    }
+  });
+  var rateFor = null, stars = 0;
+  function paintStars(){
+    [].forEach.call(document.querySelectorAll("[data-star]"), function(b){ b.style.color = +b.getAttribute("data-star") <= stars ? "var(--fare)" : "var(--line)"; });
+    $("sendRate").disabled = !stars;
+  }
+  $("stars").addEventListener("click", function(e){ var b = e.target.closest("[data-star]"); if(b){ stars = +b.getAttribute("data-star"); paintStars(); } });
+  $("sendRate").addEventListener("click", function(){
+    if(!rateFor || !stars) return;
+    var b = this; b.disabled = true;
+    TT.api("rate", { method:"POST", body:{ id:rateFor.id, token:rateFor.token, stars:stars } })
+      .then(function(){ TT.toast("شكراً على تقييمك ✓"); $("rateBox").hidden = true; })
+      .catch(function(err){ TT.toast(err.message || "تعذّر الإرسال"); b.disabled = false; });
+  });
+
+  $("repKind").addEventListener("change", function(){ $("repAskedF").hidden = this.value !== "overcharge"; });
+  $("backReport").addEventListener("click", function(){ setStep(beforeReport); });
+  $("sendReport").addEventListener("click", function(){
+    var b = this; b.disabled = true;
+    TT.api("report", { method:"POST", body:{ id:reportFor.id, token:reportFor.token, kind:$("repKind").value,
+      asked:$("repAsked").value.replace(/\D/g,""), note:$("repNote").value.trim() } })
+      .then(function(){ TT.toast("البلاغ وصل للإدارة ✓"); $("repNote").value = ""; $("repAsked").value = ""; setStep(beforeReport); })
+      .catch(function(err){ TT.toast(err.message || "تعذّر الإرسال"); })
+      .then(function(){ b.disabled = false; });
+  });
+
+  $("cancelSearch").addEventListener("click", function(){
+    if(!confirm("تلغي الطلب؟")) return;
+    stopPoll(); saveLive(null);
+    trip = { from:null, to:null };
+    setStep("from");
+  });
+
+  function reset(){
+    stopPoll(); saveLive(null); reportFor = null;
+    trip = { from:null, to:null };
+    var me = getJSON(ME, {}); $("rName").value = me.name || ""; $("rPhone").value = me.phone || "";
+    setStep("from");
+  }
+  $("newRide").addEventListener("click", reset);
+  $("newRide2").addEventListener("click", reset);
+
+  $("locate").addEventListener("click", function(){
+    if(!navigator.geolocation){ TT.toast("المتصفح لا يدعم تحديد الموقع"); return; }
+    var b = this; b.style.opacity = ".5";
+    navigator.geolocation.getCurrentPosition(function(pos){
+      b.style.opacity = "1";
+      var ll = [pos.coords.latitude, pos.coords.longitude];
+      map.setView(ll, 17);
+      if(meMarker) map.removeLayer(meMarker);
+      meMarker = L.circleMarker(ll, { radius:6, color:"#fff", weight:2, fillColor:"#3F6DA8", fillOpacity:1 }).addTo(map);
+    }, function(){ b.style.opacity = "1"; TT.toast("تعذّر تحديد موقعك"); }, { enableHighAccuracy:true, timeout:12000 });
+  });
+
+  document.addEventListener("visibilitychange", function(){ if(!document.hidden && live) track(); });
+
+  /* ---------- الإقلاع ---------- */
+  map = L.map("map", { zoomControl:false }).setView(TT.CENTER, 16);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom:19, attribution:"&copy; OpenStreetMap"
+  }).addTo(map);
+  L.control.zoom({ position:"topleft" }).addTo(map);
+
+  map.on("movestart", function(){ if(!$("pin").hidden) $("pin").classList.add("lift"); });
+  map.on("move",      function(){ if(!$("pin").hidden) updatePick(); });
+  map.on("moveend",   function(){ $("pin").classList.remove("lift"); if(!$("pin").hidden) updatePick(); });
+
+  (function(){ var me = getJSON(ME, {}); if(me.name) $("rName").value = me.name; if(me.phone) $("rPhone").value = me.phone; })();
+
+  TT.api("public").then(function(raw){
+    var s = TT.shape(raw);
+    state.zones = s.zones; state.places = s.places; state.cfg = s.cfg;
+    $("fixedFare").textContent = s.cfg.same + "–" + s.cfg.cross + " ج ثابت";
+    var placed = state.places.filter(function(p){ return p.lat != null; });
+    if(placed.length) map.fitBounds(L.latLngBounds(placed.map(function(p){ return [p.lat,p.lng]; })), { padding:[50,50], maxZoom:16 });
+    if(live && live.id) startTracking(); else setStep("from");
+  }).catch(function(){
+    var e = $("err"); e.textContent = "تعذّر تحميل البيانات. حدّث الصفحة."; e.hidden = false;
+    setStep("from");
+  });
+})();
+</script>
+<script>if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(function(){});</script>
+</body>
+</html>
