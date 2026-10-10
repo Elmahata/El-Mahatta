@@ -46,6 +46,7 @@
       <button data-tab="heading" aria-selected="false">رايح ناحية</button>
     </div>
 
+    <button class="btn btn-ghost btn-wide" data-switch="rider" type="button">التبديل لراكب</button>
     <section id="t-earn" class="stack">
       <div>
         <div class="hint">حصّلت آخر ٧ أيام</div>
@@ -217,5 +218,6 @@
   });
 })();
 </script>
+<script>document.addEventListener("click",function(e){var b=e.target.closest("[data-switch]");if(!b)return;var r=b.getAttribute("data-switch");try{localStorage.setItem("mh-role",r);}catch(x){}location.href=r==="driver"?"/driver.html":"/";});</script>
 </body>
 </html>

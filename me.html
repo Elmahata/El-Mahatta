@@ -42,6 +42,7 @@
 
   <!-- البروفايل -->
   <section id="t-profile" class="stack">
+    <button class="btn btn-ghost btn-wide" data-switch="driver" type="button">التبديل لحساب سائق</button>
     <div class="card">
       <div class="field"><label for="pName">اسمك</label><input id="pName" autocomplete="name"></div>
       <div class="field"><label for="pPhone">رقم موبايلك</label><input id="pPhone" inputmode="tel" placeholder="01xxxxxxxxx" style="direction:ltr;text-align:right"></div>
@@ -283,5 +284,6 @@
   show((location.hash || "#profile").slice(1) in { profile:1, places:1, history:1, invite:1, support:1 } ? (location.hash || "#profile").slice(1) : "profile");
 })();
 </script>
+<script>document.addEventListener("click",function(e){var b=e.target.closest("[data-switch]");if(!b)return;var r=b.getAttribute("data-switch");try{localStorage.setItem("mh-role",r);}catch(x){}location.href=r==="driver"?"/driver.html":"/";});</script>
 </body>
 </html>

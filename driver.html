@@ -85,6 +85,7 @@
         <p class="hint" id="gateErr" style="margin-top:10px;color:var(--crit)" hidden></p>
       </div>
     </div>
+    <button class="btn btn-ghost btn-wide" id="toRider" type="button" style="margin-top:12px">أنا راكب مش سائق</button>
   </section>
 
   <!-- الشاشة الرئيسية -->
@@ -185,6 +186,12 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="/assets/common.js"></script>
 <script src="/assets/chat.js"></script>
+<script>
+  try { localStorage.setItem("mh-role", "driver"); } catch(e){}
+  document.addEventListener("click", function(e){
+    if(e.target.closest("#toRider")){ try { localStorage.setItem("mh-role", "rider"); } catch(err){} location.href = "/"; }
+  });
+</script>
 <script>
 (function(){
   "use strict";

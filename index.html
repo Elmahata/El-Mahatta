@@ -2,6 +2,7 @@
 <html lang="ar" dir="rtl">
 <head>
 <meta charset="utf-8">
+<script>try{ if(localStorage.getItem("mh-role") === "driver" && !/[?&]rider\b/.test(location.search)) location.replace("/driver.html"); }catch(e){}</script>
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>المحطة — مشوارك بقى أسهل</title>
 <meta name="description" content="مشوارك بقى أسهل — اطلب توكتوك بسعر ثابت معروف قبل ما السائق يتحرك.">
@@ -679,10 +680,34 @@ html,body{height:100%;overflow:hidden}
     }, function(){}, { enableHighAccuracy:true, timeout:8000, maximumAge:60000 });
   }
 
-  TT.riderGate(getJSON(ME, {}), function(me){
-    setJSON(ME, me);
-    if(!forOther){ $("rName").value = me.name; $("rPhone").value = me.phone; }
-  });
+  /* تطبيق واحد: أول مرة بيسأل «راكب ولا سائق»، والاختيار بيتحفظ */
+  function openRider(){
+    TT.riderGate(getJSON(ME, {}), function(me){
+      setJSON(ME, me);
+      if(!forOther){ $("rName").value = me.name; $("rPhone").value = me.phone; }
+    });
+  }
+  var role = ""; try { role = localStorage.getItem("mh-role") || ""; } catch(e){}
+  if(role === "rider") openRider();
+  else {
+    var ch = document.createElement("div");
+    ch.style.cssText = "position:fixed;inset:0;z-index:4950;background:#0E7566;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px calc(24px + env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px))";
+    ch.innerHTML = '<div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px;align-items:stretch">'
+      + '<img src="/assets/logo.png" alt="" style="height:80px;width:auto;align-self:center;filter:brightness(0) invert(1)">'
+      + '<h1 style="margin:0;text-align:center;font:800 28px/1.3 var(--display)">أهلاً بيك في المحطة</h1>'
+      + '<p style="margin:0 0 10px;text-align:center;color:#D6EBE6">مشوارك بقى أسهل. إنت هنا كـ…</p>'
+      + '<button data-role="rider" style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;background:#fff;color:#131E1C;border:0;border-radius:16px;padding:18px 20px;cursor:pointer;text-align:start;min-height:72px"><b style="font:800 20px var(--display);color:#0A5A4E">راكب</b><span style="font-size:14px;color:#47544F">عايز أطلب توكتوك</span></button>'
+      + '<button data-role="driver" style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;background:#131E1C;color:#fff;border:0;border-radius:16px;padding:18px 20px;cursor:pointer;text-align:start;min-height:72px"><b style="font:800 20px var(--display)">سائق</b><span style="font-size:14px;color:#AEBCB7">عندي توكتوك ومسجّل مع الإدارة</span></button>'
+      + '<p style="margin:6px 0 0;text-align:center;font-size:13px;color:#D6EBE6">تقدر تغيّر بعدين من «حسابي».</p></div>';
+    document.body.appendChild(ch);
+    ch.addEventListener("click", function(e){
+      var b = e.target.closest("[data-role]"); if(!b) return;
+      var r = b.getAttribute("data-role");
+      try { localStorage.setItem("mh-role", r); } catch(err){}
+      if(r === "driver"){ location.replace("/driver.html"); return; }
+      ch.remove(); openRider();
+    });
+  }
 
   TT.api("public").then(function(raw){
     var s = TT.shape(raw);
