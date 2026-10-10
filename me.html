@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>المحطة — حسابي</title>
+<meta name="theme-color" content="#0E7566">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="icon" href="/assets/icon-192.png">
+<link rel="stylesheet" href="/assets/style.css">
+<style>
+.wrap{max-width:560px;margin:0 auto;padding:14px 16px 60px}
+.top{display:flex;align-items:center;gap:10px;padding:6px 0 14px;border-bottom:1px solid var(--line);margin-bottom:14px}
+.top h1{margin:0;font-family:var(--display);font-size:20px}
+.tabs{display:flex;gap:4px;background:var(--inset);border-radius:10px;padding:3px;margin-bottom:14px;overflow-x:auto}
+.tabs button{flex:1;white-space:nowrap;border:0;background:transparent;color:var(--muted);font-family:var(--body);font-weight:600;font-size:13.5px;padding:9px 8px;border-radius:8px;cursor:pointer}
+.tabs button[aria-selected="true"]{background:var(--surface);color:var(--ink);font-weight:700}
+.row2{display:flex;align-items:center;gap:12px;padding:12px 14px;border-bottom:1px solid var(--line)}
+.row2:last-child{border-bottom:0}
+.ico{width:36px;height:36px;border-radius:10px;background:var(--accent-soft,#D6EBE6);color:var(--accent-ink,#0A5A4E);display:grid;place-items:center;font-weight:800;flex:none}
+.big{font-family:var(--display);font-weight:800;font-size:28px;letter-spacing:3px;direction:ltr}
+.opt{display:flex;align-items:center;gap:10px;width:100%;text-align:start;padding:11px 13px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font-family:var(--body);font-size:14px;font-weight:600;cursor:pointer;margin-bottom:7px}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft,#D6EBE6)}
+.day{font-size:12px;font-weight:700;color:var(--muted);margin:12px 2px 6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <a href="/" class="btn btn-ghost btn-sm" aria-label="رجوع">→</a>
+    <img src="/assets/logo.png" alt="" style="height:30px;width:auto">
+    <h1>حسابي</h1>
+  </div>
+
+  <div class="tabs" role="tablist">
+    <button role="tab" data-tab="profile" aria-selected="true">البروفايل</button>
+    <button role="tab" data-tab="places" aria-selected="false">أماكني</button>
+    <button role="tab" data-tab="history" aria-selected="false">رحلاتي</button>
+    <button role="tab" data-tab="invite" aria-selected="false">ادعي صاحبك</button>
+    <button role="tab" data-tab="support" aria-selected="false">الدعم</button>
+  </div>
+
+  <!-- البروفايل -->
+  <section id="t-profile" class="stack">
+    <div class="card">
+      <div class="field"><label for="pName">اسمك</label><input id="pName" autocomplete="name"></div>
+      <div class="field"><label for="pPhone">رقم موبايلك</label><input id="pPhone" inputmode="tel" placeholder="01xxxxxxxxx" style="direction:ltr;text-align:right"></div>
+      <button class="btn btn-primary btn-wide" id="pSave">حفظ</button>
+      <p class="hint" style="margin-top:8px">بيتحفظوا على موبايلك بس، علشان ماتكتبهمش كل مرة.</p>
+    </div>
+    <div class="card" style="padding:0">
+      <div class="row2"><span style="flex:1;font-weight:600">طريقة الدفع</span><span class="hint">نقداً للسائق</span></div>
+      <div class="row2"><span style="flex:1;font-weight:600">الأسعار</span><span class="hint" id="prices">—</span></div>
+      <div class="row2"><button class="btn btn-ghost btn-sm" id="pClear" style="color:var(--crit)">امسح بياناتي من الموبايل ده</button></div>
+    </div>
+  </section>
+
+  <!-- الأماكن المحفوظة -->
+  <section id="t-places" class="stack" hidden>
+    <div id="savedList"></div>
+    <div class="card">
+      <h2 style="margin:0 0 10px;font-size:16px">ضيف مكان</h2>
+      <div class="field"><label for="sLabel">الاسم</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:6px">
+          <button type="button" class="btn btn-ghost btn-sm" data-lbl="البيت">البيت</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-lbl="الشغل">الشغل</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-lbl="المدرسة">المدرسة</button>
+        </div>
+        <input id="sLabel" placeholder="مثلاً: بيت ماما"></div>
+      <div class="field"><label for="sPlace">المكان</label><select id="sPlace"></select></div>
+      <button class="btn btn-ghost btn-wide" id="sHere" style="margin-bottom:8px">📍 استخدم موقعي الحالي</button>
+      <button class="btn btn-primary btn-wide" id="sAdd">حفظ المكان</button>
+    </div>
+    <div class="banner b-note"><span>◆</span><span>أماكنك بتظهر في صفحة الطلب كأزرار، دوسة واحدة وتحدد الركوب أو الوجهة.</span></div>
+  </section>
+
+  <!-- رحلاتي -->
+  <section id="t-history" hidden>
+    <div class="card" style="background:var(--fare-soft,#F9E6DA);border:0;display:flex;align-items:center;gap:12px">
+      <span class="big" id="hTotal" style="color:var(--fare);letter-spacing:0">0</span>
+      <span style="color:var(--fare);font-size:13px"><b>جنيه</b> الشهر ده<br><span id="hCount">0</span> رحلة</span>
+    </div>
+    <div id="hList"></div>
+  </section>
+
+  <!-- ادعي صاحبك -->
+  <section id="t-invite" class="stack" hidden>
+    <div class="card" style="background:var(--accent);color:#fff;border:0;text-align:center">
+      <h2 style="margin:0 0 6px;color:#fff">هات صاحبك، وخدوا ٥ ج</h2>
+      <p style="margin:0;font-size:13.5px;opacity:.9">أول رحلة لصاحبك بـ ٥ ج أقل، وإنت كمان تاخد ٥ ج على رحلتك الجاية.</p>
+    </div>
+    <div id="invNeed" class="banner b-warn" hidden><span>⚠</span><span>اطلب أول رحلة أو اكتب رقمك في «البروفايل» علشان يطلعلك كود.</span></div>
+    <div id="invBox" class="card" hidden>
+      <div class="hint">كودك</div>
+      <div style="display:flex;align-items:center;gap:10px;border:2px dashed var(--accent);border-radius:12px;padding:10px 14px;margin:6px 0 12px">
+        <span class="big" id="invCode">—</span>
+        <button class="btn btn-ghost btn-sm" id="invCopy" style="margin-inline-start:auto">نسخ اللينك</button>
+      </div>
+      <a class="btn btn-primary btn-wide" id="invWa" target="_blank" rel="noopener" href="#">ابعته على واتساب</a>
+      <div class="grid2" style="margin-top:12px">
+        <div class="stat"><span class="k" id="invJoined">0</span><div class="l">صحاب طلبوا</div></div>
+        <div class="stat"><span class="k" id="invCredit">0</span><div class="l">جنيه رصيدك</div></div>
+      </div>
+      <p class="hint" style="margin-top:10px">الخصم بيتطبّق لوحده على رحلتك الجاية، والسائق بياخد حقه كامل من الإدارة.</p>
+    </div>
+  </section>
+
+  <!-- الدعم -->
+  <section id="t-support" class="stack" hidden>
+    <div class="card">
+      <h2 style="margin:0 0 10px;font-size:16px">المشكلة إيه؟</h2>
+      <div id="kinds"></div>
+      <div class="field"><label for="supTrip">الرحلة (اختياري)</label><select id="supTrip"><option value="">— مش مرتبطة برحلة —</option></select></div>
+      <div class="field"><label for="supNote">اكتب اللي حصل</label><textarea id="supNote" rows="4"></textarea></div>
+      <button class="btn btn-primary btn-wide" id="supSend">ابعت للإدارة</button>
+    </div>
+    <div class="grid2">
+      <a class="btn btn-ghost" id="supCall" href="#">اتصل بالإدارة</a>
+      <a class="btn btn-ghost" id="supWa" target="_blank" rel="noopener" href="#">واتساب</a>
+    </div>
+  </section>
+</div>
+
+<script src="/assets/common.js"></script>
+<script>
+(function(){
+  "use strict";
+  var $ = TT.$;
+  var ME = "tt-me", SAVED = "tt-saved", HIST = "tt-history";
+  var state = { zones:[], places:[], cfg:{} }, kind = "overcharge", here = null;
+  function getJSON(k, d){ try{ return JSON.parse(localStorage.getItem(k) || "null") || d; }catch(e){ return d; } }
+  function setJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
+
+  /* ---------- التبويبات ---------- */
+  function show(t){
+    [].forEach.call(document.querySelectorAll("[data-tab]"), function(b){ b.setAttribute("aria-selected", b.getAttribute("data-tab") === t); });
+    ["profile","places","history","invite","support"].forEach(function(x){ $("t-" + x).hidden = x !== t; });
+    if(t === "history") renderHistory();
+    if(t === "invite") renderInvite();
+    if(t === "places") renderSaved();
+    try{ history.replaceState(null, "", "#" + t); }catch(e){}
+  }
+  document.addEventListener("click", function(e){
+    if(!e.target.closest) return;
+    var b = e.target.closest("[data-tab]"); if(b){ show(b.getAttribute("data-tab")); return; }
+    var l = e.target.closest("[data-lbl]"); if(l){ $("sLabel").value = l.getAttribute("data-lbl"); return; }
+    var d = e.target.closest("[data-delsaved]");
+    if(d){ var s = getJSON(SAVED, []); s.splice(+d.getAttribute("data-delsaved"), 1); setJSON(SAVED, s); renderSaved(); return; }
+    var k = e.target.closest("[data-kind]"); if(k){ kind = k.getAttribute("data-kind"); renderKinds(); return; }
+  });
+
+  /* ---------- البروفايل ---------- */
+  var me = getJSON(ME, {});
+  $("pName").value = me.name || ""; $("pPhone").value = me.phone || "";
+  $("pSave").addEventListener("click", function(){
+    var n = $("pName").value.trim(), p = $("pPhone").value.trim();
+    if(p && p.replace(/\D/g,"").length < 9){ TT.toast("اكتب رقم موبايل صحيح"); return; }
+    me = { name:n, phone:p }; setJSON(ME, me); TT.toast("اتحفظ ✓");
+  });
+  $("pClear").addEventListener("click", function(){
+    if(!confirm("هتتمسح بياناتك وأماكنك ورحلاتك من الموبايل ده. متأكد؟")) return;
+    ["tt-me","tt-saved","tt-history","tt-routes"].forEach(function(k){ try{ localStorage.removeItem(k); }catch(e){} });
+    location.reload();
+  });
+
+  /* ---------- الأماكن ---------- */
+  function nearest(ll){
+    var best = null, bd = Infinity;
+    state.places.forEach(function(p){
+      if(p.lat == null) return;
+      var dLa = (p.lat-ll.lat)*111320, dLo = (p.lng-ll.lng)*111320*Math.cos(ll.lat*Math.PI/180), d = Math.sqrt(dLa*dLa+dLo*dLo);
+      if(d < bd){ bd = d; best = p; }
+    });
+    return best ? { p:best, d:Math.round(bd) } : null;
+  }
+  function renderSaved(){
+    var s = getJSON(SAVED, []);
+    $("savedList").innerHTML = s.length ? '<div class="card" style="padding:0">' + s.map(function(x, i){
+      return '<div class="row2"><span class="ico">'+TT.esc((x.label||"؟").charAt(0))+'</span><div style="flex:1;min-width:0"><b>'+TT.esc(x.label)+'</b><div class="hint">'+TT.esc(x.place.label)+(x.place.zone ? ' · '+TT.esc(x.place.zone) : '')+'</div></div>'
+        + '<button class="btn btn-ghost btn-sm" data-delsaved="'+i+'">شيل</button></div>';
+    }).join("") + '</div>' : '<div class="empty">لسه مفيش أماكن محفوظة.</div>';
+    var opts = state.places.filter(function(p){ return p.lat != null; });
+    $("sPlace").innerHTML = (here ? '<option value="here">📍 موقعي الحالي — '+TT.esc(here.label)+'</option>' : '')
+      + (opts.length ? opts.map(function(p){ return '<option value="'+TT.esc(p.id)+'">'+TT.esc(p.name)+' — '+TT.esc(TT.zoneName(state.zones, p.zoneId))+'</option>'; }).join("")
+        : '<option value="">لسه مفيش أماكن متحددة على الخريطة</option>');
+    if(here) $("sPlace").value = "here";
+  }
+  $("sHere").addEventListener("click", function(){
+    if(!navigator.geolocation){ TT.toast("الموبايل مش بيدعم تحديد الموقع"); return; }
+    var b = this; b.disabled = true; b.textContent = "بنحدد مكانك…";
+    navigator.geolocation.getCurrentPosition(function(pos){
+      var ll = { lat:+pos.coords.latitude.toFixed(6), lng:+pos.coords.longitude.toFixed(6) }, n = nearest(ll);
+      here = { lat:ll.lat, lng:ll.lng, label: n ? (n.d < 45 ? n.p.name : "جنب " + n.p.name) : "موقعي", zoneId: n ? n.p.zoneId : "", zone: n ? TT.zoneName(state.zones, n.p.zoneId) : "" };
+      renderSaved();
+      b.disabled = false; b.textContent = "📍 استخدم موقعي الحالي";
+    }, function(){ TT.toast("تعذّر تحديد موقعك"); b.disabled = false; b.textContent = "📍 استخدم موقعي الحالي"; }, { enableHighAccuracy:true, timeout:10000 });
+  });
+  $("sAdd").addEventListener("click", function(){
+    var label = $("sLabel").value.trim(), v = $("sPlace").value, place = null;
+    if(!label){ $("sLabel").focus(); return; }
+    if(v === "here" && here) place = here;
+    else {
+      var p = state.places.filter(function(x){ return x.id === v; })[0];
+      if(p) place = { lat:p.lat, lng:p.lng, label:p.name, zoneId:p.zoneId, zone:TT.zoneName(state.zones, p.zoneId) };
+    }
+    if(!place){ TT.toast("اختار المكان"); return; }
+    var s = getJSON(SAVED, []); s.push({ label:label, place:place }); setJSON(SAVED, s.slice(-8));
+    $("sLabel").value = ""; here = null; renderSaved(); TT.toast("اتحفظ ✓");
+  });
+
+  /* ---------- رحلاتي ---------- */
+  function dayLabel(t){
+    var d = new Date(t), n = new Date();
+    var diff = Math.round((new Date(n.getFullYear(), n.getMonth(), n.getDate()) - new Date(d.getFullYear(), d.getMonth(), d.getDate())) / 864e5);
+    return diff === 0 ? "النهارده" : diff === 1 ? "امبارح" : d.toLocaleDateString("ar-EG", { weekday:"long", day:"numeric", month:"long" });
+  }
+  function renderHistory(){
+    var h = getJSON(HIST, []), m0 = new Date(); m0.setDate(1); m0.setHours(0,0,0,0);
+    var month = h.filter(function(x){ return x.status === "done" && x.at >= m0.getTime(); });
+    $("hTotal").textContent = month.reduce(function(s, x){ return s + (x.fare || 0); }, 0);
+    $("hCount").textContent = month.length;
+    if(!h.length){ $("hList").innerHTML = '<div class="empty" style="margin-top:12px">لسه ماطلبتش رحلات من الموبايل ده.</div>'; return; }
+    var last = "";
+    $("hList").innerHTML = h.map(function(x){
+      var dl = dayLabel(x.at), head = dl !== last ? '<div class="day">'+dl+'</div>' : ""; last = dl;
+      var st = x.status === "done" ? '<span class="chip c-ok">تمّت</span>' : x.status === "cancelled" ? '<span class="chip c-crit">اتلغت</span>'
+        : x.scheduledAt ? '<span class="chip c-warn">محجوزة</span>' : '<span class="chip c-neutral">جارية</span>';
+      var t = new Date(x.scheduledAt || x.at).toLocaleTimeString("ar-EG", { hour:"numeric", minute:"2-digit" });
+      return head + '<div class="card" style="padding:11px 13px;margin-bottom:7px"><div style="display:flex;align-items:center;gap:8px"><span class="hint">'+t+'</span>'+st
+        + (x.forOther ? '<span class="chip c-neutral">لـ '+TT.esc(x.forOther)+'</span>' : '')
+        + '<b style="margin-inline-start:auto;color:var(--fare)">'+(x.fare||"—")+' ج</b></div>'
+        + '<div style="margin-top:6px;font-size:14px">'+TT.esc(x.from)+' <span style="color:var(--muted)">←</span> '+TT.esc(x.to)+'</div></div>';
+    }).join("");
+  }
+
+  /* ---------- ادعي صاحبك ---------- */
+  function renderInvite(){
+    var ph = (getJSON(ME, {}).phone || "").replace(/\D/g,"");
+    $("invNeed").hidden = ph.length >= 9; $("invBox").hidden = ph.length < 9;
+    if(ph.length < 9) return;
+    TT.api("referral?phone=" + encodeURIComponent(ph)).then(function(r){
+      var link = location.origin + "/?ref=" + r.code;
+      $("invCode").textContent = r.code;
+      $("invJoined").textContent = r.joined; $("invCredit").textContent = r.credit;
+      $("invWa").href = "https://wa.me/?text=" + encodeURIComponent("جرّب «المحطة» — مشوارك بقى أسهل. أول رحلة ليك بـ " + r.off + " ج أقل بالكود ده: " + link);
+      $("invCopy").onclick = function(){ (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function(){ TT.toast("اتنسخ ✓"); }).catch(function(){ prompt("انسخ اللينك:", link); }); };
+    }).catch(function(e){ TT.toast(e.message || "تعذّر التحميل"); });
+  }
+
+  /* ---------- الدعم ---------- */
+  var KINDS = [["overcharge","السائق طلب أكتر من السعر"],["late","السائق اتأخر أو ماجاش"],["lost","نسيت حاجة في التوكتوك"],["behaviour","أسلوب السائق"],["suggest","اقتراح"],["other","حاجة تانية"]];
+  function renderKinds(){
+    $("kinds").innerHTML = KINDS.map(function(k){ return '<button class="opt" data-kind="'+k[0]+'" aria-pressed="'+(k[0]===kind)+'">'+k[1]+'</button>'; }).join("");
+  }
+  function fillTrips(){
+    var h = getJSON(HIST, []).slice(0, 10);
+    $("supTrip").innerHTML = '<option value="">— مش مرتبطة برحلة —</option>' + h.map(function(x){
+      return '<option value="'+TT.esc(x.id)+'">'+dayLabel(x.at)+' · '+TT.esc(x.from)+' ← '+TT.esc(x.to)+'</option>';
+    }).join("");
+  }
+  $("supSend").addEventListener("click", function(){
+    var m = getJSON(ME, {}), note = $("supNote").value.trim();
+    if(!m.phone){ TT.toast("اكتب رقمك في «البروفايل» الأول"); show("profile"); return; }
+    if(!note){ $("supNote").focus(); return; }
+    var b = this; b.disabled = true;
+    TT.api("support", { method:"POST", body:{ name:m.name, phone:m.phone, kind:kind, note:note, requestId:$("supTrip").value } })
+      .then(function(){ TT.toast("وصلت للإدارة ✓ — هيكلموك قريب"); $("supNote").value = ""; })
+      .catch(function(e){ TT.toast(e.message || "تعذّر الإرسال"); })
+      .then(function(){ b.disabled = false; });
+  });
+
+  /* ---------- تحميل ---------- */
+  renderKinds(); fillTrips();
+  TT.api("public").then(function(raw){
+    var s = TT.shape(raw);
+    state.zones = s.zones; state.places = s.places; state.cfg = s.cfg;
+    $("prices").textContent = s.cfg.same + " ج داخل المنطقة · " + s.cfg.cross + " ج بين منطقتين";
+    var admin = (s.cfg.adminPhone || "").replace(/\D/g,"");
+    if(admin){ $("supCall").href = "tel:" + admin; $("supWa").href = "https://wa.me/" + TT.waNum(admin); }
+    else { $("supCall").hidden = true; $("supWa").hidden = true; }
+    renderSaved();
+  }).catch(function(){});
+  show((location.hash || "#profile").slice(1) in { profile:1, places:1, history:1, invite:1, support:1 } ? (location.hash || "#profile").slice(1) : "profile");
+})();
+</script>
+</body>
+</html>

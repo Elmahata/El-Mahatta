@@ -9,6 +9,7 @@
 <link rel="manifest" href="/manifest-driver.webmanifest">
 <link rel="icon" href="/assets/icon-driver-192.png">
 <link rel="apple-touch-icon" href="/assets/icon-driver-192.png">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Readex+Pro:wght@400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="/assets/style.css">
 <style>
@@ -65,7 +66,8 @@
         <h1>تطبيق السائق</h1>
         <p class="sub" id="who">المحطة</p>
       </div>
-      <button class="btn btn-ghost btn-sm" id="out" hidden style="margin-inline-start:auto">خروج</button>
+      <a class="btn btn-ghost btn-sm" id="acct" href="/driver-me.html" hidden style="margin-inline-start:auto">حسابي</a>
+      <button class="btn btn-ghost btn-sm" id="out" hidden>خروج</button>
     </div>
     <div style="height:14px"></div>
   </header>
@@ -78,6 +80,7 @@
       <div style="margin-top:14px">
         <div class="field"><label for="ph">رقم الموبايل</label><input id="ph" inputmode="tel" placeholder="01xxxxxxxxx"></div>
         <div class="field"><label for="cd">الكود</label><input id="cd" inputmode="numeric" maxlength="6" placeholder="••••"></div>
+        <label style="display:flex;gap:10px;align-items:center;min-height:44px;margin:-4px 0 8px;cursor:pointer"><input type="checkbox" id="remember" checked style="width:20px;height:20px;accent-color:var(--accent)"><span>احفظ الدخول على الموبايل ده</span></label>
         <button class="btn btn-primary btn-wide" id="go">دخول</button>
         <p class="hint" id="gateErr" style="margin-top:10px;color:var(--crit)" hidden></p>
       </div>
@@ -88,6 +91,26 @@
   <section id="app" class="stack" hidden>
 
     <div id="subWarn" class="banner b-warn" hidden></div>
+    <a id="headBan" class="banner b-note" href="/driver-me.html#heading" hidden style="text-decoration:none"></a>
+
+    <div id="bigAlert" hidden style="position:fixed;inset:0;z-index:50;background:#0E7566;color:#fff;display:flex;flex-direction:column;align-items:center;padding:28px 20px calc(24px + env(safe-area-inset-bottom));gap:14px;text-align:center">
+      <b style="font-family:var(--display);font-size:16px;color:#D6EBE6">طلب جديد</b>
+      <div id="baRing" style="width:170px;height:170px;border-radius:50%;display:grid;place-items:center">
+        <div style="width:150px;height:150px;border-radius:50%;background:#0E7566;display:flex;flex-direction:column;align-items:center;justify-content:center">
+          <span id="baFare" style="font:800 56px/1 var(--display)">20</span><span style="font-weight:700;color:#F9E6DA">جنيه نقداً</span>
+        </div>
+      </div>
+      <span id="baSecs" style="font-size:13.5px;color:#D6EBE6"></span>
+      <div style="width:100%;max-width:420px;background:#fff;color:var(--ink);border-radius:14px;padding:14px;text-align:start;display:flex;flex-direction:column;gap:10px">
+        <div style="display:flex;gap:10px"><span style="width:10px;height:10px;border-radius:50%;background:var(--accent);margin-top:7px;flex:none"></span><b id="baFrom" style="font-size:16px"></b></div>
+        <div style="display:flex;gap:10px"><span style="width:10px;height:10px;border-radius:50%;background:var(--fare);margin-top:7px;flex:none"></span><b id="baTo" style="font-size:16px"></b></div>
+        <span id="baChip" class="chip c-neutral" style="align-self:flex-start"></span>
+      </div>
+      <div style="margin-top:auto;width:100%;max-width:420px;display:flex;flex-direction:column;gap:8px">
+        <button id="baTake" class="btn btn-take" data-take="" style="background:#fff;color:#0A5A4E;font-weight:800;font-size:20px;padding:18px;border-radius:14px;border:0">خد المشوار</button>
+        <button id="baSkip" class="btn" style="background:transparent;color:#D6EBE6;border:0">تجاهل</button>
+      </div>
+    </div>
 
     <button class="banner b-note" id="alertsBtn" style="border:0;width:100%;text-align:start;cursor:pointer;font-family:var(--body)">
       <span>♪</span><span><b>فعّل صوت الطلبات</b> — الموبايل هيرن ويهتز لما يوصل طلب جديد، والشاشة تفضل منوّرة. دوس هنا.</span>
@@ -109,6 +132,8 @@
     <div id="rideWrap" hidden>
       <div class="ride">
         <h2>مشوارك الحالي</h2>
+        <div id="rMap" style="height:220px;border-radius:12px;margin-top:10px;overflow:hidden;background:#E7ECEA"></div>
+        <div id="rNote" class="banner b-note" hidden style="margin-top:10px"></div>
         <div class="route" style="margin-top:10px">
           <div class="r"><span class="d" style="background:var(--accent)"></span>
             <div><b id="rFrom">—</b><span class="n">الانطلاق</span></div></div>
@@ -120,9 +145,9 @@
           <span class="num" id="rRider" style="font-weight:600"></span>
         </div>
         <div class="grid">
-          <a class="btn btn-ghost" id="rCall" href="#">اتصال بالراكب</a>
-          <a class="btn btn-ghost" id="rWa" target="_blank" rel="noopener" href="#">واتساب</a>
-          <a class="btn btn-ghost" id="rNavA" target="_blank" rel="noopener" href="#">مسار الانطلاق</a>
+          <button class="btn btn-ghost" id="rMsg" type="button">رسالة</button>
+          <button class="btn btn-ghost" id="rNet" type="button">اتصال بالنت</button>
+          <a class="btn btn-primary" id="rNavA" target="_blank" rel="noopener" href="#">ودّيني للراكب</a>
           <a class="btn btn-ghost" id="rNavB" target="_blank" rel="noopener" href="#">مسار الوصول</a>
         </div>
         <div id="codeGate" style="margin-top:12px;background:var(--surface);border-radius:var(--r-sm);padding:12px">
@@ -157,7 +182,9 @@
   </section>
 </div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="/assets/common.js"></script>
+<script src="/assets/chat.js"></script>
 <script>
 (function(){
   "use strict";
@@ -165,7 +192,7 @@
   var KEY = "tt-driver";
   var auth = null, timer = null, busy = false, lastIds = "";
 
-  try{ auth = JSON.parse(localStorage.getItem(KEY) || "null"); }catch(e){}
+  try{ auth = JSON.parse(localStorage.getItem(KEY) || sessionStorage.getItem(KEY) || "null"); }catch(e){}
 
   function hdr(){
     return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "content-type": "application/json" };
@@ -187,7 +214,7 @@
 
   function navUrl(pt){
     if(!pt) return "#";
-    var q = (pt.lat != null) ? (pt.lat + "," + pt.lng) : (pt.label + "، كفر صقر، الشرقية");
+    var q = (pt.lat != null) ? (pt.lat + "," + pt.lng) : (pt.label + "، مصر");
     return "https://www.google.com/maps/dir/?api=1&travelmode=driving&destination=" + encodeURIComponent(q);
   }
 
@@ -197,13 +224,14 @@
     var e = $("gateErr"); e.hidden = true;
     if(phone.length < 9 || !code){ e.textContent = "اكتب رقم الموبايل والكود"; e.hidden = false; return; }
     var b = this; b.disabled = true; b.textContent = "جارٍ الدخول…";
+    var rem = $("remember").checked;
     fetch("/api/driver/login", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ phone: phone, code: code })
     }).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "خطأ"); return j; }); })
       .then(function(j){
         auth = { phone: phone, code: code, name: j.driver.name };
-        try{ localStorage.setItem(KEY, JSON.stringify(auth)); }catch(x){}
+        try{ localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); (rem ? localStorage : sessionStorage).setItem(KEY, JSON.stringify(auth)); }catch(x){}
         start();
       })
       .catch(function(err){ e.textContent = err.message; e.hidden = false; })
@@ -213,9 +241,9 @@
 
   $("out").addEventListener("click", function(){
     if(timer) clearInterval(timer);
-    try{ localStorage.removeItem(KEY); }catch(e){}
+    try{ localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); }catch(e){}
     auth = null;
-    $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true;
+    $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true; $("acct").hidden = true;
     $("who").textContent = "المحطة";
   });
 
@@ -250,9 +278,12 @@
     lastIds = ids;
 
     host.innerHTML = list.map(function(j){
+      var when = j.scheduledAt ? new Date(j.scheduledAt).toLocaleTimeString("ar-EG", { hour:"numeric", minute:"2-digit" }) : "";
       return '<div class="job">'
         + '<div class="head"><span class="price">' + j.fare + '<small> ج</small></span>'
         + '<span class="chip c-neutral">' + (j.sameZone ? "داخل المنطقة" : "بين منطقتين") + '</span>'
+        + (when ? '<span class="chip c-warn">محجوز ' + when + '</span>' : '')
+        + (j.forOther ? '<span class="chip c-neutral">لحد تاني</span>' : '')
         + '<span class="ago" data-ago="' + TT.esc(j.id) + '">' + TT.timeAgo(j.createdAt) + '</span></div>'
         + '<div class="route">'
         + '<div class="r"><span class="d" style="background:var(--accent)"></span><div><b>' + TT.esc(j.from.label) + '</b><span class="n">الانطلاق</span></div></div>'
@@ -263,16 +294,82 @@
     }).join("");
   }
 
+  /* خريطة المشوار: مكان الراكب بالظبط (زي ما حط الدبوس) + الوجهة + مكانك */
+  var chat = null, chatId = "";
+  var rMap = null, rLayers = [], rMapId = "", meDot = null, watchId = null;
+  var curRide = null, lastSent = 0, rRoute = null, rr = { at:0 };
+  function rideEta(t){
+    var e = $("rEta");
+    if(!e){ e = document.createElement("div"); e.id = "rEta"; e.style.cssText = "margin-top:8px;font-weight:700;color:var(--accent-ink);text-align:center"; $("rMap").parentNode.insertBefore(e, $("rMap").nextSibling); }
+    e.textContent = t; e.hidden = !t;
+  }
+  /* المسار من مكانك للراكب (وبعد ما يركب: للوجهة) — بيتحدّث لما تتحرك */
+  function updRoute(me){
+    if(!curRide || !rMap) return;
+    var phase = curRide.startedAt ? 1 : 0, t = phase ? curRide.to : curRide.from;
+    if(!t || t.lat == null) return;
+    var moved = !rr.last || TT.dist(rr.last, me) > 0.06 || rr.phase !== phase;
+    if(!moved || Date.now() - rr.at < 8000) return;
+    var refit = rr.phase !== phase;
+    rr.at = Date.now(); rr.last = me; rr.phase = phase;
+    TT.route(me, t).then(function(rt){
+      if(!curRide) return;
+      if(!rRoute) rRoute = L.polyline(rt.coords, { color:"#131E1C", weight:5, opacity:.85 }).addTo(rMap);
+      else rRoute.setLatLngs(rt.coords);
+      rideEta((phase ? "للوجهة: " : "للراكب: ") + TT.etaText(rt));
+      if(refit) rMap.fitBounds(rRoute.getBounds(), { padding:[30,30], maxZoom:17 });
+    });
+  }
+  function drawRideMap(r){
+    if(!window.L) return;
+    curRide = r;
+    if(!rMap){
+      rMap = L.map("rMap", { zoomControl:false, attributionControl:false });
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19 }).addTo(rMap);
+    }
+    setTimeout(function(){ rMap.invalidateSize(); }, 50);
+    if(rMapId === r.id) return;
+    rMapId = r.id;
+    rLayers.forEach(function(l){ rMap.removeLayer(l); }); rLayers = [];
+    var pts = [];
+    if(r.from && r.from.lat != null){ rLayers.push(L.marker([r.from.lat, r.from.lng], { icon:TT.markerIcon("#0E7566", true) }).addTo(rMap).bindTooltip("الراكب هنا", { permanent:true, direction:"top", offset:[0,-30] })); pts.push([r.from.lat, r.from.lng]); }
+    if(r.to && r.to.lat != null){ rLayers.push(L.marker([r.to.lat, r.to.lng], { icon:TT.markerIcon("#BC4E1E", true) }).addTo(rMap)); pts.push([r.to.lat, r.to.lng]); }
+    if(pts.length) rMap.fitBounds(pts, { padding:[36,36], maxZoom:17 });
+    if(rRoute){ rMap.removeLayer(rRoute); rRoute = null; } rr = { at:0 }; rideEta("");
+    if(pts.length === 2){
+      TT.route(r.from, r.to).then(function(rt){
+        if(rMapId !== r.id) return;
+        rLayers.push(L.polyline(rt.coords, { color:"#0E7566", weight:4, opacity:.45, dashArray: rt.road ? "" : "6 8" }).addTo(rMap));
+      });
+    }
+    if(!navigator.geolocation){ rideEta("الموبايل ده مش بيدعم تحديد المكان"); }
+    else if(watchId == null){
+      watchId = navigator.geolocation.watchPosition(function(p){
+        var ll = [p.coords.latitude, p.coords.longitude], me = { lat:ll[0], lng:ll[1] };
+        if(!meDot) meDot = L.marker(ll, { icon:TT.driverIcon(p.coords.heading), interactive:false, zIndexOffset:1000 }).addTo(rMap);
+        else { meDot.setLatLng(ll); meDot.setIcon(TT.driverIcon(p.coords.heading)); }
+        /* بيبعت مكانك للراكب كل ٥ ثواني — وانت في مشوار بس */
+        if(Date.now() - lastSent > 5000){
+          lastSent = Date.now();
+          fetch("/api/driver/loc", { method:"POST", headers:hdr(), body:JSON.stringify({ lat:me.lat, lng:me.lng, h:p.coords.heading }) }).catch(function(){});
+        }
+        updRoute(me);
+      }, function(e){ if(e && e.code === 1) rideEta("افتح تحديد المكان (GPS) علشان الراكب يشوفك جاي"); }, { enableHighAccuracy:true, maximumAge:5000 });
+    }
+  }
+
   function renderRide(r){
     $("rideWrap").hidden = !r;
     $("feedWrap").hidden = Boolean(r);
-    if(!r) return;
+    if(!r){ if(chat){ chat.stop(); chat = null; chatId = ""; } rMapId = ""; curRide = null; if(rRoute && rMap){ rMap.removeLayer(rRoute); rRoute = null; } if(meDot && rMap){ rMap.removeLayer(meDot); meDot = null; } if(watchId != null){ navigator.geolocation.clearWatch(watchId); watchId = null; } return; }
+    drawRideMap(r);
+    $("rNote").hidden = !r.note;
+    $("rNote").innerHTML = r.note ? '<span>📍</span><span><b>علامة من الراكب:</b> ' + TT.esc(r.note) + '</span>' : "";
     $("rFrom").textContent = r.from.label;
     $("rTo").textContent = r.to.label;
-    $("rFare").textContent = r.fare + " ج نقداً";
-    $("rRider").textContent = r.riderName + " · " + r.riderPhone;
-    $("rCall").href = "tel:" + r.riderPhone;
-    $("rWa").href = "https://wa.me/" + TT.waNum(r.riderPhone);
+    $("rFare").textContent = r.fare + " ج نقداً" + (r.discount ? " (بعد خصم دعوة " + r.discount + " ج — الإدارة هتدفعهولك)" : "");
+    $("rRider").textContent = r.riderName;
+    if(!chat || chatId !== r.id){ chatId = r.id; chat = TT.chat.mount({ rid: r.id, headers: function(){ return { "x-driver-phone": auth.phone, "x-driver-code": auth.code }; }, msgBtn: $("rMsg"), callBtn: $("rNet") }); }
     $("rNavA").href = navUrl(r.from);
     $("rNavB").href = navUrl(r.to);
     $("rDone").setAttribute("data-rid", r.id);
@@ -330,8 +427,31 @@
     if(!("wakeLock" in navigator)) return;
     navigator.wakeLock.request("screen").then(function(w){ wake = w; }).catch(function(){});
   }
+  /* ---------- إشعار ملء الشاشة ---------- */
+  var baJob = null, baT = null, baLeft = 0, BA_SECS = 15;
+  function hideBig(){ $("bigAlert").hidden = true; baJob = null; if(baT){ clearInterval(baT); baT = null; } }
+  function paintBig(){
+    var p = Math.max(0, baLeft) / BA_SECS * 100;
+    $("baRing").style.background = "conic-gradient(#fff 0 " + p + "%, rgba(255,255,255,.2) " + p + "% 100%)";
+    $("baSecs").textContent = "باقي " + Math.max(0, baLeft) + " ثانية · أول واحد يقبل ياخده";
+    if(baLeft <= 0) hideBig();
+  }
+  function showBig(job){
+    baJob = job.id; baLeft = BA_SECS;
+    $("baFare").textContent = job.fare;
+    $("baFrom").textContent = job.from.label; $("baTo").textContent = job.to.label;
+    $("baChip").textContent = (job.sameZone ? "داخل المنطقة" : "بين منطقتين") + (job.scheduledAt ? " · محجوز" : "");
+    $("baTake").setAttribute("data-take", job.id); $("baTake").disabled = false; $("baTake").textContent = "خد المشوار";
+    $("bigAlert").hidden = false; paintBig();
+    if(baT) clearInterval(baT);
+    baT = setInterval(function(){ baLeft--; paintBig(); }, 1000);
+  }
+  $("baSkip").addEventListener("click", hideBig);
+  $("baTake").addEventListener("click", function(){ setTimeout(hideBig, 50); });
+
   function alertNew(job){
     beep();
+    if(!baJob) showBig(job);
     if(navigator.vibrate) navigator.vibrate([300, 120, 300, 120, 500]);
     if(document.hidden && "Notification" in window && Notification.permission === "granted"){
       var t = "طلب جديد — " + job.fare + " ج", o = { body: job.from.label + " ← " + job.to.label, icon: "/assets/icon-driver-192.png", tag: "job", vibrate: [300,120,300] };
@@ -381,9 +501,9 @@
       function fmt(s){ return s ? new Date(s + "T00:00:00").toLocaleDateString("ar-EG", { day:"numeric", month:"long" }) : ""; }
       var prices = (sb.week ? sb.week + " ج في الأسبوع" : "") + (sb.week && sb.month ? " أو " : "") + (sb.month ? sb.month + " ج في الشهر" : "");
       W.hidden = false;
-      if(sb.state === "free" && sb.until){
+      if(sb.state === "free"){
         W.className = "banner b-note";
-        W.innerHTML = '<span>★</span><span><b>المحطة مجانية دلوقتي</b> لحد ' + fmt(sb.until) + ' (باقي ' + TT.daysTo(sb.until) + ' يوم). بعدها اشتراك ' + prices + '.</span>';
+        W.innerHTML = '<span>★</span><span><b>المحطة مجانية</b> — مفيش اشتراك ولا عمولة.</span>';
       } else if(sb.state === "ok"){
         var left = TT.daysTo(sb.until);
         if(left <= 2){ W.className = "banner b-warn"; W.innerHTML = '<span>⚠</span><span>اشتراكك بيخلص ' + (left <= 0 ? "النهارده" : "خلال " + left + " يوم") + ' — جدّده مع الإدارة (' + prices + ').</span>'; }
@@ -397,6 +517,10 @@
       } else W.hidden = true;
 
       renderRide(j.mine);
+      if(baJob && (j.mine || !j.available.some(function(x){ return x.id === baJob; }))) hideBig();
+      var hd = j.me.heading;
+      $("headBan").hidden = !hd;
+      if(hd) $("headBan").innerHTML = '<span>➤</span><span><b>رايح ناحية ' + TT.esc(TT.zoneName(zonesCache, hd.zoneId) || "") + '</b> — بتشوف الطلبات اللي على طريقك بس' + (j.hidden ? ' (' + j.hidden + ' متخبّيين)' : '') + '. دوس للإلغاء.</span>';
       if(!j.mine){ checkNew(j.available); renderJobs(j.available); }
       $("feedHint").textContent = j.me.online
         ? "أول سائق يضغط «خد المشوار» ياخده"
@@ -404,16 +528,19 @@
     }).catch(function(err){
       if(err.status === 401 || err.status === 403){
         if(timer) clearInterval(timer);
-        try{ localStorage.removeItem(KEY); }catch(e){}
+        try{ localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); }catch(e){}
         auth = null;
-        $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true;
+        $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true; $("acct").hidden = true;
         $("gateErr").textContent = err.message; $("gateErr").hidden = false;
       }
     });
   }
 
+  var zonesCache = [];
+  TT.api("public").then(function(raw){ zonesCache = raw.zones || []; }).catch(function(){});
+
   function start(){
-    $("gate").hidden = true; $("app").hidden = false; $("out").hidden = false;
+    $("gate").hidden = true; $("app").hidden = false; $("out").hidden = false; $("acct").hidden = false;
     tick();
     if(timer) clearInterval(timer);
     timer = setInterval(function(){ if(!document.hidden) tick(); }, 4000);

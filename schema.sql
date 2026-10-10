@@ -1,4 +1,4 @@
--- قاعدة بيانات تطبيق توكتوك كفر صقر (Cloudflare D1)
+-- قاعدة بيانات تطبيق المحطة (Cloudflare D1)
 -- جدول واحد عام يخزّن كل الأنواع: zones / places / drivers / requests / config
 
 DROP TABLE IF EXISTS docs;

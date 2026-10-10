@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-<title>المحطة — اطلب توكتوك في كفر صقر</title>
-<meta name="description" content="اطلب توكتوك في مدينة كفر صقر بسعر ثابت معروف قبل ما السائق يتحرك.">
+<title>المحطة — مشوارك بقى أسهل</title>
+<meta name="description" content="مشوارك بقى أسهل — اطلب توكتوك بسعر ثابت معروف قبل ما السائق يتحرك.">
 <meta name="theme-color" content="#0E7566">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/assets/icon-192.png">
@@ -97,8 +97,10 @@ html,body{height:100%;overflow:hidden}
   <div class="pillbar">
     <img src="/assets/logo.png" alt="" style="height:28px;width:auto;display:block">
     <b>المحطة</b>
+    <span style="font-size:12px;font-weight:600;opacity:.75;white-space:nowrap">مشوارك بقى أسهل</span>
   </div>
   <span class="fixedfare" id="fixedFare">سعر ثابت</span>
+  <a href="/me.html" class="pillbar" aria-label="حسابي" style="text-decoration:none;color:inherit;padding:8px 12px;font-weight:700;font-size:13px">حسابي</a>
 </div>
 
 <button class="fab" id="locate" title="موقعي الحالي" aria-label="موقعي الحالي">
@@ -144,10 +146,22 @@ html,body{height:100%;overflow:hidden}
       <span class="cap" id="fareCap"><b>جنيهاً</b> — سعر ثابت، بلا مفاصلة.<br>يُدفع نقداً عند الوصول.</span>
     </div>
 
-    <div class="row">
-      <div class="field"><label for="rName">اسمك</label><input id="rName" autocomplete="name" placeholder="الاسم"></div>
-      <div class="field"><label for="rPhone">رقم موبايلك</label><input id="rPhone" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx"></div>
+    <div class="seg" id="whoSeg" style="display:flex;background:var(--inset);border-radius:10px;padding:3px;gap:3px;margin:4px 0 10px">
+      <button type="button" data-who="me" style="flex:1;border:0;border-radius:8px;padding:8px;font-family:var(--body);font-weight:700;cursor:pointer;background:var(--surface);color:var(--ink)">الرحلة ليّا</button>
+      <button type="button" data-who="other" style="flex:1;border:0;border-radius:8px;padding:8px;font-family:var(--body);font-weight:600;cursor:pointer;background:transparent;color:var(--ink)">لحد تاني</button>
     </div>
+    <div class="field">
+      <label for="when">إمتى؟</label>
+      <select id="when"><option value="">دلوقتي</option></select>
+      <p class="hint" id="whenHint" hidden style="margin-top:4px">الطلب بيوصل للسواقين قبل المعاد بـ ١٥ دقيقة.</p>
+    </div>
+    <div class="field"><label for="rNote">علامة مميزة للسائق (اختياري)</label><input id="rNote" maxlength="140" placeholder="مثلاً: قدام الصيدلية، البوابة الخضرا"></div>
+    <div class="row">
+      <div class="field"><label for="rName" id="rNameL">اسمك</label><input id="rName" autocomplete="name" placeholder="الاسم"></div>
+      <div class="field"><label for="rPhone" id="rPhoneL">رقم موبايلك</label><input id="rPhone" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx"></div>
+    </div>
+    <p class="hint" id="otherHint" hidden style="margin:-4px 0 10px">السائق هيكلّم الراكب ده مش إنت. هتقدر تتابع الرحلة من هنا وتبعتله الكود.</p>
+    <p class="hint" id="refHint" hidden style="margin:-4px 0 10px;color:var(--ok)"></p>
     <button class="btn btn-primary btn-wide" id="sendReq" style="font-size:16px;padding:13px">اطلب التوكتوك</button>
   </section>
 
@@ -183,6 +197,8 @@ html,body{height:100%;overflow:hidden}
     <div class="grid2">
       <a class="btn btn-primary" id="dCall" href="#">اتصل بالسائق</a>
       <a class="btn btn-ghost" id="dWa" target="_blank" rel="noopener" href="#">واتساب</a>
+      <button class="btn btn-ghost" id="dMsg" type="button">رسالة</button>
+      <button class="btn btn-ghost" id="dNet" type="button">اتصال بالنت</button>
     </div>
     <a class="btn btn-ghost btn-wide" id="shareTrip" target="_blank" rel="noopener" href="#" style="margin-top:8px">شارك رحلتك مع أهلك</a>
     <p class="hint" style="margin-top:12px;text-align:center">استنّى في مكانك، وادفع <b id="dFare2"></b> جنيه نقداً عند الوصول.</p>
@@ -228,6 +244,8 @@ html,body{height:100%;overflow:hidden}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="/assets/common.js"></script>
+<script src="/assets/verify.js"></script>
+<script src="/assets/chat.js"></script>
 <script>
 (function(){
   "use strict";
@@ -236,7 +254,33 @@ html,body{height:100%;overflow:hidden}
   var state = { zones:[], places:[], cfg:{ same:15, cross:20, sub:200 } };
   var map, step = "from", trip = { from:null, to:null }, layers = [], meMarker = null;
   var live = null, poll = null, reportFor = null, beforeReport = "ended";
-  var ROUTES = "tt-routes", ME = "tt-me";
+  var ROUTES = "tt-routes", ME = "tt-me", SAVED = "tt-saved", HIST = "tt-history", REF = "tt-ref";
+  var forOther = false;
+  (function(){ var m = /[?&]ref=([A-Za-z0-9]+)/.exec(location.search); if(m) try{ localStorage.setItem(REF, m[1].toUpperCase()); }catch(e){} })();
+  function histUpdate(id, patch){
+    var h = getJSON(HIST, []), it = h.filter(function(x){ return x.id === id; })[0];
+    if(it){ for(var k in patch) it[k] = patch[k]; setJSON(HIST, h); }
+  }
+  function getRef(){ try{ return localStorage.getItem(REF) || ""; }catch(e){ return ""; } }
+  var DAYS = ["الحد","التنين","التلات","الأربع","الخميس","الجمعة","السبت"];
+  function whenLabel(t){
+    var d = new Date(t), now = new Date(), day;
+    var diff = Math.round((new Date(d.getFullYear(), d.getMonth(), d.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5);
+    day = diff === 0 ? "النهارده" : diff === 1 ? "بكرة" : DAYS[d.getDay()];
+    var h = d.getHours(), m = d.getMinutes();
+    return day + " " + ((h % 12) || 12) + ":" + (m < 10 ? "0" : "") + m + (h < 12 ? " ص" : " م");
+  }
+  function fillWhen(){
+    var sel = $("when"), cur = sel.value, start = new Date();
+    start.setMinutes(Math.ceil((start.getMinutes() + 30) / 15) * 15, 0, 0);
+    var html = '<option value="">دلوقتي</option>';
+    for(var i = 0; i < 4 * 36; i++){
+      var t = start.getTime() + i * 15 * 6e4, h = new Date(t).getHours();
+      if(h < 6 || h > 23) continue;
+      html += '<option value="'+t+'">'+whenLabel(t)+'</option>';
+    }
+    sel.innerHTML = html; sel.value = cur;
+  }
   function getJSON(k, d){ try{ return JSON.parse(localStorage.getItem(k) || "null") || d; }catch(e){ return d; } }
   function setJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 
@@ -290,10 +334,19 @@ html,body{height:100%;overflow:hidden}
     if(trip.from && trip.to){
       var f = fareOf();
       var line = L.polyline([[trip.from.lat,trip.from.lng],[trip.to.lat,trip.to.lng]], {
-        color: f.same ? "#0E7566" : "#BC4E1E", weight:4, opacity:.9
+        color: f.same ? "#0E7566" : "#BC4E1E", weight:4, opacity:.5, dashArray:"6 8"
       }).addTo(map);
       layers.push(line);
-      map.fitBounds(line.getBounds(), { paddingTopLeft:[40,90], paddingBottomRight:[40,320], maxZoom:17 });
+      var fitOpts = { paddingTopLeft:[40,90], paddingBottomRight:[40,320], maxZoom:17 };
+      if(step !== "matched") map.fitBounds(line.getBounds(), fitOpts);
+      /* المسار الحقيقي على الطرق — بيحل مكان الخط المتقطع أول ما يوصل */
+      TT.route(trip.from, trip.to).then(function(rt){
+        if(layers.indexOf(line) < 0) return;
+        if(rt.road){ line.setLatLngs(rt.coords); line.setStyle({ opacity:.95, dashArray:"" }); if(step === "confirm") map.fitBounds(line.getBounds(), fitOpts); }
+        var el = $("routeInfo");
+        if(!el && $("fareBox")){ el = document.createElement("p"); el.id = "routeInfo"; el.className = "hint"; el.style.cssText = "margin:6px 0 0;text-align:center"; $("fareBox").parentNode.insertBefore(el, $("fareBox").nextSibling); }
+        if(el) el.textContent = "المشوار حوالي " + TT.etaText(rt) + (rt.road ? "" : " (تقريبي)");
+      });
     }
   }
 
@@ -312,7 +365,7 @@ html,body{height:100%;overflow:hidden}
       $("confirmPick").textContent = (s === "from") ? "تأكيد مكان الركوب" : "تأكيد الوجهة";
       $("backPick").hidden = (s === "from");
       $("pinBody").setAttribute("fill", (s === "from") ? "#0E7566" : "#BC4E1E");
-      renderQuick(s === "from");
+      renderQuick(true);
       updatePick();
     }
     if(s === "confirm") renderConfirm();
@@ -337,9 +390,13 @@ html,body{height:100%;overflow:hidden}
   }
   function renderQuick(show){
     var q = $("quick"), list = show ? getJSON(ROUTES, []).slice(0, 3) : [];
-    q.hidden = !list.length;
-    if(!list.length){ q.innerHTML = ""; return; }
-    q.innerHTML = '<div class="lbl" style="font-size:11.5px;font-weight:600;color:var(--muted)">مشاويرك — دوسة واحدة</div>' + list.map(function(r, i){
+    var saved = getJSON(SAVED, []).filter(function(s){ return s.place && s.place.lat != null; });
+    q.hidden = !list.length && !saved.length;
+    if(q.hidden){ q.innerHTML = ""; return; }
+    var chips = saved.length ? '<div style="display:flex;gap:6px;flex-wrap:wrap">' + saved.map(function(s, i){
+      return '<button data-saved="'+i+'" style="flex:0 0 auto;border-radius:999px;padding:7px 12px"><span>'+TT.esc(s.label)+'</span></button>';
+    }).join("") + '</div>' : "";
+    q.innerHTML = chips + (list.length ? '<div class="lbl" style="font-size:11.5px;font-weight:600;color:var(--muted)">مشاويرك — دوسة واحدة</div>' : "") + list.map(function(r, i){
       var same = r.from.zoneId && r.from.zoneId === r.to.zoneId;
       return '<button data-quick="'+i+'"><span>'+TT.esc(r.from.label)+' ← '+TT.esc(r.to.label)+'</span><b>'+(same ? state.cfg.same : state.cfg.cross)+' ج</b></button>';
     }).join("");
@@ -347,6 +404,10 @@ html,body{height:100%;overflow:hidden}
 
   function renderConfirm(){
     var f = fareOf();
+    fillWhen();
+    var ref = getRef();
+    $("refHint").hidden = !ref || forOther;
+    $("refHint").textContent = "كود دعوة " + ref + " — لو دي أول رحلة ليك، هتاخد خصم ٥ ج.";
     $("cFrom").textContent = trip.from.label; $("cFromZ").textContent = trip.from.zone;
     $("cTo").textContent = trip.to.label;     $("cToZ").textContent = trip.to.zone;
     $("fareAmt").textContent = f.amount;
@@ -373,14 +434,16 @@ html,body{height:100%;overflow:hidden}
       .then(function(j){
         $("sFare").textContent = j.fare;
         if(j.status === "assigned" && j.driver){
-          stopPoll();
-          $("dAv").textContent = (j.driver.name || "س").trim().charAt(0);
+          if(step !== "matched"){
+          var av = $("dAv"); av.textContent = j.driver.photo ? "" : (j.driver.name || "س").trim().charAt(0);
+          av.style.backgroundImage = j.driver.photo ? "url(" + j.driver.photo + ")" : ""; av.style.backgroundSize = "cover"; av.style.backgroundPosition = "center";
           $("dName").textContent = j.driver.name;
           $("dPlate").textContent = j.driver.plate ? ("لوحة " + j.driver.plate) : "توكتوك مرخّص";
           $("dFare").textContent = j.fare + " ج نقداً";
           $("dFare2").textContent = j.fare;
           $("dCall").href = "tel:" + j.driver.phone;
           $("dWa").href = "https://wa.me/" + TT.waNum(j.driver.phone);
+          if(!window.__chat || window.__chatId !== j.id){ window.__chatId = j.id; window.__chat = TT.chat.mount({ rid: j.id, token: live.token, msgBtn: $("dMsg"), callBtn: $("dNet") }); }
           $("codeBox").hidden = !j.code;
           $("dCode").textContent = j.code || "—";
           reportFor = { id: live.id, token: live.token };
@@ -388,25 +451,61 @@ html,body{height:100%;overflow:hidden}
           $("shareTrip").href = "https://wa.me/?text=" + encodeURIComponent("تابع رحلتي مع المحطة لحد ما أوصل: " + shareUrl);
           $("shareTrip").hidden = !j.shareToken;
           setStep("matched");
+          }
+          drawLive(j);
         } else if(j.status === "done"){
-          stopPoll(); saveLive(null);
+          stopPoll(); saveLive(null); clearLive();
+          histUpdate(j.id, { status:"done", fare:j.fare });
           $("endTitle").textContent = "تمّت الرحلة ✓";
           $("endMsg").textContent = "شكراً لاستخدامك المحطة.";
           rateFor = reportFor; stars = 0; paintStars(); $("rateBox").hidden = !rateFor;
           setStep("ended");
         } else if(j.status === "cancelled"){
-          stopPoll(); saveLive(null);
+          stopPoll(); saveLive(null); clearLive();
+          histUpdate(j.id, { status:"cancelled" });
           $("endTitle").textContent = "الطلب اتلغى";
           $("endMsg").textContent = "تقدر تطلب تاني في أي وقت.";
           setStep("ended");
         } else {
           var mins = Math.round((Date.now() - (j.createdAt||Date.now()))/6e4);
+          if(j.scheduledAt && Date.now() < j.scheduledAt - 15*6e4){
+            $("searchSub").textContent = "محجوز " + whenLabel(j.scheduledAt) + ". الطلب هيوصل للسواقين قبلها بـ ١٥ دقيقة — تقدر تقفل الصفحة.";
+            return;
+          }
           $("searchSub").textContent = mins < 2
             ? "الطلب وصل لكل السواقين — أول واحد يقبل هياخده"
             : "لسه بندوّر… عدّى " + mins + " دقيقة. لو اتأخر، جرّب تلغي وتطلب تاني.";
         }
       $("endReport").hidden = !reportFor;
     }).catch(function(){ /* الشبكة ممكن تقطع — النبضة الجاية تعوّض */ });
+  }
+
+  /* ---------- الخريطة لايف: مكان السائق + المسار ليك (وبعد الركوب: للوجهة) ---------- */
+  var liveL = { at:0 };
+  function clearLive(){ ["drv","tgt","line"].forEach(function(k){ if(liveL[k]) map.removeLayer(liveL[k]); }); liveL = { at:0 }; }
+  function drawLive(j){
+    if(!map) return;
+    var phase = j.startedAt ? 1 : 0, target = phase ? j.to : j.from;
+    var eta = $("dEta");
+    if(!eta && $("codeBox")){ eta = document.createElement("div"); eta.id = "dEta"; eta.style.cssText = "margin:8px 0;font-weight:700;color:var(--accent-ink);text-align:center"; $("codeBox").parentNode.insertBefore(eta, $("codeBox")); }
+    if(!j.driverLoc){ if(eta) eta.textContent = phase ? "" : "مستنّيين مكان السائق…"; return; }
+    var d = [j.driverLoc.lat, j.driverLoc.lng];
+    if(!liveL.drv) liveL.drv = L.marker(d, { icon:TT.driverIcon(j.driverLoc.h), interactive:false, zIndexOffset:1000 }).addTo(map);
+    else { liveL.drv.setLatLng(d); liveL.drv.setIcon(TT.driverIcon(j.driverLoc.h)); }
+    if(!target) return;
+    if(!liveL.tgt) liveL.tgt = L.marker([target.lat, target.lng], { icon:TT.markerIcon(phase ? "#BC4E1E" : "#0E7566", true), interactive:false }).addTo(map);
+    if(liveL.phase !== phase){ liveL.tgt.setLatLng([target.lat, target.lng]); liveL.tgt.setIcon(TT.markerIcon(phase ? "#BC4E1E" : "#0E7566", true)); liveL.fitted = 0; liveL.at = 0; }
+    var moved = !liveL.last || TT.dist(liveL.last, j.driverLoc) > 0.06 || liveL.phase !== phase;
+    if(moved && Date.now() - liveL.at > 8000){
+      liveL.at = Date.now(); liveL.last = j.driverLoc; liveL.phase = phase;
+      TT.route(j.driverLoc, target).then(function(rt){
+        if(!liveL.drv) return;
+        if(!liveL.line) liveL.line = L.polyline(rt.coords, { color:"#131E1C", weight:5, opacity:.85 }).addTo(map);
+        else liveL.line.setLatLngs(rt.coords);
+        if(eta) eta.textContent = (phase ? "هتوصل خلال " : "السائق هيوصلك خلال ") + TT.etaText(rt);
+        if(!liveL.fitted){ liveL.fitted = 1; map.fitBounds(liveL.line.getBounds().extend(d), { paddingTopLeft:[40,90], paddingBottomRight:[40,360], maxZoom:17 }); }
+      });
+    }
   }
 
   function startTracking(){
@@ -437,32 +536,62 @@ html,body{height:100%;overflow:hidden}
     setStep(w);
   });
 
+  $("when").addEventListener("change", function(){ $("whenHint").hidden = !this.value; $("sendReq").textContent = this.value ? "احجز التوكتوك" : "اطلب التوكتوك"; });
+
   $("sendReq").addEventListener("click", function(){
     var btn = this;
     var name = $("rName").value.trim(), phone = $("rPhone").value.trim();
     if(!name){ $("rName").focus(); return; }
     if(!/^\d{9,}$/.test(phone.replace(/\D/g,""))){ TT.toast("اكتب رقم موبايل صحيح"); $("rPhone").focus(); return; }
     btn.disabled = true; btn.textContent = "جارٍ الإرسال…";
-    TT.api("request", { method:"POST", body:{
-      riderName:name, riderPhone:phone,
+    var me = getJSON(ME, {}), ref = getRef();
+    if(forOther && !(me.phone)){ TT.toast("اطلب لنفسك مرة الأول أو اكتب رقمك في «حسابي»"); }
+    var whenV = $("when").value ? +$("when").value : null;
+    TT.api("request", { method:"POST", verify:{ phone: forOther ? (me.phone || phone) : phone, role:"rider" }, body:{
+      riderName:name, riderPhone:phone, note:$("rNote").value.trim(),
+      forOther: forOther, bookerPhone: forOther ? (me.phone || "") : "",
+      scheduledAt: whenV, ref: forOther ? "" : ref,
       from:{ lat:trip.from.lat, lng:trip.from.lng, label:trip.from.label },
       to:{ lat:trip.to.lat, lng:trip.to.lng, label:trip.to.label }
     }}).then(function(r){
-      setJSON(ME, { name:name, phone:phone });
+      if(!forOther){ setJSON(ME, { name:name, phone:phone }); try{ localStorage.removeItem(REF); }catch(e){} }
       rememberRoute();
+      var h = getJSON(HIST, []);
+      h.unshift({ id:r.id, token:r.token, from:trip.from.label, to:trip.to.label, fare:r.fare, at:Date.now(), scheduledAt:r.scheduledAt || null, forOther:forOther ? name : "", status:"pending" });
+      setJSON(HIST, h.slice(0, 60));
+      if(r.discount) TT.toast("خصم دعوة " + r.discount + " ج ✓");
       saveLive({ id:r.id, token:r.token });
       $("sFare").textContent = r.fare;
       startTracking();
     }).catch(function(err){
       TT.toast(err.message || "تعذّر الإرسال");
     }).then(function(){
-      btn.disabled = false; btn.textContent = "اطلب التوكتوك";
+      btn.disabled = false; btn.textContent = $("when").value ? "احجز التوكتوك" : "اطلب التوكتوك";
     });
   });
 
   document.addEventListener("click", function(e){
     if(!e.target.closest) return;
     var q = e.target.closest("[data-quick]");
+    var sv = e.target.closest("[data-saved]");
+    if(sv){
+      var s = getJSON(SAVED, []).filter(function(x){ return x.place && x.place.lat != null; })[+sv.getAttribute("data-saved")]; if(!s) return;
+      var pt = { lat:s.place.lat, lng:s.place.lng, label:s.label + " — " + s.place.label, zone:s.place.zone || "", zoneId:s.place.zoneId || "" };
+      if(step === "from"){ trip.from = pt; map.setView([pt.lat, pt.lng], 17); setStep("to"); }
+      else { trip.to = pt; setStep("confirm"); }
+      return;
+    }
+    var wb = e.target.closest("[data-who]");
+    if(wb){
+      forOther = wb.getAttribute("data-who") === "other";
+      [].forEach.call(document.querySelectorAll("[data-who]"), function(x){ var on = x === wb; x.style.background = on ? "var(--surface)" : "transparent"; x.style.fontWeight = on ? "700" : "600"; });
+      $("rNameL").textContent = forOther ? "اسم الراكب" : "اسمك";
+      $("rPhoneL").textContent = forOther ? "رقم موبايله" : "رقم موبايلك";
+      $("otherHint").hidden = !forOther;
+      var me = getJSON(ME, {});
+      $("rName").value = forOther ? "" : (me.name || ""); $("rPhone").value = forOther ? "" : (me.phone || "");
+      return;
+    }
     if(q){
       var r = getJSON(ROUTES, [])[+q.getAttribute("data-quick")]; if(!r) return;
       trip.from = r.from; trip.to = r.to; setStep("confirm"); return;
@@ -499,13 +628,13 @@ html,body{height:100%;overflow:hidden}
 
   $("cancelSearch").addEventListener("click", function(){
     if(!confirm("تلغي الطلب؟")) return;
-    stopPoll(); saveLive(null);
+    stopPoll(); saveLive(null); clearLive();
     trip = { from:null, to:null };
     setStep("from");
   });
 
   function reset(){
-    stopPoll(); saveLive(null); reportFor = null;
+    stopPoll(); saveLive(null); clearLive(); reportFor = null;
     trip = { from:null, to:null };
     var me = getJSON(ME, {}); $("rName").value = me.name || ""; $("rPhone").value = me.phone || "";
     setStep("from");
@@ -540,13 +669,28 @@ html,body{height:100%;overflow:hidden}
 
   (function(){ var me = getJSON(ME, {}); if(me.name) $("rName").value = me.name; if(me.phone) $("rPhone").value = me.phone; })();
 
+  /* أول ما الصفحة تفتح: الخريطة تروح لمكان الراكب بالظبط، في أي بلد */
+  function autoLocate(){
+    if(!navigator.geolocation) return;
+    navigator.geolocation.getCurrentPosition(function(pos){
+      if(step !== "from" || trip.from) return;
+      map.setView([pos.coords.latitude, pos.coords.longitude], 18);
+      if(pos.coords.accuracy > 60) TT.toast("حرّك الخريطة شوية لحد ما الدبوس يبقى على بابك بالظبط");
+    }, function(){}, { enableHighAccuracy:true, timeout:8000, maximumAge:60000 });
+  }
+
+  TT.riderGate(getJSON(ME, {}), function(me){
+    setJSON(ME, me);
+    if(!forOther){ $("rName").value = me.name; $("rPhone").value = me.phone; }
+  });
+
   TT.api("public").then(function(raw){
     var s = TT.shape(raw);
     state.zones = s.zones; state.places = s.places; state.cfg = s.cfg;
     $("fixedFare").textContent = s.cfg.same + "–" + s.cfg.cross + " ج ثابت";
     var placed = state.places.filter(function(p){ return p.lat != null; });
     if(placed.length) map.fitBounds(L.latLngBounds(placed.map(function(p){ return [p.lat,p.lng]; })), { padding:[50,50], maxZoom:16 });
-    if(live && live.id) startTracking(); else setStep("from");
+    if(live && live.id) startTracking(); else { setStep("from"); autoLocate(); }
   }).catch(function(){
     var e = $("err"); e.textContent = "تعذّر تحميل البيانات. حدّث الصفحة."; e.hidden = false;
     setStep("from");
