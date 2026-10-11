@@ -151,6 +151,18 @@
         <select id="newPlaceZone" style="width:auto;min-width:140px"></select>
         <button class="btn btn-ghost" id="addPlace">إضافة</button>
       </div>
+      <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px">
+        <button class="btn btn-primary" id="seedPlaces" type="button">أضف أماكن كفر صقر المشهورة (١٥)</button>
+        <button class="btn btn-ghost" id="poiLoad" type="button">اقتراحات من الخريطة</button>
+      </div>
+      <div class="banner b-warn" id="placeMiss" hidden style="margin-top:10px"></div>
+      <div>
+        <p class="hint" style="margin-top:6px">بيجيب أماكن حقيقية متسجّلة على الخريطة حوالين المدينة (مستشفيات، مدارس، جوامع، بنوك، المحطة…). علّم على اللي عايزه، واختار المنطقة فوق، ودوس «أضف».</p>
+        <div id="poiBox" hidden style="margin-top:10px">
+          <div id="poiList" style="max-height:320px;overflow:auto;border:1px solid var(--line);border-radius:var(--r)"></div>
+          <button class="btn btn-primary" id="poiAdd" type="button" style="margin-top:10px">أضف المختار</button>
+        </div>
+      </div>
     </div>
     <div id="placeList"></div>
   </section>
@@ -198,6 +210,11 @@
       </div>
       <div class="field"><label for="cAdminPhone">رقم الإدارة (بيظهر للركاب في «الدعم»)</label><input id="cAdminPhone" inputmode="tel" placeholder="01xxxxxxxxx"></div>
       <button class="btn btn-ghost" id="saveCfg">حفظ</button>
+      <div style="margin-top:16px;padding-top:14px;border-top:1px solid var(--line)">
+        <b>نسخة احتياطية</b>
+        <p class="hint" style="margin:4px 0 8px">نزّل كل البيانات (السواقين، الأماكن، المناطق، الرحلات، البلاغات) في ملف واحد. احفظه على Google Drive مرة كل أسبوع.</p>
+        <button class="btn btn-primary" id="backupBtn" type="button">نزّل نسخة من البيانات</button>
+      </div>
       <div class="banner b-warn" style="margin-top:14px">
         <span>⚠</span><span>راجع تعريفة التوكتوك المعتمدة من محافظ الشرقية (قانون المرور ١٧/٢٠٢٤) قبل تثبيت السعر.</span>
       </div>
@@ -351,6 +368,7 @@
           + (d.photo ? '<img src="'+d.photo+'" alt="" style="width:34px;height:34px;border-radius:50%;object-fit:cover;flex:none">' : '')
           + '<span class="'+(d.isOnline?"dot-on":"dot-off")+'" title="'+(d.isOnline?"أونلاين":"مش متصل")+'"></span>'
           + '<strong>'+TT.esc(d.name)+'</strong>'+sChip+lChip
+          + (d.lateCount ? '<span class="chip c-warn num" title="مرات الراكب قال إنه اتأخر أو مجاش">اتأخر '+d.lateCount+'</span>' : '')
           + (d.ratingCount ? '<span class="chip c-neutral num">★ '+(d.ratingSum/d.ratingCount).toFixed(1)+' ('+d.ratingCount+')</span>' : '')
           + '<span class="meta">'+(d.active===false?"موقوف":(d.isOnline?"أونلاين":"مش متصل"))+'</span></div>'
           + '<div class="leg"><span class="num">'+TT.esc(d.phone||"—")+'</span><span class="arrow">·</span>'
@@ -379,13 +397,28 @@
         + '<span class="zdot" style="background:'+TT.zoneColor(S.zones,z.id)+'"></span><strong>'+TT.esc(z.name)+'</strong>'
         + (z.official ? '<span class="chip c-ok">حي مؤكد</span>' : '<span class="chip c-neutral">منطقة تشغيل</span>')
         + '<span class="meta num">'+n+' نقطة</span></div>'
+        + '<div class="leg" style="gap:8px;flex-wrap:wrap"><label style="margin:0;font-size:12px">سعر جوه المنطقة</label><input data-zsame="'+TT.esc(z.id)+'" type="number" min="0" step="1" value="'+(z.same||"")+'" placeholder="'+S.cfg.same+'" style="width:80px;font-size:13px;padding:5px 9px">'
+        + '<label style="margin:0;font-size:12px">لمنطقة تانية</label><input data-zcross="'+TT.esc(z.id)+'" type="number" min="0" step="1" value="'+(z.cross||"")+'" placeholder="'+S.cfg.cross+'" style="width:80px;font-size:13px;padding:5px 9px"><span class="hint">فاضي = السعر العام</span></div>'
         + '<div class="actions">'
         + '<button class="btn btn-ghost btn-sm" data-renz="'+TT.esc(z.id)+'">إعادة تسمية</button>'
         + '<button class="btn btn-ghost btn-sm" data-delz="'+TT.esc(z.id)+'">حذف</button></div></div>';
     }).join("");
   }
 
+  var PCATS = { transport:"مواصلات", health:"صحة", gov:"جهات حكومية", edu:"تعليم", public:"أماكن عامة", market:"أسواق ومحلات", village:"القرى", other:"تانيين" };
+  /* أماكن مقترحة لكفر صقر — بتتضاف من غير مكان، وإنت بتحدد مكانها على الخريطة. الراكب مش بيشوفها غير بعد ما تتحدد */
+  var STARTER = [
+    ["محطة قطار كفر صقر","transport"],["ميدان المزلقان (وسط البلد)","transport"],["موقف الميكروباص","transport"],["كوبري بحر مويس","transport"],
+    ["مستشفى كفر صقر المركزي","health"],
+    ["مجلس مدينة كفر صقر","gov"],["مركز شرطة كفر صقر","gov"],["هندسة الري","gov"],["مكتب البريد","gov"],
+    ["مدرسة كفر صقر الثانوية بنين","edu"],["المعهد العالي للخدمة الاجتماعية","edu"],
+    ["مركز شباب كفر صقر","public"],["الجامع الكبير","public"],["شارع البحر","public"],
+    ["السوق","market"]
+  ];
   function renderPlaces(){
+    var miss = S.places.filter(function(p){ return p.lat == null; }).length;
+    $("placeMiss").hidden = !miss;
+    $("placeMiss").innerHTML = '<span>⚠</span><span><b>' + miss + ' مكان لسه مش متحدد على الخريطة</b> — الراكب مش هيشوفهم في القايمة غير لما تدوس «حدّد على الخريطة» لكل واحد.</span>';
     if(!S.places.length){ $("placeList").innerHTML = '<div class="empty">أضف نقاط الركوب.</div>'; return; }
     $("placeList").innerHTML = S.places.map(function(p){
       var has = p.lat != null;
@@ -395,7 +428,11 @@
         + '</div>'
         + '<div class="leg"><label style="margin:0;font-size:12px">المنطقة</label>'
         + '<select data-pz="'+TT.esc(p.id)+'" style="width:auto;min-width:150px;font-size:13px;padding:5px 9px">'
-        + '<option value="">— بدون —</option>'+zOpts(p.zoneId)+'</select></div>'
+        + '<option value="">— بدون —</option>'+zOpts(p.zoneId)+'</select>'
+        + '<label style="margin:0 10px 0 0;font-size:12px">النوع</label>'
+        + '<select data-pcat="'+TT.esc(p.id)+'" style="width:auto;min-width:130px;font-size:13px;padding:5px 9px">'
+        + Object.keys(PCATS).map(function(k){ return '<option value="'+k+'"'+((p.cat||"other")===k?' selected':'')+'>'+PCATS[k]+'</option>'; }).join("")
+        + '</select></div>'
         + '<div class="actions">'
         + '<button class="btn btn-'+(selPlace===p.id?"primary":"ghost")+' btn-sm" data-sel="'+TT.esc(p.id)+'">'+(selPlace===p.id?"جارٍ التحديد…":"حدّد على الخريطة")+'</button>'
         + '<button class="btn btn-ghost btn-sm" data-renp="'+TT.esc(p.id)+'">إعادة تسمية</button>'
@@ -629,6 +666,46 @@
     $("newZone").value = "";
   });
 
+  $("backupBtn").addEventListener("click", function(){
+    var data = { app:"el-mahatta", at:new Date().toISOString(), zones:S.zones, places:S.places, drivers:S.drivers, requests:S.requests, reports:S.reports || [], config:S.cfg };
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 1)], { type:"application/json" }));
+    a.download = "el-mahatta-backup-" + new Date().toISOString().slice(0,10) + ".json";
+    document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
+    TT.toast("اتنزّلت النسخة ✓");
+  });
+  $("seedPlaces").addEventListener("click", function(){
+    var have = {}; S.places.forEach(function(p){ have[p.name] = 1; });
+    var add = STARTER.filter(function(s){ return !have[s[0]]; });
+    if(!add.length){ TT.toast("كلهم مضافين قبل كده"); return; }
+    var z = $("newPlaceZone").value || "", b = this; b.disabled = true;
+    Promise.all(add.map(function(s, i){ var id = TT.uid() + i; return save("places", id, { id:id, name:s[0], cat:s[1], zoneId:z, lat:null, lng:null, order:S.places.length + i }); }))
+      .then(function(){ TT.toast("اتضاف " + add.length + " مكان — حدد مكان كل واحد على الخريطة"); })
+      .finally(function(){ b.disabled = false; });
+  });
+  var POI = [];
+  var KIND = { hospital:"مستشفى", clinic:"عيادة", pharmacy:"صيدلية", school:"مدرسة", college:"كلية", university:"جامعة", place_of_worship:"جامع / كنيسة", bank:"بنك", post_office:"بريد", police:"شرطة", townhall:"مجلس المدينة", marketplace:"سوق", station:"محطة قطار", bus_station:"موقف", fuel:"بنزينة", cafe:"كافيه", restaurant:"مطعم", government:"جهة حكومية" };
+  $("poiLoad").addEventListener("click", function(){
+    var b = this; b.disabled = true; b.textContent = "بيدوّر…";
+    TT.nearbyPOIs(TT.CENTER).then(function(list){
+      var have = {}; S.places.forEach(function(p){ have[p.name] = 1; });
+      POI = list.filter(function(p){ return !have[p.name]; });
+      $("poiBox").hidden = false;
+      $("poiList").innerHTML = POI.length ? POI.map(function(p, i){
+        return '<label style="display:flex;gap:10px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer"><input type="checkbox" data-poi="'+i+'" style="width:20px;height:20px;accent-color:var(--accent)"><span style="flex:1">'+TT.esc(p.name)+'</span><span class="hint">'+TT.esc(KIND[p.kind] || p.kind)+'</span></label>';
+      }).join("") : '<div class="empty">مالقيناش أماكن جديدة. ضيفها بإيدك من فوق.</div>';
+    }).catch(function(){ TT.toast("الخدمة مش متاحة دلوقتي — جرّب بعد شوية"); })
+      .finally(function(){ b.disabled = false; b.textContent = "اقتراحات من الخريطة"; });
+  });
+  $("poiAdd").addEventListener("click", function(){
+    var picked = [].slice.call(document.querySelectorAll("[data-poi]:checked")).map(function(x){ return POI[+x.getAttribute("data-poi")]; });
+    if(!picked.length){ TT.toast("علّم على مكان واحد على الأقل"); return; }
+    var z = $("newPlaceZone").value || "";
+    Promise.all(picked.map(function(p, i){ var id = TT.uid() + i; var CK = { hospital:"health", clinic:"health", pharmacy:"health", school:"edu", college:"edu", university:"edu", station:"transport", bus_station:"transport", police:"gov", townhall:"gov", post_office:"gov", government:"gov", bank:"market", marketplace:"market", place_of_worship:"public" };
+      return save("places", id, { id:id, name:p.name, cat:CK[p.kind] || "other", zoneId:z, lat:+p.lat.toFixed(6), lng:+p.lng.toFixed(6), order:S.places.length + i }); }))
+      .then(function(){ TT.toast("اتضاف " + picked.length + " مكان"); $("poiBox").hidden = true; });
+  });
+
   $("addPlace").addEventListener("click", function(){
     var n = $("newPlace").value.trim(); if(!n) return;
     var id = TT.uid();
@@ -715,7 +792,12 @@
       save("requests", id, r); return;
     }
     id = t.getAttribute("data-pz");
-    if(id){ var p = clone(TT.byId(S.places,id)); p.zoneId = t.value; save("places", id, p); }
+    if(id){ var p = clone(TT.byId(S.places,id)); p.zoneId = t.value; save("places", id, p); return; }
+    id = t.getAttribute("data-zsame") || t.getAttribute("data-zcross");
+    if(id){ var z = clone(TT.byId(S.zones,id)), k = t.hasAttribute("data-zsame") ? "same" : "cross", v = parseInt(t.value,10);
+      if(v > 0) z[k] = v; else delete z[k]; save("zones", id, z).then(function(){ TT.toast("اتحفظ السعر"); }); return; }
+    id = t.getAttribute("data-pcat");
+    if(id){ var q = clone(TT.byId(S.places,id)); q.cat = t.value; save("places", id, q); }
   });
 
   /* ---------- الإقلاع ---------- */

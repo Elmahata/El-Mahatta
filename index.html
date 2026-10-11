@@ -98,10 +98,9 @@ html,body{height:100%;overflow:hidden}
   <div class="pillbar">
     <img src="/assets/logo.png" alt="" style="height:28px;width:auto;display:block">
     <b>المحطة</b>
-    <span style="font-size:12px;font-weight:600;opacity:.75;white-space:nowrap">مشوارك بقى أسهل</span>
   </div>
   <span class="fixedfare" id="fixedFare">سعر ثابت</span>
-  <a href="/me.html" class="pillbar" aria-label="حسابي" style="text-decoration:none;color:inherit;padding:8px 12px;font-weight:700;font-size:13px">حسابي</a>
+  <a href="/me.html" class="pillbar" aria-label="حسابي" title="حسابي" style="text-decoration:none;color:inherit;width:44px;height:44px;padding:0;display:grid;place-items:center;flex:none"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></a>
 </div>
 
 <button class="fab" id="locate" title="موقعي الحالي" aria-label="موقعي الحالي">
@@ -114,8 +113,21 @@ html,body{height:100%;overflow:hidden}
   <!-- ١ + ٢ : تحديد النقطتين -->
   <section id="stPick">
     <h2 id="pickTitle">فين هتركب؟</h2>
-    <p class="hint">حرّك الخريطة لحد ما الدبوس يبقى على مكانك بالظبط</p>
+    <p class="hint" id="pickHint">اختار من القايمة، والخريطة هتوريك المشوار</p>
+    <button type="button" id="gpsPick" class="btn btn-wide mh-shine dark" style="display:flex;align-items:center;justify-content:center;gap:10px;min-height:52px;margin:6px 0 4px;background:var(--accent-soft,#D6EBE6);color:var(--accent-ink,#0A5A4E);border:1.5px solid var(--accent,#0E7566);font-weight:700">
+      <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg>
+      <span id="gpsTxt">اركب من موقعي دلوقتي (GPS)</span>
+    </button>
     <div class="quick" id="quick" hidden></div>
+    <div id="listMode">
+      <div class="field" style="margin:8px 0 6px;position:relative">
+        <input id="plSearch" type="search" placeholder="ابحث: مستشفى، المحطة، اسم قرية…" autocomplete="off" style="padding-inline-start:40px;min-height:50px;font-size:16px">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="position:absolute;inset-inline-start:12px;top:15px;opacity:.55;pointer-events:none"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      </div>
+      <div id="plList" style="max-height:38vh;overflow-y:auto;margin:0 -4px;padding:0 4px"></div>
+      <button type="button" id="toMapMode" style="display:block;width:100%;margin-top:8px;min-height:44px;background:none;border:0;color:var(--accent-ink,#0A5A4E);font:600 14px var(--body);text-decoration:underline;cursor:pointer">مش لاقي المكان؟ حدده على الخريطة</button>
+    </div>
+    <div id="mapMode" hidden>
     <div class="legrow" style="border:0;padding-top:0">
       <span class="d" id="pickDot" style="background:var(--accent)"></span>
       <div class="txt">
@@ -124,7 +136,9 @@ html,body{height:100%;overflow:hidden}
         <div class="zn" id="pickZn"></div>
       </div>
     </div>
-    <button class="btn btn-primary btn-wide" id="confirmPick" style="margin-top:6px">تأكيد مكان الركوب</button>
+    <button class="btn btn-primary btn-wide mh-shine" id="confirmPick" style="margin-top:6px">تأكيد مكان الركوب</button>
+    <button type="button" id="toListMode" class="btn btn-ghost btn-wide" style="margin-top:8px">ارجع للقايمة</button>
+    </div>
     <button class="btn btn-ghost btn-wide" id="backPick" style="margin-top:8px" hidden>رجوع</button>
   </section>
 
@@ -163,7 +177,7 @@ html,body{height:100%;overflow:hidden}
     </div>
     <p class="hint" id="otherHint" hidden style="margin:-4px 0 10px">السائق هيكلّم الراكب ده مش إنت. هتقدر تتابع الرحلة من هنا وتبعتله الكود.</p>
     <p class="hint" id="refHint" hidden style="margin:-4px 0 10px;color:var(--ok)"></p>
-    <button class="btn btn-primary btn-wide" id="sendReq" style="font-size:16px;padding:13px">اطلب التوكتوك</button>
+    <button class="btn btn-primary btn-wide mh-shine" id="sendReq" style="font-size:16px;padding:13px">اطلب التوكتوك</button>
   </section>
 
   <!-- ٤ : بندوّر على سائق -->
@@ -176,6 +190,13 @@ html,body{height:100%;overflow:hidden}
     <div class="bigfare" style="margin-top:4px">
       <span class="amt" id="sFare">—</span>
       <span class="cap"><b>جنيهاً</b> — السعر مقفول ومش هيتغير.<br>يُدفع نقداً عند الوصول.</span>
+    </div>
+    <div id="busyBox" class="banner b-warn" hidden style="margin:0 0 10px;flex-direction:column;align-items:stretch;gap:10px">
+      <div><b>السواقين مشغولين دلوقتي</b><br>طلبك لسه شغال ووصل لكل السواقين. تحب تعمل إيه؟</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm btn-ghost" id="busyWait" type="button" style="flex:1;background:var(--surface)">هستنى شوية</button>
+        <a class="btn btn-sm btn-primary" id="busyCall" href="#" style="flex:1">كلّم الإدارة</a>
+      </div>
     </div>
     <button class="btn btn-ghost btn-wide" id="cancelSearch">إلغاء الطلب</button>
   </section>
@@ -190,6 +211,13 @@ html,body{height:100%;overflow:hidden}
         <div class="pl" id="dPlate">—</div>
       </div>
       <span class="chip c-accent num" id="dFare">—</span>
+    </div>
+    <div id="lateBox" class="banner b-warn" hidden style="margin-top:10px;flex-direction:column;align-items:stretch;gap:10px">
+      <div><b>السائق اتأخر؟</b><br>عدّى أكتر من ١٥ دقيقة من ساعة ما قبل. تقدر ترجّع الطلب لسواق تاني بنفس السعر.</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-sm btn-primary" id="lateRebook" type="button" style="flex:1">سواق تاني</button>
+        <button class="btn btn-sm btn-ghost" id="lateCancel" type="button" style="flex:1;background:var(--surface)">الغي الطلب</button>
+      </div>
     </div>
     <div class="ridecode" id="codeBox" hidden>
       <div style="flex:1"><div style="font-weight:700">كود الركوب</div><div class="hint">قوله للسائق قبل ما تركب — متركبش مع حد ماسألكش عليه</div></div>
@@ -315,7 +343,15 @@ html,body{height:100%;overflow:hidden}
     var c = state.cfg;
     if(!trip.from || !trip.to) return { amount:c.same, same:true, known:false };
     var same = Boolean(trip.from.zoneId && trip.to.zoneId && trip.from.zoneId === trip.to.zoneId);
-    return { amount: same ? c.same : c.cross, same:same, known: Boolean(trip.from.zoneId && trip.to.zoneId) };
+    return { amount: zoneFare(trip.from.zoneId, trip.to.zoneId), same:same, known: Boolean(trip.from.zoneId && trip.to.zoneId) };
+  }
+  /* نفس حساب السيرفر: سعر المنطقة لو متحدد، وإلا السعر العام */
+  function zoneFare(a, b){
+    var c = state.cfg, same = Boolean(a && b && a === b);
+    var za = TT.byId(state.zones, a), zb = TT.byId(state.zones, b);
+    if(same) return za && +za.same > 0 ? +za.same : c.same;
+    var x = Math.max(+(za && za.cross) || 0, +(zb && zb.cross) || 0);
+    return x > 0 ? x : c.cross;
   }
 
   /* ---------- الخريطة ---------- */
@@ -334,16 +370,14 @@ html,body{height:100%;overflow:hidden}
     if(trip.to)   layers.push(L.marker([trip.to.lat,   trip.to.lng],   { icon:TT.markerIcon("#BC4E1E", true), interactive:false }).addTo(map));
     if(trip.from && trip.to){
       var f = fareOf();
-      var line = L.polyline([[trip.from.lat,trip.from.lng],[trip.to.lat,trip.to.lng]], {
-        color: f.same ? "#0E7566" : "#BC4E1E", weight:4, opacity:.5, dashArray:"6 8"
-      }).addTo(map);
+      var line = TT.animRoute(map, [[trip.from.lat,trip.from.lng],[trip.to.lat,trip.to.lng]], f.same ? "#0E7566" : "#BC4E1E");
       layers.push(line);
       var fitOpts = { paddingTopLeft:[40,90], paddingBottomRight:[40,320], maxZoom:17 };
       if(step !== "matched") map.fitBounds(line.getBounds(), fitOpts);
       /* المسار الحقيقي على الطرق — بيحل مكان الخط المتقطع أول ما يوصل */
       TT.route(trip.from, trip.to).then(function(rt){
         if(layers.indexOf(line) < 0) return;
-        if(rt.road){ line.setLatLngs(rt.coords); line.setStyle({ opacity:.95, dashArray:"" }); if(step === "confirm") map.fitBounds(line.getBounds(), fitOpts); }
+        if(rt.road){ line.setLatLngs(rt.coords); line.redraw(); if(step === "confirm") map.fitBounds(line.getBounds(), fitOpts); }
         var el = $("routeInfo");
         if(!el && $("fareBox")){ el = document.createElement("p"); el.id = "routeInfo"; el.className = "hint"; el.style.cssText = "margin:6px 0 0;text-align:center"; $("fareBox").parentNode.insertBefore(el, $("fareBox").nextSibling); }
         if(el) el.textContent = "المشوار حوالي " + TT.etaText(rt) + (rt.road ? "" : " (تقريبي)");
@@ -357,27 +391,114 @@ html,body{height:100%;overflow:hidden}
     var picking = (s === "from" || s === "to");
     ["stPick","stConfirm","stSearch","stMatched","stEnded","stReport"].forEach(function(id){ $(id).hidden = true; });
     $(picking ? "stPick" : ({ confirm:"stConfirm", search:"stSearch", matched:"stMatched", ended:"stEnded", report:"stReport" })[s]).hidden = false;
-    $("pin").hidden = !picking; $("pinShadow").hidden = !picking;
-    $("locate").hidden = !picking;
+    if(!picking) mapMode = false;
+    $("pin").hidden = !(picking && mapMode); $("pinShadow").hidden = !(picking && mapMode);
+    $("locate").hidden = !(picking && mapMode);
 
     if(picking){
       $("pickTitle").textContent = (s === "from") ? "فين هتركب؟" : "رايح فين؟";
       $("pickDot").style.background = (s === "from") ? "var(--accent)" : "var(--fare)";
       $("confirmPick").textContent = (s === "from") ? "تأكيد مكان الركوب" : "تأكيد الوجهة";
       $("backPick").hidden = (s === "from");
+      $("gpsPick").hidden = (s !== "from");
       $("pinBody").setAttribute("fill", (s === "from") ? "#0E7566" : "#BC4E1E");
       renderQuick(true);
-      updatePick();
+      $("listMode").hidden = mapMode; $("mapMode").hidden = !mapMode;
+      $("pickHint").textContent = mapMode ? "حرّك الخريطة لحد ما الدبوس يبقى على المكان بالظبط" : "اختار من القايمة، والخريطة هتوريك المشوار";
+      $("plSearch").value = ""; renderList();
+      if(mapMode) updatePick();
     }
     if(s === "confirm") renderConfirm();
     drawAll();
   }
 
+  /* اسم المكان: لو قريب من مكان معروف بنكتبه، ولو لا بنجيب اسم الشارع من الخريطة */
+  var revT = null, revLabel = "", revFor = "";
   function updatePick(){
-    var d = describe(map.getCenter());
-    $("pickVal").textContent = d.label;
-    $("pickZn").textContent = d.zone ? ("المنطقة: " + d.zone) : "لسه مفيش نقاط لها إحداثيات — كلّم الإدارة";
+    var c = map.getCenter(), d = describe(c), exact = d.label && d.label.indexOf("جنب ") !== 0 && d.label !== "موقع على الخريطة" && d.label !== "مكان بعيد عن النقاط المعروفة";
+    $("pickVal").textContent = exact ? d.label : (revFor === c.lat.toFixed(4) + c.lng.toFixed(4) && revLabel ? revLabel : "بنجيب اسم المكان…");
+    $("pickZn").textContent = d.zone ? ("المنطقة: " + d.zone) : "";
+    clearTimeout(revT);
+    if(exact) return;
+    revT = setTimeout(function(){
+      var k = c.lat.toFixed(4) + c.lng.toFixed(4);
+      TT.reverse(c.lat, c.lng).then(function(name){
+        var now = map.getCenter(); if(now.lat.toFixed(4) + now.lng.toFixed(4) !== k) return;
+        revFor = k; revLabel = name ? (d.label.indexOf("جنب ") === 0 ? name + " · " + d.label : name) : (d.label || "موقع على الخريطة");
+        $("pickVal").textContent = revLabel;
+      });
+    }, 500);
   }
+  function labelFor(c, d){
+    var exact = d.label && d.label.indexOf("جنب ") !== 0 && d.label !== "موقع على الخريطة" && d.label !== "مكان بعيد عن النقاط المعروفة";
+    return exact ? d.label : (revFor === c.lat.toFixed(4) + c.lng.toFixed(4) && revLabel ? revLabel : d.label);
+  }
+  /* ---------- الاختيار من القايمة (الطريقة الأساسية) ---------- */
+  var mapMode = false;
+  var CATS = { transport:"مواصلات", health:"صحة", gov:"جهات حكومية", edu:"تعليم", public:"أماكن عامة", market:"أسواق ومحلات", village:"القرى", other:"تانيين" };
+  var CORDER = ["transport","health","gov","edu","market","public","village","other"];
+  function norm(s){ return String(s || "").replace(/[أإآ]/g,"ا").replace(/ة/g,"ه").replace(/ى/g,"ي").replace(/[\u064B-\u0652]/g,"").toLowerCase(); }
+  function rowHTML(attr, title, sub, color){
+    return '<button type="button" ' + attr + ' style="display:flex;align-items:center;gap:12px;width:100%;min-height:52px;padding:8px 6px;background:none;border:0;border-bottom:1px solid var(--line);text-align:start;cursor:pointer;color:var(--ink);font:inherit">'
+      + '<span style="width:10px;height:10px;border-radius:50%;flex:none;background:' + color + '"></span>'
+      + '<span style="flex:1;min-width:0"><span style="display:block;font-weight:600;font-size:15px">' + TT.esc(title) + '</span>'
+      + (sub ? '<span style="display:block;font-size:12.5px;color:var(--ink-2)">' + TT.esc(sub) + '</span>' : '') + '</span></button>';
+  }
+  function head(t){ return '<div style="font:700 12.5px var(--body);color:var(--ink-2);padding:12px 6px 4px">' + t + '</div>'; }
+  function renderList(){
+    var q = norm($("plSearch").value.trim()), html = "";
+    var places = state.places.filter(function(p){ return p.lat != null && p.lng != null; });
+    var other = step === "to" ? trip.from : trip.to;
+    if(other) places = places.filter(function(p){ return metres(other, p) >= 60; });
+    if(q){
+      var hits = places.filter(function(p){ return norm(p.name).indexOf(q) >= 0 || norm(CATS[p.cat] || "").indexOf(q) >= 0 || norm(TT.zoneName ? TT.zoneName(state.zones, p.zoneId) : "").indexOf(q) >= 0; });
+      html = hits.length ? hits.map(function(p){ return rowHTML('data-pl="' + TT.esc(p.id) + '"', p.name, CATS[p.cat] || "", TT.zoneColor(state.zones, p.zoneId)); }).join("")
+        : '<div class="empty" style="padding:14px 6px">مالقيناش «' + TT.esc($("plSearch").value.trim()) + '». جرّب اسم تاني، أو حدده على الخريطة من تحت.</div>';
+    } else {
+      CORDER.forEach(function(c){
+        var g = places.filter(function(p){ return (p.cat || "other") === c; }).sort(function(a, b){ return (a.order||0) - (b.order||0); });
+        if(!g.length) return;
+        html += head(CATS[c]) + g.map(function(p){ return rowHTML('data-pl="' + TT.esc(p.id) + '"', p.name, "", TT.zoneColor(state.zones, p.zoneId)); }).join("");
+      });
+      if(!places.length) html += '<div class="empty" style="padding:14px 6px">لسه مفيش أماكن في القايمة — حدد المكان على الخريطة من تحت.</div>';
+    }
+    $("plList").innerHTML = html;
+  }
+  function choosePt(pt){
+    if(step === "from"){ trip.from = pt; setStep("to"); }
+    else{
+      if(trip.from && metres(trip.from, pt) < 60){ TT.toast("الوجهة قريبة جداً من مكان الركوب"); return; }
+      trip.to = pt; setStep("confirm");
+    }
+    map.setView([pt.lat, pt.lng], 16);
+  }
+  $("plSearch").addEventListener("input", renderList);
+  $("toMapMode").addEventListener("click", function(){
+    mapMode = true;
+    var o = step === "to" ? trip.from : null; if(o) map.setView([o.lat, o.lng], 17);
+    setStep(step);
+  });
+  $("toListMode").addEventListener("click", function(){ mapMode = false; setStep(step); });
+  document.addEventListener("click", function(e){
+    if(!e.target.closest) return;
+    var g = e.target.closest("[data-gps]"); if(g){ $("gpsPick").click(); return; }
+    var b = e.target.closest("[data-pl]"); if(!b) return;
+    var p = TT.byId(state.places, b.getAttribute("data-pl")); if(!p) return;
+    choosePt({ lat:p.lat, lng:p.lng, label:p.name, zone:TT.zoneName ? TT.zoneName(state.zones, p.zoneId) : "", zoneId:p.zoneId || "" });
+  });
+  function renderSug(){ if(step === "from" || step === "to") renderList(); }
+  function renderSugOld(){
+    var list = state.places.filter(function(p){ return p.lat != null; });
+    $("sugWrap").hidden = !list.length;
+    $("sugList").innerHTML = list.slice().sort(function(a, b){ return (a.order||0) - (b.order||0); }).map(function(p){
+      return '<button type="button" data-sug="' + TT.esc(p.id) + '" style="flex:none;display:flex;align-items:center;gap:6px;min-height:40px;padding:6px 14px;border-radius:999px;border:1px solid var(--line);background:var(--surface,#fff);color:var(--ink);font:600 14px var(--body);cursor:pointer;white-space:nowrap"><span style="width:8px;height:8px;border-radius:50%;background:' + TT.zoneColor(state.zones, p.zoneId) + '"></span>' + TT.esc(p.name) + '</button>';
+    }).join("");
+  }
+  document.addEventListener("click", function(e){
+    var b = e.target.closest && e.target.closest("[data-sug]"); if(!b) return;
+    var p = TT.byId(state.places, b.getAttribute("data-sug")); if(!p) return;
+    map.setView([p.lat, p.lng], 17);
+  });
 
   /* ---------- مشاويرك المعتادة (محفوظة على الموبايل بس) ---------- */
   function rememberRoute(){
@@ -399,7 +520,7 @@ html,body{height:100%;overflow:hidden}
     }).join("") + '</div>' : "";
     q.innerHTML = chips + (list.length ? '<div class="lbl" style="font-size:11.5px;font-weight:600;color:var(--muted)">مشاويرك — دوسة واحدة</div>' : "") + list.map(function(r, i){
       var same = r.from.zoneId && r.from.zoneId === r.to.zoneId;
-      return '<button data-quick="'+i+'"><span>'+TT.esc(r.from.label)+' ← '+TT.esc(r.to.label)+'</span><b>'+(same ? state.cfg.same : state.cfg.cross)+' ج</b></button>';
+      return '<button data-quick="'+i+'"><span>'+TT.esc(r.from.label)+' ← '+TT.esc(r.to.label)+'</span><b>'+zoneFare(r.from.zoneId, r.to.zoneId)+' ج</b></button>';
     }).join("");
   }
 
@@ -452,8 +573,10 @@ html,body{height:100%;overflow:hidden}
           $("shareTrip").href = "https://wa.me/?text=" + encodeURIComponent("تابع رحلتي مع المحطة لحد ما أوصل: " + shareUrl);
           $("shareTrip").hidden = !j.shareToken;
           setStep("matched");
+          TT.celebrate({ title: j.driver.name + " جاي ليك", sub: "السعر " + j.fare + " ج — قول له كود الركوب قبل ما تركب", photo: j.driver.photo || "" });
           }
           drawLive(j);
+          $("lateBox").hidden = !(j.assignedAt && !j.startedAt && Date.now() - j.assignedAt > 15 * 6e4);
         } else if(j.status === "done"){
           stopPoll(); saveLive(null); clearLive();
           histUpdate(j.id, { status:"done", fare:j.fare });
@@ -473,6 +596,10 @@ html,body{height:100%;overflow:hidden}
             $("searchSub").textContent = "محجوز " + whenLabel(j.scheduledAt) + ". الطلب هيوصل للسواقين قبلها بـ ١٥ دقيقة — تقدر تقفل الصفحة.";
             return;
           }
+          if(step === "matched"){ setStep("search"); TT.toast("بندوّر على سواق تاني…"); }
+          var adm = (state.cfg && state.cfg.adminPhone) || "";
+          $("busyCall").hidden = !adm; if(adm) $("busyCall").href = "tel:" + adm;
+          $("busyBox").hidden = !(mins >= 3 && Date.now() > (window.__busySnooze || 0));
           $("searchSub").textContent = mins < 2
             ? "الطلب وصل لكل السواقين — أول واحد يقبل هياخده"
             : "لسه بندوّر… عدّى " + mins + " دقيقة. لو اتأخر، جرّب تلغي وتطلب تاني.";
@@ -501,7 +628,7 @@ html,body{height:100%;overflow:hidden}
       liveL.at = Date.now(); liveL.last = j.driverLoc; liveL.phase = phase;
       TT.route(j.driverLoc, target).then(function(rt){
         if(!liveL.drv) return;
-        if(!liveL.line) liveL.line = L.polyline(rt.coords, { color:"#131E1C", weight:5, opacity:.85 }).addTo(map);
+        if(!liveL.line) liveL.line = TT.animRoute(map, rt.coords, phase ? "#BC4E1E" : "#131E1C");
         else liveL.line.setLatLngs(rt.coords);
         if(eta) eta.textContent = (phase ? "هتوصل خلال " : "السائق هيوصلك خلال ") + TT.etaText(rt);
         if(!liveL.fitted){ liveL.fitted = 1; map.fitBounds(liveL.line.getBounds().extend(d), { paddingTopLeft:[40,90], paddingBottomRight:[40,360], maxZoom:17 }); }
@@ -517,9 +644,34 @@ html,body{height:100%;overflow:hidden}
   }
 
   /* ---------- أحداث ---------- */
+  /* «من موقعي»: بياخد إحداثيات الـ GPS نفسها (مش وسط الخريطة)، علشان السائق يوصل لنفس النقطة بالظبط */
+  $("gpsPick").addEventListener("click", function(){
+    if(!navigator.geolocation){ TT.toast("الموبايل مش بيدعم تحديد الموقع"); return; }
+    var b = this; b.disabled = true; $("gpsTxt").textContent = "بنحدد مكانك…";
+    var best = null, done = false;
+    function finish(){
+      if(done) return; done = true; navigator.geolocation.clearWatch(w); clearTimeout(t);
+      b.disabled = false; $("gpsTxt").textContent = "اركب من موقعي دلوقتي (GPS)";
+      if(!best){ TT.toast("مش قادرين نحدد مكانك — شغّل الـ GPS أو اختار من القايمة"); return; }
+      var ll = L.latLng(best.latitude, best.longitude), d = describe(ll);
+      map.setView(ll, 18);
+      TT.reverse(ll.lat, ll.lng).then(function(name){
+        trip.from = { lat:+ll.lat.toFixed(6), lng:+ll.lng.toFixed(6), label:(name ? "موقعي · " + name : "موقعي (GPS)"), zone:d.zone, zoneId:d.zoneId, gps:true, acc:Math.round(best.accuracy) };
+        if(best.accuracy > 50) TT.toast("الدقة حوالي " + Math.round(best.accuracy) + " متر — اكتب علامة مميزة تساعد السائق");
+        setStep("to");
+      });
+    }
+    /* بنستنى لحد ٨ ثواني علشان ناخد أدق قراءة (أحسن من ٢٠ متر بنوقف على طول) */
+    var w = navigator.geolocation.watchPosition(function(p){
+      if(!best || p.coords.accuracy < best.accuracy) best = p.coords;
+      if(best.accuracy <= 20) finish();
+    }, function(){ finish(); }, { enableHighAccuracy:true, maximumAge:0, timeout:15000 });
+    var t = setTimeout(finish, 8000);
+  });
+
   $("confirmPick").addEventListener("click", function(){
     var c = map.getCenter(), d = describe(c);
-    var pt = { lat:+c.lat.toFixed(6), lng:+c.lng.toFixed(6), label:d.label, zone:d.zone, zoneId:d.zoneId };
+    var pt = { lat:+c.lat.toFixed(6), lng:+c.lng.toFixed(6), label:labelFor(c, d), zone:d.zone, zoneId:d.zoneId };
     if(step === "from"){ trip.from = pt; setStep("to"); }
     else{
       if(trip.from && metres(trip.from, pt) < 60){ TT.toast("الوجهة قريبة جداً من مكان الركوب"); return; }
@@ -627,11 +779,29 @@ html,body{height:100%;overflow:hidden}
       .then(function(){ b.disabled = false; });
   });
 
+  function riderCancel(reason, rebook){
+    if(!live) return Promise.resolve({ status:"cancelled" });
+    return TT.api("rider-cancel", { method:"POST", body:{ id:live.id, token:live.token, reason:reason, rebook:!!rebook } });
+  }
   $("cancelSearch").addEventListener("click", function(){
     if(!confirm("تلغي الطلب؟")) return;
-    stopPoll(); saveLive(null); clearLive();
-    trip = { from:null, to:null };
-    setStep("from");
+    var id = live && live.id;
+    riderCancel("changed").catch(function(){}).then(function(){
+      if(id) histUpdate(id, { status:"cancelled" });
+      stopPoll(); saveLive(null); clearLive();
+      trip = { from:null, to:null };
+      setStep("from");
+    });
+  });
+  $("busyWait").addEventListener("click", function(){ window.__busySnooze = Date.now() + 3 * 6e4; $("busyBox").hidden = true; });
+  $("lateRebook").addEventListener("click", function(){
+    var b = this; b.disabled = true;
+    riderCancel("late", true).then(function(){ $("lateBox").hidden = true; setStep("search"); TT.toast("الطلب رجع للسواقين ✓"); })
+      .catch(function(e){ TT.toast(e.message); }).then(function(){ b.disabled = false; });
+  });
+  $("lateCancel").addEventListener("click", function(){
+    if(!confirm("تلغي الطلب؟")) return;
+    riderCancel("noshow").then(function(){ TT.toast("اتلغى"); }).catch(function(e){ TT.toast(e.message); });
   });
 
   function reset(){
@@ -662,7 +832,6 @@ html,body{height:100%;overflow:hidden}
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
     maxZoom:19, attribution:"&copy; OpenStreetMap"
   }).addTo(map);
-  L.control.zoom({ position:"topleft" }).addTo(map);
 
   map.on("movestart", function(){ if(!$("pin").hidden) $("pin").classList.add("lift"); });
   map.on("move",      function(){ if(!$("pin").hidden) updatePick(); });
@@ -691,9 +860,9 @@ html,body{height:100%;overflow:hidden}
   if(role === "rider") openRider();
   else {
     var ch = document.createElement("div");
-    ch.style.cssText = "position:fixed;inset:0;z-index:4950;background:#0E7566;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px calc(24px + env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px))";
-    ch.innerHTML = '<div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px;align-items:stretch">'
-      + '<img src="/assets/logo.png" alt="" style="height:80px;width:auto;align-self:center;filter:brightness(0) invert(1)">'
+    ch.style.cssText = "position:fixed;inset:0;z-index:4950;background:radial-gradient(120% 80% at 50% 30%, #12897A 0%, #0E7566 45%, #0A5A4E 100%);color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px calc(24px + env(safe-area-inset-right,0px)) calc(24px + env(safe-area-inset-bottom,0px))";
+    ch.innerHTML = '<div class="mh-login" style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px;align-items:stretch">'
+      + '<img class="mh-logo" src="/assets/logo.png" alt="" style="height:88px;width:auto;align-self:center;filter:brightness(0) invert(1) drop-shadow(0 10px 18px rgba(0,0,0,.25))">'
       + '<h1 style="margin:0;text-align:center;font:800 28px/1.3 var(--display)">أهلاً بيك في المحطة</h1>'
       + '<p style="margin:0 0 10px;text-align:center;color:#D6EBE6">مشوارك بقى أسهل. إنت هنا كـ…</p>'
       + '<button data-role="rider" style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;background:#fff;color:#131E1C;border:0;border-radius:16px;padding:18px 20px;cursor:pointer;text-align:start;min-height:72px"><b style="font:800 20px var(--display);color:#0A5A4E">راكب</b><span style="font-size:14px;color:#47544F">عايز أطلب توكتوك</span></button>'
@@ -712,7 +881,10 @@ html,body{height:100%;overflow:hidden}
   TT.api("public").then(function(raw){
     var s = TT.shape(raw);
     state.zones = s.zones; state.places = s.places; state.cfg = s.cfg;
-    $("fixedFare").textContent = s.cfg.same + "–" + s.cfg.cross + " ج ثابت";
+    renderSug();
+    var fs = [s.cfg.same, s.cfg.cross]; s.zones.forEach(function(z){ if(+z.same > 0) fs.push(+z.same); if(+z.cross > 0) fs.push(+z.cross); });
+    var lo = Math.min.apply(null, fs), hi = Math.max.apply(null, fs);
+    $("fixedFare").textContent = (lo === hi ? lo : lo + "–" + hi) + " ج ثابت";
     var placed = state.places.filter(function(p){ return p.lat != null; });
     if(placed.length) map.fitBounds(L.latLngBounds(placed.map(function(p){ return [p.lat,p.lng]; })), { padding:[50,50], maxZoom:16 });
     if(live && live.id) startTracking(); else { setStep("from"); autoLocate(); }

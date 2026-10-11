@@ -218,7 +218,7 @@ async function createRequest(env, b, source) {
   const phone = digits(b.riderPhone).slice(0, 15);
   if (!name || phone.length < 9) return { error: "الاسم ورقم الموبايل مطلوبان", status: 400 };
 
-  const { places, config } = await readDocs(env, PUBLIC_KINDS);
+  const { places, config, zones = [] } = await readDocs(env, PUBLIC_KINDS);
   const cfg = config.find((c) => c.id === "pricing") || { same: 15, cross: 20 };
 
   const pick = (idKey, objKey) => {
@@ -236,6 +236,10 @@ async function createRequest(env, b, source) {
   /* السعر يُحسب هنا فقط — لا يُقرأ من العميل */
   const same = Boolean(from.zoneId && to.zoneId && from.zoneId === to.zoneId);
   let fare = same ? cfg.same : cfg.cross;
+  /* سعر خاص لكل منطقة (لو الإدارة حددته) — للتوسع لمراكز تانية */
+  const zf = zones.find((z) => z.id === from.zoneId), zt = zones.find((z) => z.id === to.zoneId);
+  if (same && zf && Number(zf.same) > 0) fare = Number(zf.same);
+  if (!same) { const zc = Math.max(Number(zf && zf.cross) || 0, Number(zt && zt.cross) || 0); if (zc > 0) fare = zc; }
   const now = Date.now();
 
   /* احجز لبعدين: من ٢٠ دقيقة لحد ٧ أيام */
@@ -268,7 +272,7 @@ async function createRequest(env, b, source) {
   const id = uid(), tok = newToken(), share = newToken().slice(0, 12);
   await putDoc(env, "requests", id, {
     id, token: tok, shareToken: share, code: rideCode(), source,
-    riderName: name, riderPhone: phone, note: str(b.note, 140), from, to,
+    riderName: name, riderPhone: phone, note: str(b.note, 140), from, to, ip: str(b.__ip, 64),
     fare, sameZone: same, status: "pending", driverId: "",
     createdAt: now, day: todayStr(), scheduledAt,
     forOther: Boolean(b.forOther), bookerPhone: b.forOther ? digits(b.bookerPhone).slice(0, 15) : "",
@@ -326,6 +330,15 @@ export async function onRequest({ request, env, params }) {
       const b = await parseBody(request);
       const deny = await needSession(request, env, b.forOther && b.bookerPhone ? b.bookerPhone : b.riderPhone, "rider");
       if (deny) return deny;
+      /* ضد الطلبات الوهمية: ٣ طلبات مفتوحة بالكتير لكل رقم، وطلب واحد كل دقيقة من نفس الرقم أو الموبايل */
+      const ip = str(request.headers.get("CF-Connecting-IP"), 64);
+      const rp = digits(b.riderPhone).slice(0, 15);
+      const { requests: allR } = await readDocs(env, ["requests"]);
+      if (allR.filter((r) => r.riderPhone === rp && (r.status === "pending" || r.status === "assigned")).length >= 3)
+        return json({ error: "عندك ٣ طلبات مفتوحة — استنى أو الغي واحد الأول" }, 429);
+      if (allR.some((r) => (r.riderPhone === rp || (ip && r.ip === ip)) && Date.now() - (r.createdAt || 0) < 60000))
+        return json({ error: "استنى دقيقة قبل ما تطلب تاني" }, 429);
+      b.__ip = ip;
       const out = await createRequest(env, b, "app");
       return out.error ? json({ error: out.error }, out.status) : json(out);
     }
@@ -346,7 +359,7 @@ export async function onRequest({ request, env, params }) {
       }
       const pt = (p) => (p && p.lat != null ? { lat: p.lat, lng: p.lng, label: p.label } : null);
       return json({
-        id: r.id, status: r.status, fare: r.fare, driver, driverLoc, from: pt(r.from), to: pt(r.to), createdAt: r.createdAt, scheduledAt: r.scheduledAt || null, discount: r.discount || 0,
+        id: r.id, status: r.status, fare: r.fare, driver, driverLoc, from: pt(r.from), to: pt(r.to), createdAt: r.createdAt, assignedAt: r.assignedAt || null, scheduledAt: r.scheduledAt || null, discount: r.discount || 0,
         code: r.status === "assigned" ? r.code : null, startedAt: r.startedAt || null,
         shareToken: r.shareToken || null, reported: Boolean(r.reported),
       });
@@ -368,6 +381,42 @@ export async function onRequest({ request, env, params }) {
         to: { label: r.to.label, lat: r.to.lat, lng: r.to.lng }, driver,
         createdAt: r.createdAt, assignedAt: r.assignedAt || null, startedAt: r.startedAt || null, finishedAt: r.finishedAt || null,
       });
+    }
+
+    /* الراكب يلغي — أو يرجّع الطلب للسواقين التانيين لو السائق اتأخر */
+    if (route === "rider-cancel" && method === "POST") {
+      const b = await parseBody(request);
+      const r = await getDoc(env, "requests", str(b.id, 40));
+      if (!r || !r.token || !safeEqual(b.token, r.token)) return json({ error: "غير مصرّح" }, 401);
+      if (r.status === "done" || r.status === "cancelled") return json({ ok: true, status: r.status });
+      const reason = ["changed", "late", "noshow", "wrong", "other"].includes(b.reason) ? b.reason : "other";
+      if (r.driverId && (reason === "late" || reason === "noshow")) {
+        const d = await getDoc(env, "drivers", r.driverId);
+        if (d) await putDoc(env, "drivers", d.id, { ...d, lateCount: (d.lateCount || 0) + 1, lateLog: [...(d.lateLog || []), { at: Date.now(), rid: r.id }].slice(-20) });
+      }
+      if (b.rebook && r.status === "assigned" && !r.startedAt) {
+        await putDoc(env, "requests", r.id, { ...r, status: "pending", driverId: "", assignedAt: null, skipDrivers: [...(r.skipDrivers || []), r.driverId].slice(-5), rebooked: (r.rebooked || 0) + 1 });
+        return json({ ok: true, status: "pending" });
+      }
+      await putDoc(env, "requests", r.id, { ...r, status: "cancelled", cancelledBy: "rider", cancelReason: reason, cancelledAt: Date.now() });
+      return json({ ok: true, status: "cancelled" });
+    }
+
+    /* احذف حسابي: بيمسح اسم الراكب ورقمه من كل رحلاته اللي خلصت (المفتوحة بتتلغي) */
+    if (route === "delete-account" && method === "POST") {
+      const b = await parseBody(request);
+      const phone = digits(b.phone).slice(0, 15);
+      if (phone.length < 9) return json({ error: "اكتب رقمك" }, 400);
+      const deny = await needSession(request, env, phone, "rider");
+      if (deny) return deny;
+      const { requests } = await readDocs(env, ["requests"]);
+      let n = 0;
+      for (const r of requests.filter((x) => x.riderPhone === phone)) {
+        const open = r.status === "pending" || r.status === "assigned";
+        await putDoc(env, "requests", r.id, { ...r, riderName: "(محذوف)", riderPhone: "", note: "", bookerPhone: "", ip: "", ...(open ? { status: "cancelled", cancelledBy: "rider", cancelReason: "deleted" } : {}) });
+        n++;
+      }
+      return json({ ok: true, cleared: n });
     }
 
     /* تقييم السائق بعد الرحلة — مرة واحدة لكل رحلة */
@@ -545,6 +594,7 @@ export async function onRequest({ request, env, params }) {
            سواق المنطقة المفضّلة بيشوف الطلب على طول، والباقي بعد ٥ ثواني. */
         const open = (me.online === false || mine || blocked) ? [] : requests
           .filter((r) => r.status === "pending" && now >= openAt(r) && now - openAt(r) < CLAIM_WINDOW_MS)
+          .filter((r) => !(r.skipDrivers || []).includes(me.id))
           .filter((r) => now - openAt(r) >= PRIORITY_MS || zones.includes(r.from && r.from.zoneId));
         const available = open
           .filter((r) => !heading || (r.to && r.to.zoneId === heading.zoneId))

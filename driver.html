@@ -73,8 +73,10 @@
   </header>
 
   <!-- تسجيل الدخول -->
-  <section id="gate" class="gate">
-    <div class="card">
+  <section id="gate" class="gate" style="background:radial-gradient(120% 80% at 50% 25%, #1E2B28 0%, #131E1C 55%, #0B1210 100%)">
+    <div class="mh-login" style="width:100%;max-width:340px;display:flex;flex-direction:column;gap:16px;align-items:center">
+    <img class="mh-logo" src="/assets/logo.png" alt="" style="height:80px;width:auto;filter:brightness(0) invert(1) drop-shadow(0 10px 18px rgba(0,0,0,.4))">
+    <div class="card" style="width:100%">
       <h2>دخول السائق</h2>
       <p class="hint">اكتب رقم موبايلك والكود اللي أخدته من الإدارة.</p>
       <div style="margin-top:14px">
@@ -85,13 +87,17 @@
         <p class="hint" id="gateErr" style="margin-top:10px;color:var(--crit)" hidden></p>
       </div>
     </div>
-    <button class="btn btn-ghost btn-wide" id="toRider" type="button" style="margin-top:12px">أنا راكب مش سائق</button>
+    <button class="btn btn-ghost btn-wide" id="toRider" type="button" style="margin-top:4px;color:#D6EBE6">أنا راكب مش سائق</button>
+    </div>
   </section>
 
   <!-- الشاشة الرئيسية -->
   <section id="app" class="stack" hidden>
 
     <div id="subWarn" class="banner b-warn" hidden></div>
+    <button type="button" id="trainBtn" class="banner b-note" style="border:0;width:100%;text-align:start;cursor:pointer;font:inherit;min-height:48px;align-items:center">
+      <span>▶</span><span id="trainTxt"><b>جرّب مشوار تجريبي</b> — دقيقة واحدة تتعلّم فيها تقبل وتأكد الكود وتخلّص الرحلة. مفيش راكب حقيقي.</span>
+    </button>
     <a id="headBan" class="banner b-note" href="/driver-me.html#heading" hidden style="text-decoration:none"></a>
 
     <div id="bigAlert" hidden style="position:fixed;inset:0;z-index:50;background:#0E7566;color:#fff;display:flex;flex-direction:column;align-items:center;padding:28px 20px calc(24px + env(safe-area-inset-bottom));gap:14px;text-align:center">
@@ -108,7 +114,7 @@
         <span id="baChip" class="chip c-neutral" style="align-self:flex-start"></span>
       </div>
       <div style="margin-top:auto;width:100%;max-width:420px;display:flex;flex-direction:column;gap:8px">
-        <button id="baTake" class="btn btn-take" data-take="" style="background:#fff;color:#0A5A4E;font-weight:800;font-size:20px;padding:18px;border-radius:14px;border:0">خد المشوار</button>
+        <button id="baTake" class="btn btn-take mh-shine dark" data-take="" style="background:#fff;color:#0A5A4E;font-weight:800;font-size:20px;padding:18px;border-radius:14px;border:0">خد المشوار</button>
         <button id="baSkip" class="btn" style="background:transparent;color:#D6EBE6;border:0">تجاهل</button>
       </div>
     </div>
@@ -321,7 +327,7 @@
     rr.at = Date.now(); rr.last = me; rr.phase = phase;
     TT.route(me, t).then(function(rt){
       if(!curRide) return;
-      if(!rRoute) rRoute = L.polyline(rt.coords, { color:"#131E1C", weight:5, opacity:.85 }).addTo(rMap);
+      if(!rRoute) rRoute = TT.animRoute(rMap, rt.coords, phase ? "#BC4E1E" : "#0E7566");
       else rRoute.setLatLngs(rt.coords);
       rideEta((phase ? "للوجهة: " : "للراكب: ") + TT.etaText(rt));
       if(refit) rMap.fitBounds(rRoute.getBounds(), { padding:[30,30], maxZoom:17 });
@@ -346,7 +352,7 @@
     if(pts.length === 2){
       TT.route(r.from, r.to).then(function(rt){
         if(rMapId !== r.id) return;
-        rLayers.push(L.polyline(rt.coords, { color:"#0E7566", weight:4, opacity:.45, dashArray: rt.road ? "" : "6 8" }).addTo(rMap));
+        rLayers.push(TT.animRoute(rMap, rt.coords, "#0E7566"));
       });
     }
     if(!navigator.geolocation){ rideEta("الموبايل ده مش بيدعم تحديد المكان"); }
@@ -396,7 +402,7 @@
       var id = t.getAttribute("data-take");
       t.disabled = true; t.textContent = "جارٍ الحجز…";
       call("claim", { method: "POST", body: { requestId: id } })
-        .then(function(){ TT.toast("المشوار بقى ليك ✓"); })
+        .then(function(){ TT.celebrate({ dark:true, title:"المشوار بقى بتاعك ✓", sub:"روح للراكب — دوس «ودّيني للراكب» علشان الخريطة تفتح", ms:1900 }); })
         .catch(function(err){ TT.toast(err.message || "تعذّر الحجز"); })
         .then(function(){ lastIds = ""; return tick(); })
         .then(function(){ busy = false; }, function(){ busy = false; });
@@ -556,6 +562,48 @@
   document.addEventListener("visibilitychange", function(){ if(!document.hidden && auth) tick(); });
 
   if(auth && auth.phone && auth.code) start();
+})();
+</script>
+<script>
+/* وضع التدريب: محاكاة كاملة على الموبايل بس — مفيش أي حاجة بتتبعت للسيرفر */
+(function(){
+  var btn = document.getElementById("trainBtn"); if(!btn) return;
+  var done = false; try{ done = localStorage.getItem("mh-trained") === "1"; }catch(e){}
+  if(done){ btn.style.minHeight = "44px"; document.getElementById("trainTxt").innerHTML = "<b>مشوار تجريبي</b> — لو عايز تتمرّن تاني"; }
+  var CODE = String(1000 + Math.floor(Math.random() * 9000));
+  var STEPS = [
+    { t:"طلب جديد!", s:"لما طلب يوصل، الشاشة كلها بتتغيّر وبترن. عندك ١٥ ثانية تقبل.", body:'<div style="font:800 54px/1 var(--display);color:#fff" id="trT">15</div><div style="margin-top:14px;background:rgba(255,255,255,.12);border-radius:14px;padding:14px;text-align:start;width:100%"><div>من: <b>محطة القطر</b></div><div>إلى: <b>المستشفى المركزي</b></div><div style="margin-top:6px;font:800 22px var(--display)">15 ج نقداً</div></div>', a:"اقبل الطلب", bg:"#0E7566" },
+    { t:"روح للراكب", s:"دوس «ودّيني للراكب» علشان الخريطة تفتح على مكانه بالظبط. لما توصل دوس «وصلت».", body:'<div style="background:rgba(255,255,255,.1);border-radius:14px;padding:14px;width:100%;text-align:start"><div style="font-weight:700">الراكب: أحمد</div><div style="opacity:.85;font-size:14px">علامة مميزة: قدام شباك التذاكر</div><div style="display:flex;gap:8px;margin-top:10px"><span class="btn btn-sm" style="background:#fff;color:#0A5A4E;flex:1">ودّيني للراكب</span><span class="btn btn-sm" style="background:rgba(255,255,255,.18);color:#fff;flex:1">رسالة</span></div></div>', a:"وصلت للراكب", bg:"#131E1C" },
+    { t:"اسأل على الكود", s:"قبل ما الراكب يركب، اسأله على كود الركوب واكتبه. الراكب بيقولك: «" + CODE + "»", body:'<input id="trCode" inputmode="numeric" maxlength="4" placeholder="••••" dir="ltr" style="font:800 34px var(--display);text-align:center;letter-spacing:.3em;width:200px;border-radius:14px;border:0;padding:12px"><p id="trErr" style="color:#FFB4A8;margin:8px 0 0" hidden>الكود غلط — اسأل الراكب تاني</p>', a:"ابدأ الرحلة", bg:"#131E1C" },
+    { t:"في الطريق", s:"وصّل الراكب للوجهة، وخد الأجرة كاش. بعدها دوس «خلّصت».", body:'<div style="font:800 40px var(--display)">15 ج</div><div style="opacity:.85">خدهم كاش من الراكب</div>', a:"خلّصت الرحلة", bg:"#131E1C" },
+    { t:"برافو! إنت جاهز ✓", s:"ده كل اللي هتعمله في كل مشوار. خلي التطبيق مفتوح والصوت شغال علشان الطلبات توصلك.", body:'<div style="font-size:64px;line-height:1">✓</div>', a:"تمام", bg:"#0E7566" }
+  ];
+  btn.addEventListener("click", function(){
+    var i = 0, timer = null;
+    var ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;z-index:5000;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px 20px calc(24px + env(safe-area-inset-bottom));text-align:center;transition:background .4s";
+    document.body.appendChild(ov);
+    function show(){
+      clearInterval(timer);
+      var s = STEPS[i];
+      ov.style.background = s.bg;
+      ov.innerHTML = '<div class="mh-login" style="width:100%;max-width:380px;display:flex;flex-direction:column;align-items:center;gap:14px">'
+        + '<div style="font-size:12.5px;font-weight:700;opacity:.75">تدريب · خطوة ' + (i + 1) + ' من ' + STEPS.length + '</div>'
+        + '<h2 style="margin:0;font:800 26px/1.3 var(--display);color:#fff">' + s.t + '</h2>'
+        + '<p style="margin:0;opacity:.9">' + s.s + '</p>' + s.body
+        + '<button class="btn btn-wide" id="trGo" style="background:#fff;color:#0A5A4E;min-height:54px;font-size:17px;border-radius:14px;width:100%">' + s.a + '</button>'
+        + (i < STEPS.length - 1 ? '<button class="btn btn-ghost btn-wide" id="trX" style="color:#fff;border-color:rgba(255,255,255,.3);width:100%">اقفل التدريب</button>' : '') + '</div>';
+      if(i === 0){ try{ navigator.vibrate && navigator.vibrate([200,100,200]); }catch(e){}
+        var n = 15; timer = setInterval(function(){ n--; var el = document.getElementById("trT"); if(el) el.textContent = n; if(n <= 0){ clearInterval(timer); if(el) el.textContent = "فات!"; TT.toast("في الحقيقة الطلب كان هيروح لسواق تاني — جرّب تاني"); setTimeout(function(){ i = 0; show(); }, 1600); } }, 1000); }
+      document.getElementById("trGo").onclick = function(){
+        if(i === 2){ var v = (document.getElementById("trCode").value || "").replace(/\D/g, ""); if(v !== CODE){ document.getElementById("trErr").hidden = false; return; } }
+        if(i === STEPS.length - 1){ try{ localStorage.setItem("mh-trained", "1"); }catch(e){} ov.remove(); return; }
+        i++; show();
+      };
+      var x = document.getElementById("trX"); if(x) x.onclick = function(){ clearInterval(timer); ov.remove(); };
+    }
+    show();
+  });
 })();
 </script>
 <script>if("serviceWorker" in navigator) navigator.serviceWorker.register("/sw.js").catch(function(){});</script>

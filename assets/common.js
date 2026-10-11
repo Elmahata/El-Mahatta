@@ -6,6 +6,11 @@
 
   /* مركز افتراضي للخريطة — بتروح لمكان الراكب أو الأماكن المسجّلة تلقائياً */
   var CENTER = [30.7964, 31.6261];
+  /* الموبايلات الضعيفة أو «توفير البيانات»: الحركة بتخف لوحدها */
+  try {
+    var nv = navigator, cn = nv.connection || {};
+    if ((nv.deviceMemory && nv.deviceMemory <= 2) || (nv.hardwareConcurrency && nv.hardwareConcurrency <= 2) || cn.saveData) document.documentElement.classList.add("lite");
+  } catch (e) {}
 
   var T = {
     $: function (id) { return document.getElementById(id); },
@@ -92,11 +97,17 @@
         return T.verify(v.phone, v.role).then(function (tok) { opts.session = tok; return T.api(path, opts); });
       }
       if (opts.session) headers["x-session"] = opts.session;
-      return fetch("/api/" + path, {
-        method: opts.method || "GET",
-        headers: headers,
-        body: opts.body ? JSON.stringify(opts.body) : undefined,
-      }).then(function (r) {
+      /* النت الضعيف: لو الطلب ماوصلش خالص بنحاول تاني مرتين لوحدنا */
+      var tries = opts.retry === false ? 0 : 2, method = opts.method || "GET";
+      function send(n) {
+        return fetch("/api/" + path, { method: method, headers: headers, body: opts.body ? JSON.stringify(opts.body) : undefined })
+          .catch(function (e) {
+            if (n >= tries) throw Object.assign(new Error("النت ضعيف أو مقطوع — اتأكد من الاتصال وجرّب تاني"), { network: true });
+            if (method !== "GET" && T.toast) T.toast("النت ضعيف… بنحاول تاني");
+            return new Promise(function (ok) { setTimeout(ok, 1500 * (n + 1)); }).then(function () { return send(n + 1); });
+          });
+      }
+      return send(0).then(function (r) {
         return r.json().catch(function () { return {}; }).then(function (j) {
           if (!r.ok) {
             if (j.reverify && T.clearSession) T.clearSession(j.reverify);
@@ -225,6 +236,69 @@
       .catch(function () { delete RC[k]; return straight; });
     return RC[k];
   };
+  /* اسم الشارع من الخريطة (مجاني — OpenStreetMap). بيرجّع "" لو مفيش */
+  var GC = {};
+  T.reverse = function (lat, lng) {
+    var k = (+lat).toFixed(4) + "," + (+lng).toFixed(4);
+    if (GC[k]) return GC[k];
+    GC[k] = fetch("https://nominatim.openstreetmap.org/reverse?format=jsonv2&accept-language=ar&zoom=18&lat=" + lat + "&lon=" + lng)
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var a = (j && j.address) || {};
+        var near = j && j.name && j.name !== a.road ? j.name : "";
+        var road = a.road || a.pedestrian || a.footway || "";
+        var area = a.neighbourhood || a.suburb || a.village || a.town || a.city || "";
+        return [near, road, area].filter(Boolean).filter(function (v, i, s) { return s.indexOf(v) === i; }).slice(0, 2).join("، ");
+      })
+      .catch(function () { delete GC[k]; return ""; });
+    return GC[k];
+  };
+  /* أماكن حقيقية ليها اسم في حدود ~٤ كم من المركز (للإدارة — مرة واحدة) */
+  T.nearbyPOIs = function (center) {
+    var q = '[out:json][timeout:25];(nwr["name"]["amenity"](around:4000,' + center[0] + ',' + center[1] + ');nwr["name"]["railway"="station"](around:4000,' + center[0] + ',' + center[1] + ');nwr["name"]["healthcare"](around:4000,' + center[0] + ',' + center[1] + ');nwr["name"]["office"="government"](around:4000,' + center[0] + ',' + center[1] + '););out center 200;';
+    return fetch("https://overpass-api.de/api/interpreter", { method: "POST", body: "data=" + encodeURIComponent(q) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        var seen = {};
+        return (j.elements || []).map(function (e) {
+          var t = e.tags || {};
+          return { name: t["name:ar"] || t.name, kind: t.amenity || t.healthcare || t.office || t.railway || "", lat: e.lat != null ? e.lat : e.center && e.center.lat, lng: e.lon != null ? e.lon : e.center && e.center.lon };
+        }).filter(function (p) { if (!p.name || p.lat == null || seen[p.name]) return false; seen[p.name] = 1; return true; });
+      });
+  };
+  /* المسار المتحرك: حدّ أبيض + خط بيترسم + نقط ماشية فوقه في اتجاه المشوار */
+  T.animRoute = function (map, coords, color) {
+    var g = L.layerGroup().addTo(map);
+    var casing = L.polyline(coords, { color: "#fff", weight: 9, opacity: .95, className: "mh-route-casing", interactive: false }).addTo(g);
+    var main = L.polyline(coords, { color: color, weight: 5, opacity: 1, className: "mh-route", interactive: false }).addTo(g);
+    var flow = L.polyline(coords, { color: "#fff", weight: 3, opacity: .9, className: "mh-route-flow", interactive: false }).addTo(g);
+    function norm() { [casing, main].forEach(function (l) { var e = l.getElement && l.getElement(); if (e) e.setAttribute("pathLength", "1000"); }); }
+    norm();
+    g.setLatLngs = function (c2) { casing.setLatLngs(c2); main.setLatLngs(c2); flow.setLatLngs(c2); norm(); return g; };
+    g.redraw = function () { var e = main.getElement(); if (!e) return; e.style.animation = "none"; void e.getBBox; e.getBoundingClientRect(); e.style.animation = ""; };
+    g.getBounds = function () { return main.getBounds(); };
+    g.setStyle = function (o) { main.setStyle(o); return g; };
+    return g;
+  };
+  /* احتفال صغير: لما السائق يقبل (عند الراكب)، أو لما السائق ياخد المشوار */
+  T.celebrate = function (o) {
+    o = o || {};
+    try { navigator.vibrate && navigator.vibrate([40, 60, 90]); } catch (e) {}
+    var el = document.createElement("div");
+    el.className = "mh-cele" + (o.dark ? " drv" : "");
+    var cols = ["#fff", "#F9E6DA", "#BC4E1E", "#D6EBE6", "#E8874F"], dots = "";
+    for (var i = 0; i < 18; i++) {
+      var a = (i / 18) * Math.PI * 2, d = 120 + Math.random() * 90;
+      dots += '<i style="background:' + cols[i % cols.length] + ';--x:' + Math.round(Math.cos(a) * d) + 'px;--y:' + Math.round(Math.sin(a) * d) + 'px;--r:' + Math.round(Math.random() * 360) + 'deg"></i>';
+    }
+    var inner = o.photo ? "" : '<svg viewBox="0 0 48 48" width="58" height="58" fill="none"><path d="M12 25l8 8 16-17" stroke="' + (o.dark ? "#131E1C" : "#0E7566") + '" stroke-width="5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    el.innerHTML = '<div class="dots">' + dots + '</div><div class="ring"><div class="disc"' + (o.photo ? ' style="background-image:url(' + o.photo + ')"' : '') + '>' + inner + '</div></div>'
+      + '<h2>' + T.esc(o.title || "تمام ✓") + '</h2>' + (o.sub ? '<p>' + T.esc(o.sub) + '</p>' : '');
+    document.body.appendChild(el);
+    var close = function () { el.classList.add("out"); setTimeout(function () { el.remove(); }, 480); };
+    el.addEventListener("click", close);
+    setTimeout(close, o.ms || 2200);
+  };
   /* أيقونة السائق على الخريطة، بسهم بيلف مع اتجاهه */
   T.driverIcon = function (h) {
     var arrow = h != null ? '<div style="position:absolute;inset:-9px;transform:rotate(' + (+h) + 'deg)"><div style="position:absolute;top:0;left:50%;margin-left:-6px;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:9px solid #131E1C"></div></div>' : '';
@@ -239,17 +313,17 @@
   try {
     var standalone = (global.matchMedia && matchMedia("(display-mode: standalone)").matches) || /android-app:/.test(document.referrer);
     var p = location.pathname;
-    if (standalone && !sessionStorage.getItem("mh-splash") && (p === "/" || p === "/index.html" || p === "/driver.html")) {
+    if ((standalone || /[?&]splash=1/.test(location.search)) && !sessionStorage.getItem("mh-splash") && (p === "/" || p === "/index.html" || p === "/driver.html")) {
       sessionStorage.setItem("mh-splash", "1");
       var drv = p === "/driver.html";
       var sp = document.createElement("div");
       sp.setAttribute("aria-hidden", "true");
-      sp.style.cssText = "position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;transition:opacity .35s;background:" + (drv ? "#131E1C" : "#0E7566");
-      sp.innerHTML = '<img src="/assets/logo.png" alt="" style="height:96px;width:auto;filter:brightness(0) invert(1)">'
-        + '<div style="font:800 30px/1.2 \'Readex Pro\',sans-serif;color:#fff">المحطة' + (drv ? ' · سائق' : '') + '</div>'
-        + '<div style="font:500 15px \'IBM Plex Sans Arabic\',sans-serif;color:#D6EBE6">مشوارك بقى أسهل</div>';
+      sp.className = "mh-splash" + (drv ? " drv" : "");
+      sp.innerHTML = '<div class="stage"><span class="rg"></span><span class="rg b"></span><span class="sh"></span><img src="/assets/logo.png" alt=""></div>'
+        + '<div class="t">المحطة' + (drv ? ' · سائق' : '') + '</div>'
+        + '<div class="s">مشوارك بقى أسهل</div><div class="bar"><i></i></div>';
       (document.body || document.documentElement).appendChild(sp);
-      setTimeout(function () { sp.style.opacity = "0"; setTimeout(function () { sp.remove(); }, 400); }, 1100);
+      setTimeout(function () { sp.classList.add("out"); setTimeout(function () { sp.remove(); }, 560); }, 1900);
     }
   } catch (e) {}
 })(window);

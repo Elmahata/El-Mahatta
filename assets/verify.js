@@ -79,8 +79,8 @@
     if (getSess("rider")) return;
     var ov = document.createElement("div");
     ov.style.cssText = "position:fixed;inset:0;z-index:4900;background:var(--ground);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px";
-    ov.innerHTML = '<div style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px">'
-      + '<img src="/assets/logo.png" alt="المحطة" style="height:64px;width:auto;align-self:center">'
+    ov.innerHTML = '<div class="mh-login" style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px">'
+      + '<img class="mh-logo" src="/assets/logo.png" alt="المحطة" style="height:72px;width:auto;align-self:center;filter:drop-shadow(0 10px 16px rgba(14,117,102,.25))">'
       + '<h1 style="margin:0;text-align:center;font:800 24px/1.3 var(--display)">أهلاً بيك في المحطة</h1>'
       + '<p style="margin:0;text-align:center;color:var(--ink-2)">اكتب اسمك ورقمك، وهنبعتلك كود على واتساب. ده أول مرة بس.</p>'
       + '<div class="field" style="margin:0"><label for="gName">اسمك</label><input id="gName" autocomplete="name" placeholder="الاسم"></div>'

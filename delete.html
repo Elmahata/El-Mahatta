@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>حذف الحساب — المحطة</title><meta name="theme-color" content="#0E7566"><link rel="stylesheet" href="/assets/style.css"></head>
+<body style="min-height:100vh;display:grid;place-items:center;padding:24px;background:var(--ground)">
+<div class="mh-login" style="width:100%;max-width:400px;display:flex;flex-direction:column;gap:14px">
+  <img class="mh-logo" src="/assets/logo.png" alt="المحطة" style="height:64px;width:auto;align-self:center">
+  <h1 style="margin:0;text-align:center;font:800 24px/1.3 var(--display)">حذف الحساب والبيانات</h1>
+  <div class="card">
+    <p style="margin:0 0 10px"><b>من جوه التطبيق (أسرع):</b> افتح «حسابي» ← البروفايل ← «احذف حسابي وبياناتي».</p>
+    <p style="margin:0 0 12px"><b>أو من هنا:</b> اكتب رقمك، والإدارة هتحذف بياناتك خلال ٧ أيام.</p>
+    <div class="field"><label for="dn">اسمك</label><input id="dn" autocomplete="name"></div>
+    <div class="field"><label for="dp">رقم الموبايل المسجّل</label><input id="dp" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx"></div>
+    <button class="btn btn-primary btn-wide" id="go">ابعت طلب الحذف</button>
+    <p class="hint" id="msg" style="margin-top:10px" hidden></p>
+  </div>
+  <p class="hint" style="text-align:center">بيتحذف: الاسم، رقم الموبايل، الملاحظات. بيفضل: سجل الرحلة من غير أي بيانات شخصية (للحسابات). <a href="/privacy.html">سياسة الخصوصية</a></p>
+</div>
+<script src="/assets/common.js"></script>
+<script>
+document.getElementById("go").addEventListener("click", function(){
+  var p = document.getElementById("dp").value.replace(/\D/g,""), n = document.getElementById("dn").value.trim(), m = document.getElementById("msg"), b = this;
+  if(!/^01\d{9}$/.test(p)){ m.hidden = false; m.style.color = "var(--crit)"; m.textContent = "اكتب رقم موبايل صحيح"; return; }
+  b.disabled = true;
+  TT.api("support", { method:"POST", body:{ phone:p, name:n, kind:"other", note:"طلب حذف الحساب وكل البيانات (من صفحة الحذف)" } })
+    .then(function(){ m.hidden = false; m.style.color = "var(--ok)"; m.textContent = "وصل طلبك ✓ — هيتحذف خلال ٧ أيام."; })
+    .catch(function(e){ b.disabled = false; m.hidden = false; m.style.color = "var(--crit)"; m.textContent = e.message; });
+});
+</script>
+</body></html>
