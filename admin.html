@@ -55,6 +55,10 @@
   <section id="p-live" class="stack" hidden>
     <div id="stale"></div>
     <div class="stats" id="liveStats"></div>
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid var(--line)"><b>التكاتك لايف</b><span class="hint" id="allMapHint"></span></div>
+      <div id="allMap" style="height:340px"></div>
+    </div>
     <div class="card" style="padding:13px 16px">
       <h2 style="margin:0">المشاوير</h2>
       <p class="hint">السواقين بيقبلوا الطلبات بنفسهم من تطبيق السائق — إنت بس بتتابع وتتدخل لو لزم.</p>
@@ -152,7 +156,7 @@
         <button class="btn btn-ghost" id="addPlace">إضافة</button>
       </div>
       <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:8px">
-        <button class="btn btn-primary" id="seedPlaces" type="button">أضف أماكن كفر صقر المشهورة (١٥)</button>
+        <button class="btn btn-primary" id="seedPlaces" type="button">أضف أماكن كفر صقر المشهورة وحدد مكانها</button>
         <button class="btn btn-ghost" id="poiLoad" type="button">اقتراحات من الخريطة</button>
       </div>
       <div class="banner b-warn" id="placeMiss" hidden style="margin-top:10px"></div>
@@ -423,7 +427,7 @@
     $("placeList").innerHTML = S.places.map(function(p){
       var has = p.lat != null;
       return '<div class="item"><div class="item-head"><strong>'+TT.esc(p.name)+'</strong>'
-        + (has ? '<span class="chip c-ok num">'+p.lat.toFixed(4)+', '+p.lng.toFixed(4)+'</span>' : '<span class="chip c-warn">بدون إحداثية</span>')
+        + (has ? '<span class="chip '+(p.auto?'c-warn':'c-ok')+' num" title="'+(p.auto?'اتحدد تلقائياً — راجعه على الخريطة':'')+'">'+(p.auto?'تلقائي · راجعه ':'')+p.lat.toFixed(4)+', '+p.lng.toFixed(4)+'</span>' : '<span class="chip c-warn">بدون إحداثية</span>')
         + (selPlace===p.id ? '<span class="chip c-accent">محدّدة — اضغط الخريطة</span>' : '')
         + '</div>'
         + '<div class="leg"><label style="margin:0;font-size:12px">المنطقة</label>'
@@ -674,14 +678,30 @@
     document.body.appendChild(a); a.click(); setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); }, 500);
     TT.toast("اتنزّلت النسخة ✓");
   });
+  /* بيضيف الأماكن المشهورة الناقصة، وبعدين بيدوّر على مكان كل نقطة ناقصة على الخريطة لوحده (واحدة كل ثانية — شرط الخدمة المجانية) */
   $("seedPlaces").addEventListener("click", function(){
-    var have = {}; S.places.forEach(function(p){ have[p.name] = 1; });
+    var b = this, have = {}; S.places.forEach(function(p){ have[p.name] = 1; });
     var add = STARTER.filter(function(s){ return !have[s[0]]; });
-    if(!add.length){ TT.toast("كلهم مضافين قبل كده"); return; }
-    var z = $("newPlaceZone").value || "", b = this; b.disabled = true;
-    Promise.all(add.map(function(s, i){ var id = TT.uid() + i; return save("places", id, { id:id, name:s[0], cat:s[1], zoneId:z, lat:null, lng:null, order:S.places.length + i }); }))
-      .then(function(){ TT.toast("اتضاف " + add.length + " مكان — حدد مكان كل واحد على الخريطة"); })
-      .finally(function(){ b.disabled = false; });
+    var z = $("newPlaceZone").value || "";
+    b.disabled = true; b.textContent = "بيضيف…";
+    var created = add.map(function(s, i){ var id = TT.uid() + i; return { id:id, name:s[0], cat:s[1], zoneId:z, lat:null, lng:null, order:S.places.length + i }; });
+    Promise.all(created.map(function(p){ return save("places", p.id, p); })).then(function(){
+      var todo = S.places.filter(function(p){ return p.lat == null; }).concat(created.filter(function(p){ return !TT.byId(S.places, p.id); }));
+      var seen = {}; todo = todo.filter(function(p){ if(seen[p.id]) return false; seen[p.id] = 1; return true; });
+      var found = 0, i = 0;
+      function next(){
+        if(i >= todo.length){
+          b.disabled = false; b.textContent = "أضف أماكن كفر صقر المشهورة وحدد مكانها";
+          TT.toast("اتحدد مكان " + found + " من " + todo.length + (todo.length - found ? " — الباقي حدده بإيدك" : " ✓"));
+          return;
+        }
+        var p = todo[i++]; b.textContent = "بيدوّر على «" + p.name + "» (" + i + "/" + todo.length + ")";
+        TT.geocode(p.name, TT.CENTER).then(function(r){
+          if(r){ found++; var q = clone(TT.byId(S.places, p.id) || p); q.lat = r.lat; q.lng = r.lng; q.auto = true; return save("places", p.id, q); }
+        }).catch(function(){}).then(function(){ setTimeout(next, 1100); });
+      }
+      next();
+    }).catch(function(e){ b.disabled = false; b.textContent = "أضف أماكن كفر صقر المشهورة وحدد مكانها"; TT.toast(e.message || "حصلت مشكلة"); });
   });
   var POI = [];
   var KIND = { hospital:"مستشفى", clinic:"عيادة", pharmacy:"صيدلية", school:"مدرسة", college:"كلية", university:"جامعة", place_of_worship:"جامع / كنيسة", bank:"بنك", post_office:"بريد", police:"شرطة", townhall:"مجلس المدينة", marketplace:"سوق", station:"محطة قطار", bus_station:"موقف", fuel:"بنزينة", cafe:"كافيه", restaurant:"مطعم", government:"جهة حكومية" };
@@ -803,12 +823,26 @@
   /* ---------- الإقلاع ---------- */
   function start(){
     $("gate").hidden = true; $("nav").hidden = false; $("p-live").hidden = false;
+    if(!window.__allMap){
+      var am = window.__allMap = TT.initMap("allMap"), aStore = {}, fitted = false;
+      var tick = function(){
+        var now = Date.now(), busy = {};
+        (S.requests || []).forEach(function(r){ if(r.status === "assigned" && r.driverId) busy[r.driverId] = 1; });
+        var list = (S.drivers || []).filter(function(x){ return x.isOnline && x.loc && now - x.loc.at < 2 * 60 * 1000; })
+          .map(function(x){ return { k:x.id, lat:x.loc.lat, lng:x.loc.lng, name:x.name, busy:!!busy[x.id], ago:Math.round((now - x.loc.at) / 1000) }; });
+        Object.keys(aStore).forEach(function(k){ var m = list.filter(function(p){ return p.k === k; })[0]; if(m) aStore[k].setIcon(TT.tukIcon(m.busy)); });
+        TT.syncMarkers(am, aStore, list, function(p){ return TT.tukIcon(p.busy); }, function(p){ return TT.esc(p.name) + (p.busy ? " · في مشوار" : " · فاضي"); });
+        $("allMapHint").textContent = list.length ? list.length + " أونلاين · " + list.filter(function(p){ return p.busy; }).length + " في مشوار" : "مفيش حد أونلاين ومكانه واصل";
+        if(!fitted && list.length){ fitted = true; am.fitBounds(L.latLngBounds(list.map(function(p){ return [p.lat, p.lng]; })), { padding:[40,40], maxZoom:16 }); }
+      };
+      tick(); setInterval(tick, 5000);
+    }
     if(!pmap){
       pmap = TT.initMap("pmap");
       pmap.on("click", function(e){
         if(!selPlace){ TT.toast("اختر نقطة من القايمة الأول"); return; }
         var p = clone(TT.byId(S.places, selPlace));
-        p.lat = +e.latlng.lat.toFixed(6); p.lng = +e.latlng.lng.toFixed(6);
+        p.lat = +e.latlng.lat.toFixed(6); p.lng = +e.latlng.lng.toFixed(6); delete p.auto;
         save("places", selPlace, p).then(function(){ TT.toast("اتسجّلت ✓"); });
       });
     }

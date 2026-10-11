@@ -6,7 +6,7 @@
   "start_url": "/driver.html",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#131E1C",
+  "background_color": "#F5F8F7",
   "theme_color": "#0E7566",
   "icons": [
     {

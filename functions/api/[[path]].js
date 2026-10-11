@@ -343,6 +343,23 @@ export async function onRequest({ request, env, params }) {
       return out.error ? json({ error: out.error }, out.status) : json(out);
     }
 
+    /* التكاتك القريبة للراكب: أونلاين + فاضية + مكانها وصل من دقيقتين. المكان تقريبي (~١٠٠ م) ومن غير أي اسم أو رقم */
+    if (route === "nearby" && method === "GET") {
+      const lat = +url.searchParams.get("lat"), lng = +url.searchParams.get("lng");
+      const { drivers, requests } = await readDocs(env, ["drivers", "requests"]);
+      const busy = new Set(requests.filter((r) => r.status === "assigned" && r.driverId).map((r) => r.driverId));
+      const now = Date.now(), hour = Math.floor(now / 36e5);
+      const hash = (s) => { let h = 0; for (const ch of String(s)) h = (h * 31 + ch.charCodeAt(0)) | 0; return h; };
+      const out = drivers.filter((d) => d.active !== false && d.online !== false && d.lastSeen && now - d.lastSeen < ONLINE_MS && d.loc && now - d.loc.at < 2 * 60 * 1000 && !busy.has(d.id))
+        .map((d) => {
+          const h = hash(d.id + ":" + hour), ox = ((h & 0xff) / 255 - 0.5) * 0.0018, oy = (((h >> 8) & 0xff) / 255 - 0.5) * 0.0018;
+          return { k: (hash(d.id) >>> 0).toString(36), lat: +(d.loc.lat + oy).toFixed(5), lng: +(d.loc.lng + ox).toFixed(5), h: d.loc.h };
+        })
+        .filter((p) => !isFinite(lat) || !isFinite(lng) || (Math.abs(p.lat - lat) < 0.05 && Math.abs(p.lng - lng) < 0.05))
+        .slice(0, 25);
+      return json({ count: out.length, drivers: out });
+    }
+
     /* متابعة الراكب — بيانات السائق تظهر فقط بعد ما يَقبل */
     if (route === "track" && sub && method === "GET") {
       const r = await getDoc(env, "requests", str(sub, 40));
@@ -560,7 +577,7 @@ export async function onRequest({ request, env, params }) {
         const lat = +b.lat, lng = +b.lng;
         if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180) return json({ error: "مكان غير صحيح" }, 400);
         if (me.loc && Date.now() - me.loc.at < 4000) return json({ ok: true });
-        me.loc = { lat: +lat.toFixed(6), lng: +lng.toFixed(6), h: b.h != null && isFinite(+b.h) ? Math.round(+b.h) : null, at: Date.now() };
+        me.loc = { lat: +lat.toFixed(6), lng: +lng.toFixed(6), h: b.h != null && isFinite(+b.h) ? Math.round(+b.h) : null, at: Date.now(), idle: Boolean(b.idle) };
         await putDoc(env, "drivers", me.id, me);
         return json({ ok: true });
       }

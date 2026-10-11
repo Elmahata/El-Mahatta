@@ -155,19 +155,19 @@ td.num,th.num{font-variant-numeric:tabular-nums;white-space:nowrap}
 
 /* شاشة البداية */
 .mh-splash{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;
-  background:radial-gradient(120% 80% at 50% 38%, #12897A 0%, #0E7566 45%, #0A5A4E 100%);transition:opacity .45s var(--ease-out), transform .55s var(--ease-out)}
-.mh-splash.drv{background:radial-gradient(120% 80% at 50% 38%, #1E2B28 0%, #131E1C 55%, #0B1210 100%)}
+  background:radial-gradient(120% 80% at 50% 40%, #FFFFFF 0%, #F5F8F7 55%, #E7ECEA 100%);transition:opacity .45s var(--ease-out), transform .55s var(--ease-out)}
+.mh-splash.drv{background:radial-gradient(120% 80% at 50% 40%, #FFFFFF 0%, #F5F8F7 55%, #E7ECEA 100%)}
 .mh-splash.out{opacity:0;transform:scale(1.08)}
 .mh-splash .stage{position:relative;width:130px;height:150px;display:grid;place-items:end center}
-.mh-splash .stage img{position:relative;z-index:2;height:110px;width:auto;filter:brightness(0) invert(1);animation:mh-drop .9s var(--ease-out) both}
-.mh-splash .stage .sh{position:absolute;bottom:-4px;width:56px;height:12px;border-radius:50%;background:rgba(0,0,0,.45);filter:blur(3px);animation:mh-shadow .9s var(--ease-out) both}
-.mh-splash .stage .rg{position:absolute;bottom:-14px;width:60px;height:30px;border-radius:50%;border:2px solid rgba(255,255,255,.7);opacity:0;animation:mh-ring 1.4s .55s var(--ease-out) infinite}
+.mh-splash .stage img{position:relative;z-index:2;height:124px;width:auto;filter:drop-shadow(0 12px 18px rgba(14,117,102,.25));animation:mh-drop .9s var(--ease-out) both}
+.mh-splash .stage .sh{position:absolute;bottom:-4px;width:56px;height:12px;border-radius:50%;background:rgba(19,30,28,.28);filter:blur(3px);animation:mh-shadow .9s var(--ease-out) both}
+.mh-splash .stage .rg{position:absolute;bottom:-14px;width:60px;height:30px;border-radius:50%;border:2px solid rgba(14,117,102,.55);opacity:0;animation:mh-ring 1.4s .55s var(--ease-out) infinite}
 .mh-splash .stage .rg.b{animation-delay:1s}
-.mh-splash .t{font:800 34px/1.2 var(--display);color:#fff;margin-top:22px;animation:mh-up .6s .55s var(--ease-out) both;position:relative;overflow:hidden}
-.mh-splash .t::after{content:"";position:absolute;inset:0;width:40%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);animation:mh-shine 1.1s 1s ease-in-out both}
-.mh-splash .s{font:500 15px var(--body);color:#D6EBE6;animation:mh-up .6s .75s var(--ease-out) both}
-.mh-splash .bar{width:46px;height:3px;border-radius:3px;background:rgba(255,255,255,.25);margin-top:26px;overflow:hidden;animation:mh-fade .4s .9s both}
-.mh-splash .bar i{display:block;height:100%;width:40%;border-radius:3px;background:#fff;animation:mh-shine 1s .9s ease-in-out infinite reverse}
+.mh-splash .t{font:800 34px/1.2 var(--display);color:#0A5A4E;margin-top:22px;animation:mh-up .6s .55s var(--ease-out) both;position:relative;overflow:hidden}
+.mh-splash .t::after{content:"";position:absolute;inset:0;width:40%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.85),transparent);animation:mh-shine 1.1s 1s ease-in-out both}
+.mh-splash .s{font:500 15px var(--body);color:#47544F;animation:mh-up .6s .75s var(--ease-out) both}
+.mh-splash .bar{width:46px;height:3px;border-radius:3px;background:rgba(14,117,102,.15);margin-top:26px;overflow:hidden;animation:mh-fade .4s .9s both}
+.mh-splash .bar i{display:block;height:100%;width:40%;border-radius:3px;background:#0E7566;animation:mh-shine 1s .9s ease-in-out infinite reverse}
 
 /* اللوجو في شاشات الدخول */
 .mh-logo{animation:mh-drop .9s var(--ease-out) both, mh-float 3.6s 1s ease-in-out infinite}
@@ -226,3 +226,8 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px color-mix(in oklab,
 .lite *,.lite *::before,.lite *::after{animation-duration:.01ms !important;animation-delay:0s !important;animation-iteration-count:1 !important;transition-duration:.01ms !important}
 .lite .pillbar,.lite .toast{-webkit-backdrop-filter:none !important;backdrop-filter:none !important;background:var(--surface)}
 .lite .toast{background:var(--ink)}
+
+/* التكاتك القريبة: بتتزحلق بنعومة بين كل تحديث */
+.mh-tuk{transition:transform 2.5s linear;background:none;border:0}
+.leaflet-zoom-anim .mh-tuk,.leaflet-dragging .mh-tuk{transition:none}
+.mh-tuk span{animation:mh-pop .45s var(--ease-spring) both}

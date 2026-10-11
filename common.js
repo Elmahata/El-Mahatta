@@ -253,6 +253,15 @@
       .catch(function () { delete GC[k]; return ""; });
     return GC[k];
   };
+  /* بيدوّر على اسم مكان جوه حدود المدينة بس (~٦ كم) — بيرجّع {lat,lng,label} أو null */
+  T.geocode = function (name, center) {
+    center = center || CENTER;
+    var d = 0.06, vb = [center[1] - d, center[0] + d, center[1] + d, center[0] - d].join(",");
+    var base = "https://nominatim.openstreetmap.org/search?format=jsonv2&accept-language=ar&limit=1&bounded=1&viewbox=" + vb + "&q=";
+    var short = String(name).replace(/\s*(كفر صقر|\(.*?\))\s*/g, " ").trim();
+    function q(s) { return fetch(base + encodeURIComponent(s)).then(function (r) { return r.json(); }).then(function (j) { return j && j[0] ? { lat: +(+j[0].lat).toFixed(6), lng: +(+j[0].lon).toFixed(6), label: j[0].display_name } : null; }); }
+    return q(name).then(function (r) { return r || (short && short !== name ? new Promise(function (ok) { setTimeout(ok, 1100); }).then(function () { return q(short); }) : null); }).catch(function () { return null; });
+  };
   /* أماكن حقيقية ليها اسم في حدود ~٤ كم من المركز (للإدارة — مرة واحدة) */
   T.nearbyPOIs = function (center) {
     var q = '[out:json][timeout:25];(nwr["name"]["amenity"](around:4000,' + center[0] + ',' + center[1] + ');nwr["name"]["railway"="station"](around:4000,' + center[0] + ',' + center[1] + ');nwr["name"]["healthcare"](around:4000,' + center[0] + ',' + center[1] + ');nwr["name"]["office"="government"](around:4000,' + center[0] + ',' + center[1] + '););out center 200;';
@@ -298,6 +307,21 @@
     var close = function () { el.classList.add("out"); setTimeout(function () { el.remove(); }, 480); };
     el.addEventListener("click", close);
     setTimeout(close, o.ms || 2200);
+  };
+  /* توكتوك صغير على الخريطة (للتكاتك القريبة) */
+  T.tukIcon = function (busy) {
+    return L.divIcon({ className: "mh-tuk", iconSize: [32, 32], iconAnchor: [16, 16],
+      html: '<span style="display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#fff;box-shadow:0 4px 10px -3px rgba(19,30,28,.45),0 0 0 2px ' + (busy ? "#BC4E1E" : "#0E7566") + '"><img src="/assets/logo.png" alt="" style="height:22px;width:auto"></span>' });
+  };
+  /* بيحرّك ماركرات حسب مفتاح: اللي اختفى بيتشال، والجديد بيظهر، والموجود بيتزحلق */
+  T.syncMarkers = function (map, store, list, iconFn, tipFn) {
+    var seen = {};
+    list.forEach(function (p) {
+      seen[p.k] = 1;
+      if (store[p.k]) store[p.k].setLatLng([p.lat, p.lng]);
+      else { store[p.k] = L.marker([p.lat, p.lng], { icon: iconFn(p), interactive: !!tipFn, keyboard: false, zIndexOffset: 500 }).addTo(map); if (tipFn) store[p.k].bindTooltip(tipFn(p)); }
+    });
+    Object.keys(store).forEach(function (k) { if (!seen[k]) { map.removeLayer(store[k]); delete store[k]; } });
   };
   /* أيقونة السائق على الخريطة، بسهم بيلف مع اتجاهه */
   T.driverIcon = function (h) {

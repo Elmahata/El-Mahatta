@@ -75,7 +75,7 @@
   <!-- تسجيل الدخول -->
   <section id="gate" class="gate" style="background:radial-gradient(120% 80% at 50% 25%, #1E2B28 0%, #131E1C 55%, #0B1210 100%)">
     <div class="mh-login" style="width:100%;max-width:340px;display:flex;flex-direction:column;gap:16px;align-items:center">
-    <img class="mh-logo" src="/assets/logo.png" alt="" style="height:80px;width:auto;filter:brightness(0) invert(1) drop-shadow(0 10px 18px rgba(0,0,0,.4))">
+    <span class="mh-logo" style="width:104px;height:104px;border-radius:50%;background:#fff;display:grid;place-items:center;align-self:center;box-shadow:0 18px 36px -14px rgba(0,0,0,.6), 0 0 0 6px rgba(255,255,255,.08)"><img src="/assets/logo.png" alt="المحطة" style="height:75px;width:auto;display:block"></span>
     <div class="card" style="width:100%">
       <h2>دخول السائق</h2>
       <p class="hint">اكتب رقم موبايلك والكود اللي أخدته من الإدارة.</p>
@@ -207,6 +207,21 @@
 
   try{ auth = JSON.parse(localStorage.getItem(KEY) || sessionStorage.getItem(KEY) || "null"); }catch(e){}
 
+  /* السائق الفاضي الأونلاين بيظهر للركاب: بيبعت مكانه كل ٣٠ ثانية لو اتحرك ٥٠ متر (وكل ٩٠ ثانية على الأقل) */
+  var idleW = null, idleLast = null, idleAt = 0;
+  function idleTrack(on){
+    if(!navigator.geolocation) return;
+    if(!on){ if(idleW != null){ navigator.geolocation.clearWatch(idleW); idleW = null; } return; }
+    if(idleW != null) return;
+    idleW = navigator.geolocation.watchPosition(function(p){
+      var now = Date.now(), pt = { lat:p.coords.latitude, lng:p.coords.longitude };
+      var moved = !idleLast || TT.dist(idleLast, pt) > 0.05;
+      if((moved && now - idleAt > 30000) || now - idleAt > 90000){
+        idleAt = now; idleLast = pt;
+        fetch("/api/driver/loc", { method:"POST", headers:hdr(), body:JSON.stringify({ lat:pt.lat, lng:pt.lng, h:p.coords.heading, idle:true }) }).catch(function(){});
+      }
+    }, function(){}, { enableHighAccuracy:true, maximumAge:15000, timeout:30000 });
+  }
   function hdr(){
     return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "content-type": "application/json" };
   }
@@ -505,6 +520,7 @@
     return call("feed").then(function(j){
       $("who").textContent = j.me.name + (j.me.plate ? " · لوحة " + j.me.plate : "");
       $("onl").checked = j.me.online;
+      idleTrack(j.me.online && !j.mine);
       $("pulse").hidden = !j.me.online;
       $("onlSt").textContent = j.me.online ? "بستقبل مشاوير" : "مش بستقبل دلوقتي";
       $("tRides").textContent = j.today.rides;
