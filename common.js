@@ -231,7 +231,10 @@
       .then(function (j) {
         var rt = j && j.routes && j.routes[0]; if (!rt) throw new Error("no route");
         /* التوكتوك أبطأ من العربية — ×١.٤ على الوقت */
-        return { coords: rt.geometry.coordinates.map(function (p) { return [p[1], p[0]]; }), km: rt.distance / 1000, min: Math.max(1, Math.round(rt.duration / 60 * 1.4)), road: true };
+        var out = { coords: rt.geometry.coordinates.map(function (p) { return [p[1], p[0]]; }), km: rt.distance / 1000, min: Math.max(1, Math.round(rt.duration / 60 * 1.4)), road: true };
+        /* لفّة مش منطقية (أطول من ٣ أضعاف الخط المستقيم) = غالباً نقطة متحددة غلط أو كوبري مشاه — نرجع للتقدير */
+        if (out.km > Math.max(8, km * 3)) { straight.odd = true; return straight; }
+        return out;
       })
       .catch(function () { delete RC[k]; return straight; });
     return RC[k];

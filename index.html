@@ -38,9 +38,26 @@ html,body{height:100%;overflow:hidden}
   background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);display:grid;place-items:center;cursor:pointer}
 .fab svg{width:21px;height:21px;stroke:var(--ink-2);fill:none;stroke-width:1.9}
 
+.sheet.mini{max-height:calc(96px + env(safe-area-inset-bottom,0px)) !important;overflow:hidden}
+.sheet.mini > section > *:not(h2){opacity:.0;pointer-events:none}
+.sheet .grab{cursor:pointer;padding:6px 0;margin:-6px auto 2px;background-clip:content-box}
+#stPick #pickHint{display:none}
+#stPick h2,#stConfirm h2{font-size:18px;margin-bottom:6px}
+#gpsPick{min-height:46px !important;margin:2px 0 6px !important}
+#plList{max-height:24vh !important}
+#plList button{min-height:46px !important;padding:6px 4px !important}
+#quick > button:nth-of-type(n+3){display:none}
+#stConfirm .legrow{padding:7px 0}
+#stConfirm .legrow .lbl{display:none}
+#stConfirm .legrow .zn{font-size:11.5px}
+#fareBox{padding:10px 14px !important;gap:10px !important;margin:8px 0 !important}
+#fareBox .amt{font-size:34px !important}
+#fareBox .cap{font-size:12px !important;line-height:1.45 !important}
+#routeInfo{margin:2px 0 4px !important;font-size:12.5px}
+#moreOpts[open] summary span:last-child{opacity:.6}
 .sheet{position:fixed;inset-inline:0;bottom:0;z-index:800;background:var(--surface);
   border-radius:20px 20px 0 0;box-shadow:0 -6px 30px -12px rgba(0,0,0,.4);
-  padding:8px 16px calc(16px + env(safe-area-inset-bottom,0px));max-height:80vh;overflow-y:auto}
+  padding:8px 16px calc(14px + env(safe-area-inset-bottom,0px));max-height:min(62vh, 560px);overflow-y:auto;transition:max-height .35s var(--ease-out,ease)}
 .grab{width:38px;height:4px;border-radius:2px;background:var(--line);margin:4px auto 12px}
 .sheet h2{font-family:var(--display);font-size:17px;margin:0 0 4px}
 .sheet .hint{margin-bottom:12px}
@@ -163,6 +180,10 @@ html,body{height:100%;overflow:hidden}
       <span class="cap" id="fareCap"><b>جنيهاً</b> — سعر ثابت، بلا مفاصلة.<br>يُدفع نقداً عند الوصول.</span>
     </div>
 
+    <div class="field" style="margin:8px 0"><input id="rNote" maxlength="140" placeholder="علامة مميزة للسائق (اختياري) — مثلاً: قدام الصيدلية" style="min-height:46px"></div>
+    <details id="moreOpts" style="margin:0 0 10px;border:1px solid var(--line);border-radius:12px;padding:0 12px">
+      <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;min-height:46px;font-weight:600;font-size:14px"><span style="flex:1" id="moreSum">باسمك · دلوقتي</span><span style="color:var(--accent-ink);font-size:13px">تغيير ▾</span></summary>
+      <div style="padding:2px 0 8px">
     <div class="seg" id="whoSeg" style="display:flex;background:var(--inset);border-radius:10px;padding:3px;gap:3px;margin:4px 0 10px">
       <button type="button" data-who="me" style="flex:1;border:0;border-radius:8px;padding:8px;font-family:var(--body);font-weight:700;cursor:pointer;background:var(--surface);color:var(--ink)">الرحلة ليّا</button>
       <button type="button" data-who="other" style="flex:1;border:0;border-radius:8px;padding:8px;font-family:var(--body);font-weight:600;cursor:pointer;background:transparent;color:var(--ink)">لحد تاني</button>
@@ -172,12 +193,14 @@ html,body{height:100%;overflow:hidden}
       <select id="when"><option value="">دلوقتي</option></select>
       <p class="hint" id="whenHint" hidden style="margin-top:4px">الطلب بيوصل للسواقين قبل المعاد بـ ١٥ دقيقة.</p>
     </div>
-    <div class="field"><label for="rNote">علامة مميزة للسائق (اختياري)</label><input id="rNote" maxlength="140" placeholder="مثلاً: قدام الصيدلية، البوابة الخضرا"></div>
+    <div hidden><label>_</label><input id="rNoteOld" maxlength="140" placeholder="مثلاً: قدام الصيدلية، البوابة الخضرا"></div>
     <div class="row">
       <div class="field"><label for="rName" id="rNameL">اسمك</label><input id="rName" autocomplete="name" placeholder="الاسم"></div>
       <div class="field"><label for="rPhone" id="rPhoneL">رقم موبايلك</label><input id="rPhone" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx"></div>
     </div>
     <p class="hint" id="otherHint" hidden style="margin:-4px 0 10px">السائق هيكلّم الراكب ده مش إنت. هتقدر تتابع الرحلة من هنا وتبعتله الكود.</p>
+      </div>
+    </details>
     <p class="hint" id="refHint" hidden style="margin:-4px 0 10px;color:var(--ok)"></p>
     <button class="btn btn-primary btn-wide mh-shine" id="sendReq" style="font-size:16px;padding:13px">اطلب التوكتوك</button>
   </section>
@@ -382,12 +405,19 @@ html,body{height:100%;overflow:hidden}
         if(rt.road){ line.setLatLngs(rt.coords); line.redraw(); if(step === "confirm") map.fitBounds(line.getBounds(), fitOpts); }
         var el = $("routeInfo");
         if(!el && $("fareBox")){ el = document.createElement("p"); el.id = "routeInfo"; el.className = "hint"; el.style.cssText = "margin:6px 0 0;text-align:center"; $("fareBox").parentNode.insertBefore(el, $("fareBox").nextSibling); }
-        if(el) el.textContent = "المشوار حوالي " + TT.etaText(rt) + (rt.road ? "" : " (تقريبي)");
+        if(el) el.textContent = rt.odd ? "مش قادرين نحسب الطريق — المسافة تقريبية" : "المشوار حوالي " + TT.etaText(rt) + (rt.road ? "" : " (تقريبي)");
       });
     }
   }
 
   /* ---------- الخطوات ---------- */
+  function updMore(){
+    var w = $("when"), wl = w && w.selectedIndex > 0 ? w.options[w.selectedIndex].text : "دلوقتي";
+    var nm = $("rName").value.trim();
+    $("moreSum").textContent = (forOther ? "لـ " + (nm || "حد تاني") : (nm ? "باسم " + nm : "اكتب اسمك ورقمك")) + " · " + wl;
+  }
+  ["rName","rPhone","when"].forEach(function(id){ var e = document.getElementById(id); if(e){ e.addEventListener("input", updMore); e.addEventListener("change", updMore); } });
+  document.addEventListener("click", function(e){ if(e.target.closest && e.target.closest("[data-who]")) setTimeout(updMore, 0); });
   function setStep(s){
     step = s;
     var picking = (s === "from" || s === "to");
@@ -410,7 +440,7 @@ html,body{height:100%;overflow:hidden}
       $("plSearch").value = ""; renderList();
       if(mapMode) updatePick();
     }
-    if(s === "confirm") renderConfirm();
+    if(s === "confirm"){ renderConfirm(); updMore(); if(!$("rName").value.trim() || !$("rPhone").value.trim()) $("moreOpts").open = true; }
     drawAll();
   }
 
@@ -853,6 +883,17 @@ html,body{height:100%;overflow:hidden}
   }
   document.addEventListener("visibilitychange", function(){ if(!document.hidden) nearby(); });
   setTimeout(nearby, 1200);
+
+  (function(){
+    var sh = $("sheet"), g = sh.querySelector(".grab"), y0 = null;
+    function mini(on){ sh.classList.toggle("mini", on); }
+    g.setAttribute("role", "button"); g.setAttribute("aria-label", "صغّر / كبّر");
+    g.addEventListener("click", function(){ mini(!sh.classList.contains("mini")); });
+    sh.addEventListener("touchstart", function(e){ if(e.target.closest(".grab") || e.target.closest("h2")) y0 = e.touches[0].clientY; }, { passive:true });
+    sh.addEventListener("touchend", function(e){ if(y0 == null) return; var dy = e.changedTouches[0].clientY - y0; y0 = null; if(dy > 40) mini(true); else if(dy < -40) mini(false); }, { passive:true });
+    sh.addEventListener("click", function(e){ if(sh.classList.contains("mini") && !e.target.closest(".grab")) mini(false); });
+    map.on("dragstart", function(){ if(step === "confirm" || step === "search" || step === "matched") mini(true); });
+  })();
 
   map.on("movestart", function(){ if(!$("pin").hidden) $("pin").classList.add("lift"); });
   map.on("move",      function(){ if(!$("pin").hidden) updatePick(); });
