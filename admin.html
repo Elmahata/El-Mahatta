@@ -112,6 +112,7 @@
         <div class="row">
           <div class="field"><label for="dCode">كود الدخول (٤ أرقام)</label><input id="dCode" inputmode="numeric" maxlength="6" placeholder="يتولّد تلقائياً"></div>
           <div class="field"><label for="dOwner">مالك التوكتوك</label><input id="dOwner" placeholder="لو غير السائق"></div>
+          <div class="field"><label for="dVillage">البلد / العيلة</label><input id="dVillage" placeholder="مثلاً: من ميت ردين — بيظهر للراكب"></div>
         </div>
         <button class="btn btn-primary btn-wide" id="addDriver">إضافة السائق</button>
       </div>
@@ -211,6 +212,17 @@
         <div class="field"><label for="cMonth">شهري (ج)</label><input id="cMonth" type="number" min="0" step="5" value="100"></div>
         <div class="field"><label for="cGrace">مهلة بعد الانتهاء (يوم)</label><input id="cGrace" type="number" min="0" step="1" value="3"></div>
       </div>
+      </div>
+      <div style="margin:6px 0 14px;padding:14px;border:1px solid var(--line);border-radius:12px">
+        <b>نظام الرصيد</b>
+        <p class="hint" style="margin:4px 0 10px">السائق بيشحن رصيد كاش، وكل مشوار بيخلص بيتخصم منه الرسم. لو الرصيد خلص، الطلبات بتوقف عنده لحد ما يشحن.</p>
+        <label style="display:flex;gap:10px;align-items:center;min-height:44px;cursor:pointer"><input type="checkbox" id="cCreditOn" style="width:20px;height:20px;accent-color:var(--accent)"><span>شغّل نظام الرصيد</span></label>
+        <div class="row">
+          <div class="field"><label for="cCreditFrom">يبدأ الخصم من يوم</label>
+            <div style="display:flex;gap:8px"><input id="cCreditFrom" type="date" style="flex:1"><button class="btn btn-primary btn-sm" id="free3" type="button">أول ٣ شهور مجاني</button></div></div>
+          <div class="field"><label for="cTripFee">رسم المشوار (ج)</label><input id="cTripFee" type="number" min="0.5" step="0.5" value="1"></div>
+        </div>
+        <p class="hint" id="creditHint"></p>
       </div>
       <div class="field"><label for="cAdminPhone">رقم الإدارة (بيظهر للركاب في «الدعم»)</label><input id="cAdminPhone" inputmode="tel" placeholder="01xxxxxxxxx"></div>
       <button class="btn btn-ghost" id="saveCfg">حفظ</button>
@@ -335,6 +347,8 @@
     if(f){ window.__df = f.getAttribute("data-df");
       [].forEach.call(document.querySelectorAll("[data-df]"), function(b){ b.className = "btn btn-sm " + (b === f ? "btn-primary" : "btn-ghost"); });
       renderDrivers(); return; }
+    var vb = e.target.closest("[data-vill]");
+    if(vb){ var vd = clone(TT.byId(S.drivers, vb.getAttribute("data-vill"))); var nv = prompt("السائق من أنهي بلد أو عيلة؟ (بيظهر للراكب)", vd.village || ""); if(nv == null) return; vd.village = nv.trim(); save("drivers", vd.id, vd).then(function(){ TT.toast("اتحفظ ✓"); }); return; }
     var p = e.target.closest("[data-photo]");
     if(p){ window.__pid = p.getAttribute("data-photo"); $("dPhotoIn").value = ""; $("dPhotoIn").click(); }
   });
@@ -360,11 +374,8 @@
     $("driverList").innerHTML = list.sort(function(a,b){ return (a.name||"").localeCompare(b.name||"","ar"); })
       .map(function(d){
         var lic = TT.daysTo(d.licExpiry);
-        var ss = subOf(d);
-        var sChip = ss.state === "free" ? ""
-          : ss.state === "ok" ? '<span class="chip '+(TT.daysTo(ss.until) <= 2 ? 'c-warn' : 'c-ok')+' num">مشترك لحد '+TT.esc(ss.until.slice(5))+'</span>'
-          : ss.state === "grace" ? '<span class="chip c-warn">في المهلة</span>'
-          : '<span class="chip c-crit">متوقف — ماجدّدش</span>';
+        var cr = +(d.credit || 0), fee = S.cfg.tripFee || 1;
+        var sChip = '<span class="chip ' + (cr < fee ? 'c-crit' : cr < fee * 10 ? 'c-warn' : 'c-ok') + ' num" title="الرصيد">رصيد ' + cr + ' ج</span>';
         var lChip = d.licExpiry==null ? '<span class="chip c-warn">رخصة غير مسجّلة</span>'
           : lic<0 ? '<span class="chip c-crit">رخصة منتهية</span>'
           : lic<=30 ? '<span class="chip c-warn num">الرخصة تنتهي خلال '+lic+' ي</span>' : "";
@@ -373,16 +384,17 @@
           + '<span class="'+(d.isOnline?"dot-on":"dot-off")+'" title="'+(d.isOnline?"أونلاين":"مش متصل")+'"></span>'
           + '<strong>'+TT.esc(d.name)+'</strong>'+sChip+lChip
           + (d.lateCount ? '<span class="chip c-warn num" title="مرات الراكب قال إنه اتأخر أو مجاش">اتأخر '+d.lateCount+'</span>' : '')
-          + (d.ratingCount ? '<span class="chip c-neutral num">★ '+(d.ratingSum/d.ratingCount).toFixed(1)+' ('+d.ratingCount+')</span>' : '')
+          + (d.ratingCount ? (function(){ var n = d.ratingCount, a = d.ratingSum / n, t = n < 5 ? "new" : a >= 4.8 && n >= 75 ? "gold" : a >= 4.5 && n >= 25 ? "silver" : a >= 4 ? "bronze" : ""; var last = (d.reviews || []).slice(-3).reverse().map(function(r){ return r.s + "★ " + ((r.t || []).join("، ") + " " + (r.n || "")).trim(); }).join(" | "); return '<span title="' + TT.esc(last || "مفيش تعليقات") + '">' + TT.tierBadge({ tier:t, rating:+a.toFixed(1), ratingCount:n }) + '</span>'; })() : '')
           + '<span class="meta">'+(d.active===false?"موقوف":(d.isOnline?"أونلاين":"مش متصل"))+'</span></div>'
           + '<div class="leg"><span class="num">'+TT.esc(d.phone||"—")+'</span><span class="arrow">·</span>'
           + 'لوحة <span class="num">'+TT.esc(d.plate||"—")+'</span><span class="arrow">·</span>'
           + 'كود <span class="code">'+TT.esc(d.code||"—")+'</span></div>'
           + (d.zoneId ? '<div class="leg"><span class="zchip"><span class="zdot" style="background:'+TT.zoneColor(S.zones,d.zoneId)+'"></span>'+TT.esc(TT.zoneName(S.zones,d.zoneId))+'</span></div>' : "")
           + '<div class="actions">'
-          + (S.cfg.paidFrom ? '<button class="btn btn-primary btn-sm" data-renew="'+TT.esc(d.id)+'" data-kind="week">+ أسبوع · '+S.cfg.week+' ج</button>'
-            + '<button class="btn btn-primary btn-sm" data-renew="'+TT.esc(d.id)+'" data-kind="month">+ شهر · '+S.cfg.month+' ج</button>' : '')
+          + [50,100,200].map(function(v){ return '<button class="btn btn-primary btn-sm" data-topup="'+TT.esc(d.id)+'" data-amt="'+v+'">شحن '+v+' ج</button>'; }).join("")
+          + '<button class="btn btn-ghost btn-sm" data-topup="'+TT.esc(d.id)+'" data-amt="">مبلغ تاني</button>'
           + '<button class="btn btn-ghost btn-sm" data-photo="'+TT.esc(d.id)+'">'+(d.photo?'غيّر الصورة':'+ صورة')+'</button>'
+          + '<button class="btn btn-ghost btn-sm" data-vill="'+TT.esc(d.id)+'">'+(d.village?'من '+TT.esc(d.village):'+ البلد')+'</button>'
           + '<button class="btn btn-ghost btn-sm" data-code="'+TT.esc(d.id)+'">كود جديد</button>'
           + '<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://wa.me/'+TT.waNum(d.phone)+'?text='
             + encodeURIComponent("كود دخولك على تطبيق المحطة للسائق: "+(d.code||"")+"\nالرابط: "+location.origin+"/driver.html\nافتحه ودوس «فعّل صوت الطلبات».")+'">ابعتله الكود</a>'
@@ -466,8 +478,8 @@
     var todayDone = done.filter(function(r){ return r.day===TT.today(); });
     $("stats").innerHTML = [
       [active.length,'سائق نشط'],[todayDone.length,'رحلة اليوم'],
-      [active.filter(function(d){ var st = subOf(d).state; return st === "ok"; }).length,'اشتراك سارٍ'],
-      [S.drivers.reduce(function(s,d){ return s + (d.paidLog||[]).filter(function(p){ return p.at >= monthStart(); }).reduce(function(a,p){ return a+(p.amount||0); },0); },0).toLocaleString("en"),'جنيه اشتراكات الشهر ده']
+      [active.filter(function(d){ return +(d.credit || 0) < (S.cfg.tripFee || 1) * 10; }).length,'رصيده قرب يخلص'],
+      [S.drivers.reduce(function(s,d){ return s + (d.creditLog||[]).filter(function(p){ return p.t === "topup" && p.at >= monthStart(); }).reduce(function(a,p){ return a+(p.amt||0); },0); },0).toLocaleString("en"),'جنيه شحن الشهر ده']
     ].map(function(s){ return '<div class="stat"><span class="k">'+s[0]+'</span><div class="l">'+s[1]+'</div></div>'; }).join("");
 
     var soon = S.drivers.filter(function(d){ var n = TT.daysTo(d.licExpiry); return n != null && n <= 30; })
@@ -615,6 +627,10 @@
     if(document.activeElement !== $("cMonth")) $("cMonth").value = S.cfg.month;
     if(document.activeElement !== $("cGrace")) $("cGrace").value = S.cfg.grace;
     if(document.activeElement !== $("cAdminPhone")) $("cAdminPhone").value = S.cfg.adminPhone || "";
+    $("cCreditOn").checked = !!S.cfg.creditOn;
+    if(document.activeElement !== $("cCreditFrom")) $("cCreditFrom").value = S.cfg.creditFrom || "";
+    if(document.activeElement !== $("cTripFee")) $("cTripFee").value = S.cfg.tripFee || 1;
+    $("creditHint").textContent = !S.cfg.creditOn ? "مقفول — التطبيق مجاني للسواقين." : (S.cfg.creditFrom && TT.daysTo(S.cfg.creditFrom) > 0 ? "الخصم هيبدأ بعد " + TT.daysTo(S.cfg.creditFrom) + " يوم. اشحن للسواقين من دلوقتي." : "شغّال — " + S.cfg.tripFee + " ج عن كل مشوار.");
     var fd = TT.daysTo(S.cfg.paidFrom);
     $("paidHint").textContent = !S.cfg.paidFrom ? "مش محدّد — التطبيق مجاني لحد ما تحدد يوم." : fd > 0 ? "مجاني — الاشتراكات هتبدأ بعد " + fd + " يوم. تقدر تسجّل اشتراكات مقدّماً." : "الاشتراكات شغالة.";
     renderRides(); renderDrivers(); renderReports(); renderPhoneForm(); renderZones(); renderPlaces(); renderAdmin(); drawPlaces();
@@ -659,7 +675,7 @@
     var id = TT.uid();
     save("drivers", id, { id:id, name:name, phone:$("dPhone").value.trim(), plate:$("dPlate").value.trim(),
       licence:$("dLic").value.trim(), licExpiry:$("dLicExp").value||null,
-      code:code, owner:$("dOwner").value.trim(), active:true, online:false, createdAt:Date.now() })
+      code:code, owner:$("dOwner").value.trim(), village:$("dVillage").value.trim(), active:true, online:false, createdAt:Date.now() })
       .then(function(){ TT.toast("اتضاف — كوده " + code); });
     ["dName","dPhone","dPlate","dLic","dLicExp","dCode","dOwner"].forEach(function(f){ $(f).value = ""; });
   });
@@ -670,6 +686,14 @@
     $("newZone").value = "";
   });
 
+  /* دوسة واحدة: يشغّل نظام الرصيد، والخصم يبدأ بعد ٣ شهور من النهارده، ويحفظ */
+  $("free3").addEventListener("click", function(){
+    var d = new Date(); d.setMonth(d.getMonth() + 3);
+    var day = d.toISOString().slice(0, 10);
+    if(!confirm("التطبيق هيبقى مجاني للسواقين لحد " + day + "، وبعدها يبدأ خصم " + (S.cfg.tripFee || 1) + " ج عن كل مشوار. موافق؟")) return;
+    $("cCreditOn").checked = true; $("cCreditFrom").value = day;
+    $("saveCfg").click();
+  });
   $("backupBtn").addEventListener("click", function(){
     var data = { app:"el-mahatta", at:new Date().toISOString(), zones:S.zones, places:S.places, drivers:S.drivers, requests:S.requests, reports:S.reports || [], config:S.cfg };
     var a = document.createElement("a");
@@ -755,16 +779,26 @@
     var a = parseInt($("cSame").value,10), b2 = parseInt($("cCross").value,10);
     var w = parseInt($("cWeek").value,10), m = parseInt($("cMonth").value,10), g = parseInt($("cGrace").value,10);
     var body = { id:"pricing", same: isNaN(a)?15:a, cross: isNaN(b2)?20:b2, paidFrom: $("cPaidFrom").value || "", week: isNaN(w)?30:w, month: isNaN(m)?100:m, grace: isNaN(g)?3:g, adminPhone: $("cAdminPhone").value.replace(/\D/g,"") };
+    var tf = parseFloat($("cTripFee").value);
+    body.creditOn = $("cCreditOn").checked; body.creditFrom = $("cCreditFrom").value || ""; body.tripFee = tf > 0 ? tf : 1;
     var btn = this;
     save("config","pricing", body).then(function(){ btn.textContent = "تم ✓"; setTimeout(function(){ btn.textContent = "حفظ"; }, 1600); });
   });
 
   document.addEventListener("click", function(e){
     if(!e.target.closest) return;
-    var el = e.target.closest("[data-cancel],[data-renew],[data-code],[data-toggle],[data-deld],[data-renz],[data-delz],[data-sel],[data-renp],[data-delp],[data-closerep]");
+    var el = e.target.closest("[data-cancel],[data-renew],[data-topup],[data-code],[data-toggle],[data-deld],[data-renz],[data-delz],[data-sel],[data-renp],[data-delp],[data-closerep]");
     if(!el) return;
     var id, c;
-    if((id = el.getAttribute("data-renew"))){
+    if((id = el.getAttribute("data-topup"))){
+      c = clone(TT.byId(S.drivers,id));
+      var amt = parseFloat(el.getAttribute("data-amt") || prompt("المبلغ اللي استلمته من " + c.name + " (ج):", "") || "");
+      if(!(amt > 0)) return;
+      if(!confirm("استلمت " + amt + " ج كاش من " + c.name + "؟")) return;
+      c.credit = +((+(c.credit || 0)) + amt).toFixed(2);
+      c.creditLog = (c.creditLog || []).concat([{ t:"topup", amt:amt, at:Date.now() }]).slice(-80);
+      save("drivers", id, c).then(function(){ TT.toast("رصيد " + c.name + " بقى " + c.credit + " ج ✓"); });
+    } else if((id = el.getAttribute("data-renew"))){
       c = clone(TT.byId(S.drivers,id));
       var kind = el.getAttribute("data-kind"), amount = kind === "week" ? S.cfg.week : S.cfg.month;
       if(!confirm("استلمت " + amount + " ج من " + c.name + " (" + (kind === "week" ? "أسبوع" : "شهر") + ")؟")) return;

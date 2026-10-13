@@ -135,6 +135,8 @@
           week: cfgDoc && cfgDoc.week != null ? cfgDoc.week : 30,
           month: cfgDoc && cfgDoc.month != null ? cfgDoc.month : 100,
           grace: cfgDoc && cfgDoc.grace != null ? cfgDoc.grace : 3,
+          creditOn: Boolean(cfgDoc && cfgDoc.creditOn), creditFrom: (cfgDoc && cfgDoc.creditFrom) || "",
+          tripFee: cfgDoc && +cfgDoc.tripFee > 0 ? +cfgDoc.tripFee : 1,
           adminPhone: (cfgDoc && cfgDoc.adminPhone) || "",
         },
       };
@@ -278,12 +280,65 @@
         }).filter(function (p) { if (!p.name || p.lat == null || seen[p.name]) return false; seen[p.name] = 1; return true; });
       });
   };
+  try { if (localStorage.getItem("tt-big") === "1") document.documentElement.style.fontSize = "118%"; } catch (e) {}
+  /* ---------- أصوات التطبيق: نغمات قصيرة متولّدة (من غير ملفات) — تتقفل من «حسابي» ---------- */
+  var SND = {
+    tap:      [[880, 0, .06, "sine", .12]],
+    confirm:  [[523, 0, .12], [659, .1, .12], [784, .2, .22]],
+    accepted: [[587, 0, .14], [740, .12, .14], [880, .24, .14], [1175, .36, .34]],
+    arrived:  [[660, 0, .18], [880, .22, .18], [1100, .44, .3]],
+    done:     [[784, 0, .14], [988, .12, .14], [1319, .26, .42, "triangle"]],
+    msg:      [[988, 0, .08], [1319, .09, .12]],
+    error:    [[330, 0, .16, "square", .12], [247, .16, .26, "square", .12]],
+    cancel:   [[523, 0, .16], [392, .16, .3]],
+    newReq:   [[880, 0, .16, "square"], [660, .2, .16, "square"], [880, .4, .26, "square"]],
+  };
+  var sctx = null;
+  T.soundOn = function () { try { return localStorage.getItem("tt-sound") !== "off"; } catch (e) { return true; } };
+  T.sound = function (name) {
+    if (!T.soundOn() || !SND[name]) return;
+    try {
+      var A = global.AudioContext || global.webkitAudioContext; sctx = sctx || new A();
+      if (sctx.state === "suspended") sctx.resume();
+      var t = sctx.currentTime + .02;
+      SND[name].forEach(function (n) {
+        var o = sctx.createOscillator(), g = sctx.createGain(), vol = n[4] || .22;
+        o.type = n[3] || "sine"; o.frequency.value = n[0];
+        g.gain.setValueAtTime(.0001, t + n[1]); g.gain.exponentialRampToValueAtTime(vol, t + n[1] + .015); g.gain.exponentialRampToValueAtTime(.0001, t + n[1] + n[2]);
+        o.connect(g); g.connect(sctx.destination); o.start(t + n[1]); o.stop(t + n[1] + n[2] + .02);
+      });
+    } catch (e) {}
+  };
+  /* صوت بيقرا الكلام بالعربي (لو الموبايل فيه صوت عربي) */
+  T.say = function (text) {
+    if (!T.soundOn() || !global.speechSynthesis) return;
+    try {
+      var u = new SpeechSynthesisUtterance(text), vs = speechSynthesis.getVoices();
+      var v = vs.filter(function (x) { return /^ar[-_]EG/i.test(x.lang); })[0] || vs.filter(function (x) { return /^ar/i.test(x.lang); })[0];
+      if (v) u.voice = v; u.lang = v ? v.lang : "ar-EG"; u.rate = .95;
+      speechSynthesis.cancel(); speechSynthesis.speak(u);
+    } catch (e) {}
+  };
+  if (global.speechSynthesis) try { speechSynthesis.getVoices(); } catch (e) {}
+  /* أول دوسة في الصفحة بتفتح الصوت (أندرويد بيمنع الصوت قبل أي دوسة) */
+  document.addEventListener("pointerdown", function un() { try { var A = global.AudioContext || global.webkitAudioContext; sctx = sctx || new A(); sctx.resume(); } catch (e) {} document.removeEventListener("pointerdown", un, true); }, true);
+
+  /* شارة ترتيب السائق: ذهبي / فضي / برونزي / جديد */
+  var TIERS = { gold: ["ذهبي", "#8A6508", "#FFF3C4", "#F5C842"], silver: ["فضي", "#4A565D", "#EEF1F3", "#C0C8CE"], bronze: ["برونزي", "#7A4019", "#F6E3D3", "#CD7F32"], "new": ["سائق جديد", "#0A5A4E", "#D6EBE6", "#0E7566"] };
+  T.tierBadge = function (d) {
+    if (!d) return "";
+    var t = TIERS[d.tier], stars = d.rating ? '<span class="num" style="font-weight:800;color:#8A6508">★ ' + d.rating + '</span><span style="opacity:.75">(' + d.ratingCount + ')</span>' : "";
+    var medal = t ? '<span class="tier tier-' + d.tier + '" style="display:inline-flex;align-items:center;gap:5px;background:' + t[2] + ';color:' + t[1] + ';border-radius:999px;padding:2px 10px 2px 4px;font-weight:700;font-size:12.5px">'
+      + '<span style="width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0%,' + t[3] + ' 45%,' + t[1] + ' 100%);box-shadow:0 0 0 1.5px ' + t[3] + '"></span>' + t[0] + '</span>' : "";
+    return '<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px">' + medal + stars + '</span>';
+  };
+
   /* المسار المتحرك: حدّ أبيض + خط بيترسم + نقط ماشية فوقه في اتجاه المشوار */
   T.animRoute = function (map, coords, color) {
     var g = L.layerGroup().addTo(map);
     var casing = L.polyline(coords, { color: "#fff", weight: 9, opacity: .95, className: "mh-route-casing", interactive: false }).addTo(g);
     var main = L.polyline(coords, { color: color, weight: 5, opacity: 1, className: "mh-route", interactive: false }).addTo(g);
-    var flow = L.polyline(coords, { color: "#fff", weight: 3, opacity: .9, className: "mh-route-flow", interactive: false }).addTo(g);
+    var flow = L.polyline(coords, { color: "#fff", weight: 4, opacity: 1, lineCap: "round", className: "mh-route-flow", interactive: false }).addTo(g);
     function norm() { [casing, main].forEach(function (l) { var e = l.getElement && l.getElement(); if (e) e.setAttribute("pathLength", "1000"); }); }
     norm();
     g.setLatLngs = function (c2) { casing.setLatLngs(c2); main.setLatLngs(c2); flow.setLatLngs(c2); norm(); return g; };
@@ -296,6 +351,7 @@
   T.celebrate = function (o) {
     o = o || {};
     try { navigator.vibrate && navigator.vibrate([40, 60, 90]); } catch (e) {}
+    if (!o.silent) T.sound(o.sound || "accepted");
     var el = document.createElement("div");
     el.className = "mh-cele" + (o.dark ? " drv" : "");
     var cols = ["#fff", "#F9E6DA", "#BC4E1E", "#D6EBE6", "#E8874F"], dots = "";

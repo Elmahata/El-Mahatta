@@ -34,6 +34,7 @@
 
   <div class="tabs" role="tablist">
     <button role="tab" data-tab="profile" aria-selected="true">البروفايل</button>
+    <button role="tab" data-tab="family" aria-selected="false">أهلي</button>
     <button role="tab" data-tab="places" aria-selected="false">أماكني</button>
     <button role="tab" data-tab="history" aria-selected="false">رحلاتي</button>
     <button role="tab" data-tab="invite" aria-selected="false">ادعي صاحبك</button>
@@ -46,12 +47,15 @@
     <div class="card">
       <div class="field"><label for="pName">اسمك</label><input id="pName" autocomplete="name"></div>
       <div class="field"><label for="pPhone">رقم موبايلك</label><input id="pPhone" inputmode="tel" placeholder="01xxxxxxxxx" style="direction:ltr;text-align:right"></div>
+      <div class="field"><label for="pFam">رقم حد من أهلك للطوارئ (اختياري)</label><input id="pFam" inputmode="tel" placeholder="01xxxxxxxxx" style="direction:ltr;text-align:right"><p class="hint" style="margin-top:4px">لو دوست «طوارئ» في الرحلة، الرسالة هتروحله على واتساب على طول.</p></div>
       <button class="btn btn-primary btn-wide" id="pSave">حفظ</button>
       <p class="hint" style="margin-top:8px">بيتحفظوا على موبايلك بس، علشان ماتكتبهمش كل مرة.</p>
     </div>
     <div class="card" style="padding:0">
       <div class="row2"><span style="flex:1;font-weight:600">طريقة الدفع</span><span class="hint">نقداً للسائق</span></div>
       <div class="row2"><span style="flex:1;font-weight:600">الأسعار</span><span class="hint" id="prices">—</span></div>
+      <div class="row2"><span style="flex:1;font-weight:600">أصوات التطبيق</span><label style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" id="sndOn" style="width:20px;height:20px;accent-color:var(--accent)"><span class="hint">شغّالة</span></label></div>
+      <div class="row2"><span style="flex:1;font-weight:600">خط أكبر</span><label style="display:flex;gap:8px;align-items:center;min-height:44px"><input type="checkbox" id="bigFont" style="width:20px;height:20px;accent-color:var(--accent)"></label></div>
       <div class="row2"><button class="btn btn-ghost btn-sm" id="pClear" style="color:var(--crit)">امسح بياناتي من الموبايل ده</button></div>
     </div>
     <div class="card" style="border-color:var(--crit-soft)">
@@ -61,8 +65,30 @@
     </div>
   </section>
 
+  <!-- أهلي -->
+  <section id="t-family" class="stack" hidden>
+    <div id="famInvites"></div>
+    <div class="card">
+      <h2 style="margin:0 0 4px;font-size:16px">أهلي على التطبيق</h2>
+      <p class="hint" style="margin:0 0 12px">لما تركب أو توصل أو تدوس «طوارئ»، بيوصلهم تنبيه على التطبيق لوحده. لازم يكون عندهم التطبيق ويوافقوا.</p>
+      <div id="famMine"></div>
+      <div class="row" style="margin-top:10px">
+        <div class="field" style="margin:0"><label for="fName">الاسم</label><input id="fName" placeholder="ماما، أخويا…"></div>
+        <div class="field" style="margin:0"><label for="fPhone">رقمه</label><input id="fPhone" inputmode="tel" placeholder="01xxxxxxxxx" style="direction:ltr;text-align:right"></div>
+      </div>
+      <button class="btn btn-primary btn-wide" id="fAdd" style="margin-top:10px">ابعتله طلب ربط</button>
+      <a class="btn btn-ghost btn-wide" id="fWa" target="_blank" rel="noopener" href="#" style="margin-top:8px">ابعتله لينك التطبيق على واتساب</a>
+    </div>
+    <div class="card" id="famWatchCard" hidden>
+      <h2 style="margin:0 0 8px;font-size:16px">بتابع</h2>
+      <div id="famWatch"></div>
+    </div>
+    <p class="hint" style="text-align:center">مشاركة الرحلة على واتساب لسه شغالة زي ما هي لأي حد.</p>
+  </section>
+
   <!-- الأماكن المحفوظة -->
   <section id="t-places" class="stack" hidden>
+    <div class="card" id="repCard" hidden><h2 style="margin:0 0 8px;font-size:16px">مشاويري الثابتة (كل يوم)</h2><div id="repList"></div></div>
     <div id="savedList"></div>
     <div class="card">
       <h2 style="margin:0 0 10px;font-size:16px">ضيف مكان</h2>
@@ -128,6 +154,8 @@
 </div>
 
 <script src="/assets/common.js"></script>
+<script src="/assets/verify.js"></script>
+<script src="/assets/family.js"></script>
 <script>
 (function(){
   "use strict";
@@ -140,7 +168,7 @@
   /* ---------- التبويبات ---------- */
   function show(t){
     [].forEach.call(document.querySelectorAll("[data-tab]"), function(b){ b.setAttribute("aria-selected", b.getAttribute("data-tab") === t); });
-    ["profile","places","history","invite","support"].forEach(function(x){ $("t-" + x).hidden = x !== t; });
+    ["profile","family","places","history","invite","support"].forEach(function(x){ $("t-" + x).hidden = x !== t; });
     if(t === "history") renderHistory();
     if(t === "invite") renderInvite();
     if(t === "places") renderSaved();
@@ -155,13 +183,81 @@
     var k = e.target.closest("[data-kind]"); if(k){ kind = k.getAttribute("data-kind"); renderKinds(); return; }
   });
 
+  /* ---------- الأصوات + الخط + المشاوير الثابتة ---------- */
+  $("sndOn").checked = TT.soundOn();
+  $("sndOn").addEventListener("change", function(){ try{ localStorage.setItem("tt-sound", this.checked ? "on" : "off"); }catch(e){} if(this.checked) TT.sound("confirm"); });
+  $("bigFont").checked = (function(){ try{ return localStorage.getItem("tt-big") === "1"; }catch(e){ return false; } })();
+  $("bigFont").addEventListener("change", function(){ try{ localStorage.setItem("tt-big", this.checked ? "1" : "0"); }catch(e){} document.documentElement.style.fontSize = this.checked ? "118%" : ""; });
+  var DN = ["الحد","الاتنين","التلات","الأربع","الخميس","الجمعة","السبت"];
+  function repRender(){
+    var m = getJSON(ME, {}); if(!m.phone) return;
+    TT.api("repeat?phone=" + encodeURIComponent(m.phone), { verify: TT.hasSession && TT.hasSession("rider") ? { phone:m.phone, role:"rider" } : undefined }).then(function(j){
+      $("repCard").hidden = !j.items.length;
+      $("repList").innerHTML = j.items.map(function(r){
+        return '<div class="row2" style="gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:0"><b class="num">' + TT.esc(r.time) + '</b> · ' + TT.esc(r.from || "") + ' ← ' + TT.esc(r.to || "") + '<br><span class="hint">' + r.days.map(function(x){ return DN[x]; }).join("، ") + '</span></span><button class="btn btn-ghost btn-sm" data-repdel="' + r.id + '" style="color:var(--crit)">شيل</button></div>';
+      }).join("");
+    }).catch(function(){});
+  }
+  document.addEventListener("click", function(e){
+    var x = e.target.closest && e.target.closest("[data-repdel]"); if(!x || !confirm("تشيل المشوار الثابت ده؟")) return;
+    var m = getJSON(ME, {});
+    TT.api("repeat/remove", { method:"POST", body:{ phone:m.phone, id:x.getAttribute("data-repdel") }, verify: TT.hasSession && TT.hasSession("rider") ? { phone:m.phone, role:"rider" } : undefined }).then(function(){ TT.toast("اتشال ✓"); repRender(); }).catch(function(er){ TT.toast(er.message); });
+  });
+  document.querySelector('[data-tab="places"]').addEventListener("click", repRender);
+
+  /* ---------- أهلي ---------- */
+  function famRender(){
+    if(!TT.family) return;
+    TT.family.call("family").then(function(j){
+      var row = function(k, side){
+        var who = side === "mine" ? (k.famName || k.fam) : k.riderName || k.rider;
+        var chip = k.status === "ok" ? '<span class="chip c-ok">مربوط ✓</span>' : '<span class="chip c-warn">مستني موافقته</span>';
+        return '<div class="row2" style="gap:8px;flex-wrap:wrap"><span style="flex:1;min-width:0"><b>' + TT.esc(who) + '</b> <span class="hint num">' + TT.esc(side === "mine" ? k.fam : k.rider) + '</span></span>'
+          + (side === "mine" ? chip : '')
+          + (side === "mine" && k.status === "ok" ? '<label style="display:flex;gap:6px;align-items:center;font-size:13px;min-height:40px"><input type="checkbox" data-fauto="' + k.id + '"' + (k.auto ? " checked" : "") + ' style="width:18px;height:18px;accent-color:var(--accent)">كل رحلة</label>' : '')
+          + '<button class="btn btn-ghost btn-sm" data-fdel="' + k.id + '" style="color:var(--crit)">شيل</button></div>';
+      };
+      $("famMine").innerHTML = j.mine.length ? j.mine.map(function(k){ return row(k, "mine"); }).join("") : '<p class="hint" style="margin:0">لسه مفيش حد مربوط.</p>';
+      $("famWatchCard").hidden = !j.watching.length;
+      $("famWatch").innerHTML = j.watching.map(function(k){ return row(k, "watch"); }).join("");
+      $("famInvites").innerHTML = j.invites.map(function(k){
+        return '<div class="card" style="background:var(--accent);color:#fff;border:0"><b style="font-size:16px">' + TT.esc(k.riderName || k.rider) + ' عايز يضيفك من أهله</b>'
+          + '<p style="margin:4px 0 10px;opacity:.9;font-size:14px">هيوصلك تنبيه لما يركب، ولما يوصل، ولو داس طوارئ.</p>'
+          + '<div style="display:flex;gap:8px"><button class="btn btn-sm" data-fans="' + k.id + '" data-ok="1" style="flex:1;background:#fff;color:#0A5A4E">موافق</button><button class="btn btn-sm" data-fans="' + k.id + '" data-ok="" style="flex:1;background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5)">لأ</button></div></div>';
+      }).join("");
+    }).catch(function(e){ $("famMine").innerHTML = '<p class="hint" style="margin:0">' + TT.esc(e.message) + '</p>'; });
+  }
+  $("fWa").href = "https://wa.me/?text=" + encodeURIComponent("نزّل تطبيق المحطة علشان يوصلك تنبيه لما أركب وأوصل: " + location.origin + "/download.html");
+  $("fAdd").addEventListener("click", function(){
+    var b = this, ph = $("fPhone").value.replace(/\D/g, "");
+    if(!/^01\d{9}$/.test(ph)){ TT.toast("اكتب رقم موبايل صحيح (١١ رقم)"); return; }
+    b.disabled = true;
+    TT.family.call("family/add", { method:"POST", body:{ fam:ph, famName:$("fName").value.trim(), name:(getJSON(ME,{}).name || "") } })
+      .then(function(){ $("fPhone").value = ""; $("fName").value = ""; TT.toast("اتبعت ✓ — قوله يفتح التطبيق ويوافق"); famRender(); })
+      .catch(function(e){ TT.toast(e.message); }).then(function(){ b.disabled = false; });
+  });
+  document.addEventListener("click", function(e){
+    var x = e.target.closest && e.target.closest("[data-fdel],[data-fans]"); if(!x) return;
+    var del = x.getAttribute("data-fdel");
+    if(del && !confirm("تشيل الربط ده؟")) return;
+    TT.family.call(del ? "family/remove" : "family/answer", { method:"POST", body: del ? { id:del } : { id:x.getAttribute("data-fans"), ok: !!x.getAttribute("data-ok") } })
+      .then(function(){ TT.toast("تمام ✓"); famRender(); var fi = document.getElementById("famInv"); if(fi) fi.remove(); }).catch(function(er){ TT.toast(er.message); });
+  });
+  document.addEventListener("change", function(e){
+    var id = e.target.getAttribute && e.target.getAttribute("data-fauto"); if(!id) return;
+    TT.family.call("family/auto", { method:"POST", body:{ id:id, auto:e.target.checked } }).then(function(){ TT.toast(e.target.checked ? "هيوصلهم مع كل رحلة" : "في الطوارئ بس"); }).catch(function(er){ TT.toast(er.message); });
+  });
+  document.querySelector('[data-tab="family"]').addEventListener("click", famRender);
+  if(location.hash === "#family") setTimeout(function(){ var t = document.querySelector('[data-tab="family"]'); if(t) t.click(); }, 50);
+
   /* ---------- البروفايل ---------- */
   var me = getJSON(ME, {});
-  $("pName").value = me.name || ""; $("pPhone").value = me.phone || "";
+  $("pName").value = me.name || ""; $("pPhone").value = me.phone || ""; $("pFam").value = me.family || "";
   $("pSave").addEventListener("click", function(){
-    var n = $("pName").value.trim(), p = $("pPhone").value.trim();
+    var n = $("pName").value.trim(), p = $("pPhone").value.trim(), fm = $("pFam").value.trim();
     if(p && p.replace(/\D/g,"").length < 9){ TT.toast("اكتب رقم موبايل صحيح"); return; }
-    me = { name:n, phone:p }; setJSON(ME, me); TT.toast("اتحفظ ✓");
+    if(fm && fm.replace(/\D/g,"").length < 9){ TT.toast("اكتب رقم الطوارئ صح"); return; }
+    me = Object.assign({}, getJSON(ME, {}), { name:n, phone:p, family:fm }); setJSON(ME, me); TT.toast("اتحفظ ✓");
   });
   $("pClear").addEventListener("click", function(){
     if(!confirm("هتتمسح بياناتك وأماكنك ورحلاتك من الموبايل ده. متأكد؟")) return;

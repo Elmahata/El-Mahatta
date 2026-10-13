@@ -180,13 +180,23 @@ html,body{height:100%;overflow:hidden}
       <span class="cap" id="fareCap"><b>جنيهاً</b> — سعر ثابت، بلا مفاصلة.<br>يُدفع نقداً عند الوصول.</span>
     </div>
 
-    <div class="field" style="margin:8px 0"><input id="rNote" maxlength="140" placeholder="علامة مميزة للسائق (اختياري) — مثلاً: قدام الصيدلية" style="min-height:46px"></div>
+    <div id="quickWho" style="display:flex;gap:8px;margin:8px 0 0;flex-wrap:wrap">
+      <button type="button" class="btn btn-sm btn-ghost" id="qOther" style="flex:1;min-height:44px">اطلب لحد تاني (ماما، بابا…)</button>
+      <a class="btn btn-sm btn-ghost" id="qPhone" href="#" hidden style="flex:1;min-height:44px">أو اطلب بالتليفون</a>
+    </div>
+    <div class="field" style="margin:8px 0"><label for="rNote" style="font-weight:700">علامة مميزة للسائق</label><input id="rNote" maxlength="140" placeholder="علامة مميزة للسائق (اختياري) — مثلاً: قدام الصيدلية" style="min-height:46px"></div>
     <details id="moreOpts" style="margin:0 0 10px;border:1px solid var(--line);border-radius:12px;padding:0 12px">
       <summary style="list-style:none;cursor:pointer;display:flex;align-items:center;gap:8px;min-height:46px;font-weight:600;font-size:14px"><span style="flex:1" id="moreSum">باسمك · دلوقتي</span><span style="color:var(--accent-ink);font-size:13px">تغيير ▾</span></summary>
       <div style="padding:2px 0 8px">
     <div class="seg" id="whoSeg" style="display:flex;background:var(--inset);border-radius:10px;padding:3px;gap:3px;margin:4px 0 10px">
       <button type="button" data-who="me" style="flex:1;border:0;border-radius:8px;padding:8px;font-family:var(--body);font-weight:700;cursor:pointer;background:var(--surface);color:var(--ink)">الرحلة ليّا</button>
       <button type="button" data-who="other" style="flex:1;border:0;border-radius:8px;padding:8px;font-family:var(--body);font-weight:600;cursor:pointer;background:transparent;color:var(--ink)">لحد تاني</button>
+    </div>
+    <label style="display:flex;gap:10px;align-items:center;min-height:44px;cursor:pointer;margin:0 0 6px"><input type="checkbox" id="repeatOn" style="width:20px;height:20px;accent-color:var(--accent)"><span>كرّر المشوار ده كل يوم (مدرسة، شغل…)</span></label>
+    <div id="repeatBox" hidden style="margin:0 0 10px;padding:10px 12px;border:1px solid var(--line);border-radius:12px">
+      <div class="field" style="margin:0 0 8px"><label for="repTime">الساعة كام؟</label><input id="repTime" type="time" value="07:30"></div>
+      <div id="repDays" style="display:flex;gap:4px;flex-wrap:wrap"></div>
+      <p class="hint" style="margin:6px 0 0">الطلب بيتعمل لوحده قبل المعاد بنص ساعة تقريباً، وبيوصلك على التطبيق.</p>
     </div>
     <div class="field">
       <label for="when">إمتى؟</label>
@@ -234,6 +244,7 @@ html,body{height:100%;overflow:hidden}
       <div class="txt">
         <div class="nm" id="dName">—</div>
         <div class="pl" id="dPlate">—</div>
+        <div id="dTier" style="margin-top:4px"></div>
       </div>
       <span class="chip c-accent num" id="dFare">—</span>
     </div>
@@ -243,6 +254,10 @@ html,body{height:100%;overflow:hidden}
         <button class="btn btn-sm btn-primary" id="lateRebook" type="button" style="flex:1">سواق تاني</button>
         <button class="btn btn-sm btn-ghost" id="lateCancel" type="button" style="flex:1;background:var(--surface)">الغي الطلب</button>
       </div>
+    </div>
+    <div id="arrBox" class="banner b-note" hidden style="margin-top:10px;align-items:center;gap:10px;background:var(--accent);color:#fff;border:0">
+      <span style="flex:1"><b style="font-size:16px">السائق وصل ✓</b><br><span id="arrTxt" style="opacity:.92">مستنّيك — عندك ٣ دقايق</span></span>
+      <b id="arrClock" class="num" style="font:800 28px var(--display)">3:00</b>
     </div>
     <div class="ridecode" id="codeBox" hidden>
       <div style="flex:1"><div style="font-weight:700">كود الركوب</div><div class="hint">قوله للسائق قبل ما تركب — متركبش مع حد ماسألكش عليه</div></div>
@@ -255,6 +270,7 @@ html,body{height:100%;overflow:hidden}
       <button class="btn btn-ghost" id="dNet" type="button">اتصال بالنت</button>
     </div>
     <a class="btn btn-ghost btn-wide" id="shareTrip" target="_blank" rel="noopener" href="#" style="margin-top:8px">شارك رحلتك مع أهلك</a>
+    <button class="btn btn-wide" id="sosBtn" type="button" style="margin-top:8px;background:#FBE9E6;color:#A9382B;border:1px solid #F0C6BF;font-weight:700">⚠ طوارئ</button>
     <p class="hint" style="margin-top:12px;text-align:center">استنّى في مكانك، وادفع <b id="dFare2"></b> جنيه نقداً عند الوصول.</p>
     <button class="btn btn-ghost btn-wide" id="newRide" style="margin-top:10px">اطلب رحلة تانية</button>
     <button class="linkbtn" data-report>السائق طلب أكتر من السعر؟ بلّغ</button>
@@ -269,6 +285,8 @@ html,body{height:100%;overflow:hidden}
       <div id="stars" style="display:flex;gap:4px;justify-content:center;direction:ltr;margin:6px 0">
         <button data-star="1" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="2" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="3" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="4" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="5" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button>
       </div>
+      <div id="rateTags" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:4px 0 10px"></div>
+      <textarea id="rateNote" maxlength="200" rows="2" placeholder="اكتب رأيك في السائق (اختياري)" style="width:100%;margin-bottom:10px"></textarea>
       <button class="btn btn-primary btn-wide" id="sendRate" disabled>ابعت التقييم</button>
     </div>
     <button class="btn btn-primary btn-wide" id="newRide2" style="margin-top:12px">اطلب رحلة تانية</button>
@@ -300,6 +318,7 @@ html,body{height:100%;overflow:hidden}
 <script src="/assets/common.js"></script>
 <script src="/assets/verify.js"></script>
 <script src="/assets/chat.js"></script>
+<script src="/assets/family.js"></script>
 <script>
 (function(){
   "use strict";
@@ -593,8 +612,9 @@ html,body{height:100%;overflow:hidden}
           if(step !== "matched"){
           var av = $("dAv"); av.textContent = j.driver.photo ? "" : (j.driver.name || "س").trim().charAt(0);
           av.style.backgroundImage = j.driver.photo ? "url(" + j.driver.photo + ")" : ""; av.style.backgroundSize = "cover"; av.style.backgroundPosition = "center";
-          $("dName").textContent = j.driver.name;
+          $("dName").textContent = j.driver.name + (j.driver.village ? " · من " + j.driver.village : "");
           $("dPlate").textContent = j.driver.plate ? ("لوحة " + j.driver.plate) : "توكتوك مرخّص";
+          $("dTier").innerHTML = TT.tierBadge(j.driver);
           $("dFare").textContent = j.fare + " ج نقداً";
           $("dFare2").textContent = j.fare;
           $("dCall").href = "tel:" + j.driver.phone;
@@ -606,14 +626,19 @@ html,body{height:100%;overflow:hidden}
           var shareUrl = location.origin + "/track.html?id=" + encodeURIComponent(live.id) + "&s=" + encodeURIComponent(j.shareToken || "");
           $("shareTrip").href = "https://wa.me/?text=" + encodeURIComponent("تابع رحلتي مع المحطة لحد ما أوصل: " + shareUrl);
           $("shareTrip").hidden = !j.shareToken;
+          window.__sos = { id: live.id, token: live.token, url: j.shareToken ? shareUrl : "", driver: j.driver.name + (j.driver.plate ? " · لوحة " + j.driver.plate : "") };
           setStep("matched");
-          TT.celebrate({ title: j.driver.name + " جاي ليك", sub: "السعر " + j.fare + " ج — قول له كود الركوب قبل ما تركب", photo: j.driver.photo || "" });
+          TT.celebrate({ title: j.driver.name + (j.driver.village ? " من " + j.driver.village : "") + " جاي ليك", sub: "السعر " + j.fare + " ج — قول له كود الركوب قبل ما تركب", photo: j.driver.photo || "" });
           }
           drawLive(j);
-          $("lateBox").hidden = !(j.assignedAt && !j.startedAt && Date.now() - j.assignedAt > 15 * 6e4);
+          $("lateBox").hidden = !(j.assignedAt && !j.startedAt && !j.arrivedAt && Date.now() - j.assignedAt > 15 * 6e4);
+          arrAt = j.startedAt ? 0 : (j.arrivedAt || 0);
+          if(arrAt && arrSeen !== j.id){ arrSeen = j.id; arrivedAlert(j); }
+          arrPaint();
         } else if(j.status === "done"){
           stopPoll(); saveLive(null); clearLive();
           histUpdate(j.id, { status:"done", fare:j.fare });
+          TT.sound("done");
           $("endTitle").textContent = "تمّت الرحلة ✓";
           $("endMsg").textContent = "شكراً لاستخدامك المحطة.";
           rateFor = reportFor; stars = 0; paintStars(); $("rateBox").hidden = !rateFor;
@@ -621,8 +646,9 @@ html,body{height:100%;overflow:hidden}
         } else if(j.status === "cancelled"){
           stopPoll(); saveLive(null); clearLive();
           histUpdate(j.id, { status:"cancelled" });
+          TT.sound("cancel");
           $("endTitle").textContent = "الطلب اتلغى";
-          $("endMsg").textContent = "تقدر تطلب تاني في أي وقت.";
+          $("endMsg").textContent = j.cancelReason === "noshow" ? "السائق وصل واستنّاك ٣ دقايق، والمشوار اتلغى. تقدر تطلب تاني في أي وقت." : "تقدر تطلب تاني في أي وقت.";
           setStep("ended");
         } else {
           var mins = Math.round((Date.now() - (j.createdAt||Date.now()))/6e4);
@@ -633,7 +659,7 @@ html,body{height:100%;overflow:hidden}
           if(step === "matched"){ setStep("search"); TT.toast("بندوّر على سواق تاني…"); }
           var adm = (state.cfg && state.cfg.adminPhone) || "";
           $("busyCall").hidden = !adm; if(adm) $("busyCall").href = "tel:" + adm;
-          $("busyBox").hidden = !(mins >= 3 && Date.now() > (window.__busySnooze || 0));
+          $("busyBox").hidden = !(mins >= 2 && Date.now() > (window.__busySnooze || 0));
           $("searchSub").textContent = mins < 2
             ? "الطلب وصل لكل السواقين — أول واحد يقبل هياخده"
             : "لسه بندوّر… عدّى " + mins + " دقيقة. لو اتأخر، جرّب تلغي وتطلب تاني.";
@@ -641,6 +667,97 @@ html,body{height:100%;overflow:hidden}
       $("endReport").hidden = !reportFor;
     }).catch(function(){ /* الشبكة ممكن تقطع — النبضة الجاية تعوّض */ });
   }
+
+  /* ---------- لحد تاني / بالتليفون / مشوار كل يوم ---------- */
+  $("qOther").addEventListener("click", function(){
+    var o = document.querySelector('[data-who="other"]'); if(o) o.click();
+    var m = $("moreOpts"); if(m) m.open = true;
+    setTimeout(function(){ $("rName").focus(); }, 120);
+  });
+  var DAYN = ["الحد","الاتنين","التلات","الأربع","الخميس","الجمعة","السبت"], repSel = { 0:1,1:1,2:1,3:1,4:1,6:1 };
+  function paintDays(){ $("repDays").innerHTML = DAYN.map(function(n, i){ return '<button type="button" data-rd="' + i + '" class="btn btn-sm ' + (repSel[i] ? "btn-primary" : "btn-ghost") + '" style="min-width:52px">' + n + '</button>'; }).join(""); }
+  paintDays();
+  $("repDays").addEventListener("click", function(e){ var b = e.target.closest("[data-rd]"); if(!b) return; var i = +b.getAttribute("data-rd"); if(repSel[i]) delete repSel[i]; else repSel[i] = 1; TT.sound("tap"); paintDays(); });
+  $("repeatOn").addEventListener("change", function(){ $("repeatBox").hidden = !this.checked; var m = $("moreOpts"); if(m && this.checked) m.open = true; });
+  function addRepeat(){
+    var me = getJSON(ME, {}), days = Object.keys(repSel).map(Number);
+    if(!trip.from || !trip.to || !days.length || forOther) return;
+    var body = { phone: me.phone || $("rPhone").value, name: me.name || $("rName").value, time: $("repTime").value, days: days, note: $("rNote").value,
+      from: { lat: trip.from.lat, lng: trip.from.lng, label: trip.from.label }, to: { lat: trip.to.lat, lng: trip.to.lng, label: trip.to.label } };
+    TT.api("repeat/add", { method:"POST", body: body, verify: { phone: body.phone, role:"rider" } })
+      .then(function(){ TT.toast("اتحفظ كمشوار كل يوم الساعة " + body.time + " ✓"); $("repeatOn").checked = false; $("repeatBox").hidden = true; })
+      .catch(function(e){ TT.toast(e.message); });
+  }
+  /* لو فيه مشوار ثابت اتعمل لوحده النهارده — نفتحه */
+  function checkRepeat(){
+    var me = getJSON(ME, {}); if(!me.phone || live) return;
+    TT.api("repeat?phone=" + encodeURIComponent(me.phone), { retry:false, verify: TT.hasSession && TT.hasSession("rider") ? { phone: me.phone, role:"rider" } : undefined })
+      .then(function(j){ var seenR = ""; try{ seenR = localStorage.getItem("tt-rep-seen") || ""; }catch(x){}
+        if(j.current && !live && seenR !== j.current.id){ try{ localStorage.setItem("tt-rep-seen", j.current.id); }catch(x){} saveLive({ id:j.current.id, token:j.current.token }); TT.sound("confirm"); TT.toast("مشوارك الثابت اتطلب ✓"); startTracking(); } })
+      .catch(function(){});
+  }
+  setInterval(checkRepeat, 60000); setTimeout(checkRepeat, 4000);
+
+  /* ---------- طوارئ: بدوسة واحدة — ابعت مكاني للأهل، كلّم الإدارة، كلّم النجدة ---------- */
+  var PHONE_SVG = '<svg width="50" height="50" viewBox="0 0 24 24" fill="#fff"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg>';
+  var SEND_SVG = '<svg width="48" height="48" viewBox="0 0 24 24" fill="#fff"><path d="M3.4 20.4 21 12 3.4 3.6 3.4 10l12.6 2-12.6 2z"/></svg>';
+  $("sosBtn").addEventListener("click", function(){
+    var s = window.__sos || {}, me = getJSON(ME, {}), fam = (me.family || "").replace(/\D/g, "");
+    try{ navigator.vibrate && navigator.vibrate(80); }catch(x){}
+    var ov = document.createElement("div"); ov.className = "sos-ov";
+    ov.innerHTML = '<h2>طوارئ</h2><div class="sos-row">'
+      + '<a class="sos-opt pol" href="tel:122"><span class="sos-ic">' + PHONE_SVG + '</span><span class="sos-lbl">اتصل بالنجدة<b style="font:800 22px var(--display)">١٢٢</b></span></a>'
+      + '<a class="sos-opt fam" id="sosFam" target="_blank" rel="noopener" href="#"><span class="sos-ic"><i></i><i></i><i></i>' + SEND_SVG + '</span><span class="sos-lbl">ابعت لأهلي<small>' + (fam ? "مكانك لايف + بيانات السائق" : "اختار مين على واتساب") + '</small></span></a>'
+      + '</div><button class="sos-x" type="button">رجوع</button>'
+      + (fam ? '' : '<a href="/me.html" style="color:#C9D6D2;font-size:13px">سجّل رقم حد من أهلك علشان الرسالة تروحله على طول</a>');
+    document.body.appendChild(ov);
+    var link = ov.querySelector("#sosFam");
+    var send = function(extra){
+      var txt = "⚠ طوارئ — أنا " + (me.name || "") + " في توكتوك مع " + (s.driver || "سائق المحطة") + "." + (s.url ? " تابع مكاني لايف: " + s.url : "") + (extra || "");
+      link.href = "https://wa.me/" + (fam ? TT.waNum(fam) : "") + "?text=" + encodeURIComponent(txt);
+    };
+    send("");
+    var pos = null;
+    if(navigator.geolocation) navigator.geolocation.getCurrentPosition(function(p){ pos = p.coords; send(" مكاني دلوقتي: https://maps.google.com/?q=" + p.coords.latitude.toFixed(6) + "," + p.coords.longitude.toFixed(6)); }, function(){}, { enableHighAccuracy:true, timeout:6000 });
+    /* «ابعت لأهلي»: بيوصل لوحده للأهل المربوطين على التطبيق (إنذار + نغمة)، والواتساب بيفتح كمان */
+    link.addEventListener("click", function(){
+      if(!s.id || !TT.family) return;
+      TT.family.call("family/sos", { method:"POST", body:{ requestId:s.id, token:s.token, lat: pos ? pos.latitude : "", lng: pos ? pos.longitude : "" } })
+        .then(function(j){ if(j.sent) TT.toast("وصل لـ " + j.sent + " من أهلك على التطبيق ✓"); }).catch(function(){});
+    });
+    ov.addEventListener("click", function(e){ if(e.target === ov || e.target.classList.contains("sos-x")) ov.remove(); });
+  });
+
+  /* ---------- السائق وصل: إشعار + صوت + اهتزاز + عدّاد ٣ دقايق ---------- */
+  var arrAt = 0, arrSeen = "", ARR_MS = 3 * 6e4;
+  function arrPaint(){
+    var b = $("arrBox"); b.hidden = !arrAt || step !== "matched"; if(b.hidden) return;
+    var left = Math.max(0, ARR_MS - (Date.now() - arrAt)), s = Math.ceil(left / 1000);
+    $("arrClock").textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    $("arrTxt").textContent = left ? "مستنّيك — عندك ٣ دقايق" : "الـ ٣ دقايق خلصوا — انزل حالاً، السائق ممكن يلغي";
+    b.style.background = left ? "var(--accent)" : "var(--fare)";
+  }
+  setInterval(arrPaint, 1000);
+  function arrivedAlert(j){
+    var name = (j.driver && j.driver.name) || "السائق";
+    try{ navigator.vibrate && navigator.vibrate([200, 100, 200, 100, 400]); }catch(e){}
+    TT.sound("arrived");
+    if(false) try{
+      var A = window.AudioContext || window.webkitAudioContext, ac = new A(), t = ac.currentTime;
+      [0, .22, .44].forEach(function(dl, i){ var o = ac.createOscillator(), g = ac.createGain(); o.frequency.value = [660, 880, 1100][i];
+        g.gain.setValueAtTime(.0001, t + dl); g.gain.exponentialRampToValueAtTime(.3, t + dl + .02); g.gain.exponentialRampToValueAtTime(.0001, t + dl + .2);
+        o.connect(g); g.connect(ac.destination); o.start(t + dl); o.stop(t + dl + .22); });
+    }catch(e){}
+    var body = name + " مستنّيك" + (j.driver && j.driver.plate ? " · لوحة " + j.driver.plate : "") + " — عندك ٣ دقايق";
+    if(document.hidden && "Notification" in window && Notification.permission === "granted" && navigator.serviceWorker){
+      navigator.serviceWorker.ready.then(function(reg){ reg.showNotification("السائق وصل 🛺", { body: body, tag: "arrived-" + j.id, renotify: true, vibrate: [200, 100, 200], icon: "/assets/icon-192.png", badge: "/assets/icon-192.png", data: { url: "/" } }); }).catch(function(){});
+    }
+    TT.celebrate({ title: "السائق وصل ✓", sub: body, photo: (j.driver && j.driver.photo) || "", ms: 2600, silent: true });
+  }
+  /* الإذن بالإشعارات بنطلبه لما الراكب يدوس «اطلب» (أندرويد بيطلب دوسة من المستخدم) */
+  document.addEventListener("click", function(e){
+    if(e.target.closest && e.target.closest("#sendReq") && "Notification" in window && Notification.permission === "default"){ try{ Notification.requestPermission(); }catch(x){} }
+  }, true);
 
   /* ---------- الخريطة لايف: مكان السائق + المسار ليك (وبعد الركوب: للوجهة) ---------- */
   var liveL = { at:0 };
@@ -749,6 +866,8 @@ html,body{height:100%;overflow:hidden}
       if(r.discount) TT.toast("خصم دعوة " + r.discount + " ج ✓");
       saveLive({ id:r.id, token:r.token });
       $("sFare").textContent = r.fare;
+      TT.sound("confirm");
+      if($("repeatOn") && $("repeatOn").checked) addRepeat();
       startTracking();
     }).catch(function(err){
       TT.toast(err.message || "تعذّر الإرسال");
@@ -790,15 +909,21 @@ html,body{height:100%;overflow:hidden}
   });
   var rateFor = null, stars = 0;
   function paintStars(){
-    [].forEach.call(document.querySelectorAll("[data-star]"), function(b){ b.style.color = +b.getAttribute("data-star") <= stars ? "var(--fare)" : "var(--line)"; });
+    [].forEach.call(document.querySelectorAll("[data-star]"), function(b){ b.style.color = +b.getAttribute("data-star") <= stars ? "#F5B301" : "var(--line)"; b.style.transform = +b.getAttribute("data-star") <= stars ? "scale(1.12)" : ""; b.style.transition = "transform .2s, color .2s"; });
     $("sendRate").disabled = !stars;
   }
-  $("stars").addEventListener("click", function(e){ var b = e.target.closest("[data-star]"); if(b){ stars = +b.getAttribute("data-star"); paintStars(); } });
+  var GOOD = ["سواقة هادية","محترم","وصل بسرعة","التوكتوك نضيف"], BAD = ["اتأخر","سواقة متهورة","طلب أكتر من السعر","مش محترم"], rTags = {};
+  function paintTags(){
+    var list = stars ? (stars >= 4 ? GOOD : BAD) : [];
+    $("rateTags").innerHTML = list.map(function(t){ var on = rTags[t]; return '<button type="button" data-rtag="' + t + '" class="btn btn-sm ' + (on ? "btn-primary" : "btn-ghost") + '">' + t + '</button>'; }).join("");
+  }
+  $("rateTags").addEventListener("click", function(e){ var b = e.target.closest("[data-rtag]"); if(!b) return; var t = b.getAttribute("data-rtag"); if(rTags[t]) delete rTags[t]; else rTags[t] = 1; TT.sound("tap"); paintTags(); });
+  $("stars").addEventListener("click", function(e){ var b = e.target.closest("[data-star]"); if(b){ var was = stars >= 4; stars = +b.getAttribute("data-star"); if(was !== (stars >= 4)) rTags = {}; TT.sound("tap"); paintStars(); paintTags(); } });
   $("sendRate").addEventListener("click", function(){
     if(!rateFor || !stars) return;
     var b = this; b.disabled = true;
-    TT.api("rate", { method:"POST", body:{ id:rateFor.id, token:rateFor.token, stars:stars } })
-      .then(function(){ TT.toast("شكراً على تقييمك ✓"); $("rateBox").hidden = true; })
+    TT.api("rate", { method:"POST", body:{ id:rateFor.id, token:rateFor.token, stars:stars, note:$("rateNote").value.trim(), tags:Object.keys(rTags) } })
+      .then(function(){ TT.sound("confirm"); TT.toast("شكراً على تقييمك ✓"); $("rateBox").hidden = true; $("rateNote").value = ""; rTags = {}; })
       .catch(function(err){ TT.toast(err.message || "تعذّر الإرسال"); b.disabled = false; });
   });
 
@@ -944,6 +1069,7 @@ html,body{height:100%;overflow:hidden}
     var s = TT.shape(raw);
     state.zones = s.zones; state.places = s.places; state.cfg = s.cfg;
     renderSug();
+    if(s.cfg.adminPhone){ $("qPhone").hidden = false; $("qPhone").href = "tel:" + s.cfg.adminPhone; }
     var fs = [s.cfg.same, s.cfg.cross]; s.zones.forEach(function(z){ if(+z.same > 0) fs.push(+z.same); if(+z.cross > 0) fs.push(+z.cross); });
     var lo = Math.min.apply(null, fs), hi = Math.max.apply(null, fs);
     $("fixedFare").textContent = (lo === hi ? lo : lo + "–" + hi) + " ج ثابت";

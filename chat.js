@@ -34,7 +34,7 @@
           st.me = j.me; st.peer = j.peer; st.open = j.open;
           j.m.forEach(function (m) { st.msgs.push(m); st.after = Math.max(st.after, m.at); });
           var hadNew = j.m.some(function (m) { return m.f !== st.me && !m.sys; });
-          if (hadNew && !st.sheet) { try { navigator.vibrate && navigator.vibrate(120); } catch (e) {} }
+          if (hadNew) { if (TT.sound) TT.sound("msg"); if (!st.sheet) { try { navigator.vibrate && navigator.vibrate(120); } catch (e) {} } }
           j.s.forEach(function (s) { st.after = Math.max(st.after, s.at); onSig(s, j.now); });
           if (st.sheet) render(); badge();
           if (!j.open && !st.call) { stop(); }

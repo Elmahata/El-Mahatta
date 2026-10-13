@@ -108,7 +108,7 @@
         </div>
       </div>
       <span id="baSecs" style="font-size:13.5px;color:#D6EBE6"></span>
-      <div style="width:100%;max-width:420px;background:#fff;color:var(--ink);border-radius:14px;padding:14px;text-align:start;display:flex;flex-direction:column;gap:10px">
+      <div style="width:100%;max-width:420px;background:#fff;color:#131E1C;border-radius:14px;padding:14px;text-align:start;display:flex;flex-direction:column;gap:10px">
         <div style="display:flex;gap:10px"><span style="width:10px;height:10px;border-radius:50%;background:var(--accent);margin-top:7px;flex:none"></span><b id="baFrom" style="font-size:16px"></b></div>
         <div style="display:flex;gap:10px"><span style="width:10px;height:10px;border-radius:50%;background:var(--fare);margin-top:7px;flex:none"></span><b id="baTo" style="font-size:16px"></b></div>
         <span id="baChip" class="chip c-neutral" style="align-self:flex-start"></span>
@@ -156,6 +156,11 @@
           <button class="btn btn-ghost" id="rNet" type="button">اتصال بالنت</button>
           <a class="btn btn-primary" id="rNavA" target="_blank" rel="noopener" href="#">ودّيني للراكب</a>
           <a class="btn btn-ghost" id="rNavB" target="_blank" rel="noopener" href="#">مسار الوصول</a>
+        </div>
+        <button class="btn btn-primary btn-wide mh-shine" id="rArrived" style="margin-top:12px;font-size:16px;padding:13px">وصلت عند الراكب</button>
+        <div id="waitBox" class="banner b-note" hidden style="margin-top:12px;flex-direction:column;align-items:stretch;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px"><span style="flex:1"><b>الراكب وصله إشعار إنك وصلت.</b><br><span id="waitTxt">استنى ٣ دقايق بس.</span></span><b id="waitClock" class="num" style="font:800 26px var(--display)">3:00</b></div>
+          <button class="btn btn-ghost btn-wide" id="rNoShow" hidden>الراكب ماجاش — إلغاء المشوار</button>
         </div>
         <div id="codeGate" style="margin-top:12px;background:var(--surface);border-radius:var(--r-sm);padding:12px">
           <label for="rCode" style="margin-bottom:6px">اسأل الراكب عن كود الركوب (٤ أرقام)</label>
@@ -405,7 +410,21 @@
     $("rStart").setAttribute("data-rid", r.id);
     $("codeGate").hidden = Boolean(r.startedAt);
     $("rDone").hidden = !r.startedAt;
+    $("rArrived").hidden = Boolean(r.arrivedAt || r.startedAt);
+    $("rArrived").setAttribute("data-rid", r.id); $("rNoShow").setAttribute("data-rid", r.id);
+    waitAt = r.startedAt ? 0 : (r.arrivedAt || 0); waitPaint();
   }
+  /* عدّاد الـ ٣ دقايق بعد «وصلت» */
+  var WAIT_MS = 3 * 6e4, waitAt = 0;
+  function waitPaint(){
+    var box = $("waitBox"); box.hidden = !waitAt; if(!waitAt) return;
+    var left = Math.max(0, WAIT_MS - (Date.now() - waitAt)), s = Math.ceil(left / 1000);
+    $("waitClock").textContent = Math.floor(s / 60) + ":" + String(s % 60).padStart(2, "0");
+    $("waitTxt").textContent = left ? "استنى ٣ دقايق بس." : "الـ ٣ دقايق خلصوا. لو الراكب ماجاش، تقدر تلغي.";
+    box.className = "banner " + (left ? "b-note" : "b-warn");
+    $("rNoShow").hidden = left > 0;
+  }
+  setInterval(waitPaint, 1000);
 
   document.addEventListener("click", function(e){
     if(!e.target.closest) return;
@@ -417,13 +436,26 @@
       var id = t.getAttribute("data-take");
       t.disabled = true; t.textContent = "جارٍ الحجز…";
       call("claim", { method: "POST", body: { requestId: id } })
-        .then(function(){ TT.celebrate({ dark:true, title:"المشوار بقى بتاعك ✓", sub:"روح للراكب — دوس «ودّيني للراكب» علشان الخريطة تفتح", ms:1900 }); })
+        .then(function(){ TT.say("المشوار بقى بتاعك. روح للراكب"); TT.celebrate({ dark:true, title:"المشوار بقى بتاعك ✓", sub:"روح للراكب — دوس «ودّيني للراكب» علشان الخريطة تفتح", ms:1900 }); })
         .catch(function(err){ TT.toast(err.message || "تعذّر الحجز"); })
         .then(function(){ lastIds = ""; return tick(); })
         .then(function(){ busy = false; }, function(){ busy = false; });
       return;
     }
 
+    var ar = e.target.closest("#rArrived, #rNoShow");
+    if(ar){
+      var arid = ar.getAttribute("data-rid"); if(!arid) return;
+      var ns = ar.id === "rNoShow";
+      if(ns && !confirm("الراكب ماجاش؟ المشوار هيتلغي ومفيش رسم هيتخصم.")) return;
+      ar.disabled = true;
+      call(ns ? "noshow" : "arrived", { method: "POST", body: { requestId: arid } })
+        .then(function(){ TT.sound(ns ? "cancel" : "arrived"); TT.toast(ns ? "المشوار اتلغى" : "الراكب وصله إشعار ✓"); try{ navigator.vibrate && navigator.vibrate(60); }catch(x){} })
+        .catch(function(err){ TT.toast(err.message || "خطأ"); })
+        .then(function(){ lastIds = ""; return tick(); })
+        .then(function(){ ar.disabled = false; }, function(){ ar.disabled = false; });
+      return;
+    }
     var d = e.target.closest("#rDone, #rRelease");
     if(d){
       var rid = d.getAttribute("data-rid"); if(!rid) return;
@@ -431,7 +463,7 @@
       if(rel && !confirm("تسيب المشوار ويرجع لباقي السواقين؟")) return;
       d.disabled = true;
       call("finish", { method: "POST", body: { requestId: rid, status: rel ? "released" : "done" } })
-        .then(function(){ TT.toast(rel ? "رجع للسواقين" : "تمّت الرحلة ✓"); })
+        .then(function(){ TT.sound(rel ? "cancel" : "done"); TT.toast(rel ? "رجع للسواقين" : "تمّت الرحلة ✓"); })
         .catch(function(err){ TT.toast(err.message || "خطأ"); })
         .then(function(){ lastIds = ""; return tick(); })
         .then(function(){ d.disabled = false; }, function(){ d.disabled = false; });
@@ -471,6 +503,8 @@
     $("baChip").textContent = (job.sameZone ? "داخل المنطقة" : "بين منطقتين") + (job.scheduledAt ? " · محجوز" : "");
     $("baTake").setAttribute("data-take", job.id); $("baTake").disabled = false; $("baTake").textContent = "خد المشوار";
     $("bigAlert").hidden = false; paintBig();
+    /* بيقرا الطلب بصوت عالي بعد النغمة — للسواقين اللي مش بيقروا بسهولة */
+    setTimeout(function(){ if(baJob === job.id) TT.say("طلب جديد. من " + (job.from && job.from.label || "") + "، إلى " + (job.to && job.to.label || "") + ". بـ " + job.fare + " جنيه"); }, 1300);
     if(baT) clearInterval(baT);
     baT = setInterval(function(){ baLeft--; paintBig(); }, 1000);
   }
@@ -509,7 +543,7 @@
     if(code.length !== 4){ TT.toast("الكود ٤ أرقام"); $("rCode").focus(); return; }
     s.disabled = true;
     call("start", { method:"POST", body:{ requestId: rid, code: code } })
-      .then(function(){ TT.toast("الرحلة بدأت ✓"); $("rCode").value = ""; })
+      .then(function(){ TT.sound("confirm"); TT.toast("الرحلة بدأت ✓"); $("rCode").value = ""; })
       .catch(function(err){ TT.toast(err.message || "خطأ"); })
       .then(function(){ s.disabled = false; return tick(); });
   });
@@ -528,21 +562,19 @@
 
       var sb = j.sub || {}, W = $("subWarn");
       function fmt(s){ return s ? new Date(s + "T00:00:00").toLocaleDateString("ar-EG", { day:"numeric", month:"long" }) : ""; }
-      var prices = (sb.week ? sb.week + " ج في الأسبوع" : "") + (sb.week && sb.month ? " أو " : "") + (sb.month ? sb.month + " ج في الشهر" : "");
       W.hidden = false;
       if(sb.state === "free"){
         W.className = "banner b-note";
-        W.innerHTML = '<span>★</span><span><b>المحطة مجانية</b> — مفيش اشتراك ولا عمولة.</span>';
+        W.innerHTML = '<span>★</span><span><b>المحطة مجانية دلوقتي</b>' + (sb.until ? ' لحد ' + fmt(sb.until) + '. بعدها ' + sb.fee + ' ج بس عن كل مشوار بتخلّصه، من رصيد بتشحنه.' : ' — مفيش رسوم.') + '</span>';
       } else if(sb.state === "ok"){
-        var left = TT.daysTo(sb.until);
-        if(left <= 2){ W.className = "banner b-warn"; W.innerHTML = '<span>⚠</span><span>اشتراكك بيخلص ' + (left <= 0 ? "النهارده" : "خلال " + left + " يوم") + ' — جدّده مع الإدارة (' + prices + ').</span>'; }
-        else W.hidden = true;
-      } else if(sb.state === "grace"){
+        W.className = "banner b-note";
+        W.innerHTML = '<span>◆</span><span>رصيدك <b>' + sb.credit + ' ج</b> — يكفي حوالي ' + sb.trips + ' مشوار (' + sb.fee + ' ج للمشوار).</span>';
+      } else if(sb.state === "low"){
         W.className = "banner b-warn";
-        W.innerHTML = '<span>⚠</span><span><b>اشتراكك خلص</b> — معاك مهلة لحد ' + fmt(sb.stopOn) + '. بعدها الطلبات هتوقف. جدّد مع الإدارة (' + prices + ').</span>';
+        W.innerHTML = '<span>⚠</span><span>رصيدك قرب يخلص: <b>' + sb.credit + ' ج</b> (' + sb.trips + ' مشوار بس). اشحن من الإدارة أو الوكيل.</span>';
       } else if(sb.state === "stopped"){
         W.className = "banner b-crit";
-        W.innerHTML = '<span>⚠</span><span><b>الطلبات وقفت</b> — اشتراكك خلص. جدّد مع الإدارة (' + prices + ') وهترجع تشتغل على طول.</span>';
+        W.innerHTML = '<span>⚠</span><span><b>رصيدك خلص — الطلبات وقفت.</b> اشحن من الإدارة أو الوكيل وهترجع تشتغل على طول.</span>';
       } else W.hidden = true;
 
       renderRide(j.mine);
