@@ -214,8 +214,68 @@ async function pushFam(env, riderPhone, item, onlyAuto) {
     const box = (await getDoc(env, "famalerts", k.fam)) || { id: k.fam, items: [] };
     box.items = box.items.filter((x) => Date.now() - x.at < 864e5).concat([{ id: uid(), at: Date.now(), riderName: k.riderName || "", riderPhone: k.riderPhoneFull || "", ...item }]).slice(-20);
     await putDoc(env, "famalerts", k.fam, box);
+    const who = k.riderName || "قريبك";
+    const T = {
+      sos: ["⚠ طوارئ من " + who, "محتاج مساعدة دلوقتي — دوس علشان تشوف مكانه"],
+      start: [who + " ركب توكتوك", "دوس علشان تتابع الرحلة"],
+      done: [who + " وصل بالسلامة ✓", ""],
+    }[item.type] || ["المحطة", ""];
+    await pushTo(env, "rider", k.fam, { kind: item.type === "sos" ? "sos" : "family", title: T[0], body: T[1], url: "/?fam=1", tag: "fam-" + k.rider });
   }
   return mine.length;
+}
+
+/* ===== Firebase Cloud Messaging (HTTP v1) — شغال بس لو FCM_SA متحط في Cloudflare ===== */
+let FCM_TOK = null;
+const b64u = (buf) => btoa(String.fromCharCode(...new Uint8Array(buf))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const b64uStr = (s) => b64u(new TextEncoder().encode(s));
+function fcmSA(env) { try { return env.FCM_SA ? JSON.parse(env.FCM_SA) : null; } catch (e) { return null; } }
+async function fcmAccess(sa) {
+  if (FCM_TOK && FCM_TOK.exp > Date.now() + 60e3) return FCM_TOK.t;
+  const now = Math.floor(Date.now() / 1000);
+  const head = b64uStr(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const body = b64uStr(JSON.stringify({ iss: sa.client_email, scope: "https://www.googleapis.com/auth/firebase.messaging", aud: "https://oauth2.googleapis.com/token", iat: now, exp: now + 3600 }));
+  const pem = sa.private_key.replace(/-----[^-]+-----/g, "").replace(/\s+/g, "");
+  const der = Uint8Array.from(atob(pem), (c) => c.charCodeAt(0));
+  const key = await crypto.subtle.importKey("pkcs8", der, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("RSASSA-PKCS1-v1_5", key, new TextEncoder().encode(head + "." + body));
+  const r = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: "grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=" + head + "." + body + "." + b64u(sig),
+  });
+  const j = await r.json();
+  if (!j.access_token) throw new Error("fcm auth");
+  FCM_TOK = { t: j.access_token, exp: Date.now() + (j.expires_in || 3600) * 1000 };
+  return FCM_TOK.t;
+}
+/** يبعت إشعار لصاحب الرقم ده (role: driver | rider). أي غلطة بتتتجاهل — الإشعار إضافة، ومش بيوقف الطلب */
+async function pushTo(env, role, phone10, data) {
+  const sa = fcmSA(env);
+  if (!sa || !phone10) return false;
+  try {
+    const id = role + "_" + phone10;
+    const p = await getDoc(env, "push", id);
+    if (!p || !p.token) return false;
+    const at = await fcmAccess(sa);
+    const strs = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v ?? "")]));
+    const r = await fetch("https://fcm.googleapis.com/v1/projects/" + sa.project_id + "/messages:send", {
+      method: "POST", headers: { authorization: "Bearer " + at, "content-type": "application/json" },
+      body: JSON.stringify({ message: { token: p.token, data: strs, webpush: { headers: { Urgency: "high", TTL: data.kind === "request" ? "90" : "600" } } } }),
+    });
+    if (r.status === 404 || r.status === 400) await env.DB.prepare("DELETE FROM docs WHERE kind=? AND id=?").bind("push", id).run();
+    return r.ok;
+  } catch (e) { return false; }
+}
+/* طلب جديد: لكل سائق أونلاين مش في مشوار (وعنده توكن) */
+async function pushDrivers(env, r) {
+  if (!fcmSA(env)) return;
+  try {
+    const { drivers, requests } = await readDocs(env, ["drivers", "requests"]);
+    const busy = new Set(requests.filter((x) => x.status === "assigned").map((x) => x.driverId));
+    const list = drivers.filter((d) => d.active !== false && d.online !== false && !busy.has(d.id) && Date.now() - (d.lastSeen || 0) < 12 * 3600e3);
+    const body = (r.from && r.from.label ? r.from.label : "") + " ← " + (r.to && r.to.label ? r.to.label : "") + " · " + r.fare + " ج";
+    await Promise.all(list.map((d) => pushTo(env, "driver", l10(d.phone), { kind: "request", title: "طلب جديد · " + r.fare + " ج", body, url: "/driver.html", tag: "req" })));
+  } catch (e) {}
 }
 
 async function newSession(env, phone, role) {
@@ -315,6 +375,7 @@ async function createRequest(env, b, source) {
     forOther: Boolean(b.forOther), bookerPhone: b.forOther ? digits(b.bookerPhone).slice(0, 15) : "",
     discount, refBy: discount && refBy ? refBy : "", refCredit: Boolean(discount && !refBy),
   });
+  if (!scheduledAt || scheduledAt - now < 15 * 60e3) await pushDrivers(env, { from, to, fare });
   return { ok: true, id, token: tok, shareToken: share, fare, sameZone: same, discount, scheduledAt, refCode: refCode(phone) };
 }
 
@@ -521,6 +582,27 @@ export async function onRequest({ request, env, params }) {
         return json({ ok: true });
       }
       return json({ error: "not found" }, 404);
+    }
+
+    /* تسجيل توكن الإشعارات للموبايل ده */
+    if (route === "push" && sub === "register" && method === "POST") {
+      const b = await parseBody(request);
+      const token = str(b.token, 400);
+      if (token.length < 20) return json({ error: "توكن غلط" }, 400);
+      let phone = "";
+      if (b.role === "driver") {
+        const d = await getDriver(request, env);
+        if (!d) return json({ error: "ادخل الأول" }, 401);
+        phone = d.phone;
+      } else {
+        phone = digits(b.phone);
+        if (phone.length < 10) return json({ error: "رقمك مش متسجّل" }, 400);
+        const deny = await needSession(request, env, phone, "rider");
+        if (deny) return deny;
+      }
+      const role = b.role === "driver" ? "driver" : "rider";
+      await putDoc(env, "push", role + "_" + l10(phone), { token, at: Date.now() });
+      return json({ ok: true });
     }
 
     /* ===== الأهل ===== */
@@ -833,6 +915,7 @@ export async function onRequest({ request, env, params }) {
         ).bind(JSON.stringify(next), Date.now(), rid).run();
 
         if (!res.meta || res.meta.changes !== 1) return json({ error: "سائق تاني خد المشوار" }, 409);
+        await pushTo(env, "rider", l10(next.bookerPhone || next.riderPhone), { kind: "ride", title: me.name + " جاي ليك", body: "السعر " + next.fare + " ج — افتح علشان تشوفه على الخريطة", url: "/", tag: "ride-" + rid });
         return json({ ok: true, ride: (({ code, token, shareToken, riderPhone, bookerPhone, refBy, ...rest }) => rest)(next) });
       }
 
@@ -843,7 +926,10 @@ export async function onRequest({ request, env, params }) {
         if (!r) return json({ error: "الطلب غير موجود" }, 404);
         if (r.driverId !== me.id || r.status !== "assigned") return json({ error: "المشوار ده مش بتاعك" }, 403);
         if (r.startedAt) return json({ error: "الرحلة بدأت خلاص" }, 409);
-        if (!r.arrivedAt) await putDoc(env, "requests", r.id, { ...r, arrivedAt: Date.now() });
+        if (!r.arrivedAt) {
+          await putDoc(env, "requests", r.id, { ...r, arrivedAt: Date.now() });
+          await pushTo(env, "rider", l10(r.bookerPhone || r.riderPhone), { kind: "ride", title: "السائق وصل عندك 📍", body: me.name + " مستنيك — قدامك ٣ دقايق", url: "/", tag: "ride-" + r.id });
+        }
         return json({ ok: true });
       }
 

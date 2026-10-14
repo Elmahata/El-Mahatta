@@ -197,6 +197,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="/assets/common.js"></script>
 <script src="/assets/chat.js"></script>
+<script src="/assets/fcm-config.js"></script>
+<script src="/assets/push.js"></script>
 <script>
   try { localStorage.setItem("mh-role", "driver"); } catch(e){}
   document.addEventListener("click", function(e){
@@ -266,6 +268,7 @@
         auth = { phone: phone, code: code, name: j.driver.name };
         try{ localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); (rem ? localStorage : sessionStorage).setItem(KEY, JSON.stringify(auth)); }catch(x){}
         start();
+        if(TT.push && "Notification" in window && Notification.permission === "granted") TT.push.init("driver", hdr);
       })
       .catch(function(err){ e.textContent = err.message; e.hidden = false; })
       .finally(function(){ b.disabled = false; b.textContent = "دخول"; });
@@ -523,7 +526,8 @@
   }
   $("alertsBtn").addEventListener("click", function(){
     try{ actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); beep(); }catch(e){}
-    if("Notification" in window && Notification.permission === "default") Notification.requestPermission();
+    if(TT.push && TT.push.ready()) TT.push.init("driver", hdr);
+    else if("Notification" in window && Notification.permission === "default") Notification.requestPermission();
     keepAwake();
     try{ localStorage.setItem("tt-alerts", "1"); }catch(e){}
     this.hidden = true;
