@@ -317,3 +317,19 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px color-mix(in oklab,
 .tier-gold{animation:tier-shine 2.6s ease-in-out infinite}
 @keyframes tier-shine{0%,100%{box-shadow:0 0 0 0 rgba(245,200,66,0)}50%{box-shadow:0 0 0 4px rgba(245,200,66,.35)}}
 @media (prefers-reduced-motion:reduce){.mh-route-flow,.mh-route,.mh-shine::after,.tier-gold{animation:none !important}}
+
+/* ===== نافذة التقييم في نص الشاشة ===== */
+@keyframes mh-rate-in{from{opacity:0;transform:translateY(24px) scale(.92)}to{opacity:1;transform:none}}
+.mh-rate{position:fixed;inset:0;z-index:5200;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:rgba(19,30,28,.48);-webkit-backdrop-filter:blur(3px);backdrop-filter:blur(3px);animation:mh-fade .25s both;transition:opacity .25s}
+.mh-rate[hidden]{display:none}
+.mh-rate.out{opacity:0}
+.mh-rate-card{position:relative;width:100%;max-width:340px;max-height:calc(100vh - 40px);overflow:auto;background:var(--surface);border-radius:22px;
+  padding:26px 18px 14px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:4px;
+  box-shadow:0 30px 60px -20px rgba(0,0,0,.5);animation:mh-rate-in .42s var(--ease-spring) both}
+.mh-rate-card > textarea,.mh-rate-card > .btn,.mh-rate-card > #rateTags{width:100%}
+.mh-rate-x{position:absolute;top:10px;inset-inline-start:10px;width:32px;height:32px;border-radius:50%;border:0;cursor:pointer;
+  background:#F6DDD9;color:#A9382B;font:700 14px/1 var(--body);display:grid;place-items:center;transition:transform .15s,background .2s}
+.mh-rate-x:active{transform:scale(.9);background:#EFC9C3}
+.mh-rate-av{width:64px;height:64px;font-size:24px;margin-bottom:4px;border:3px solid var(--surface);box-shadow:0 6px 16px -6px rgba(0,0,0,.35)}
+#stars button:active{transform:scale(1.25)}

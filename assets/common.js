@@ -290,7 +290,9 @@
     done:     [[784, 0, .14], [988, .12, .14], [1319, .26, .42, "triangle"]],
     msg:      [[988, 0, .08], [1319, .09, .12]],
     error:    [[330, 0, .16, "square", .12], [247, .16, .26, "square", .12]],
-    cancel:   [[523, 0, .16], [392, .16, .3]],
+    cancel:   [[659, 0, .16, "sine", .16], [523, .15, .16, "sine", .16], [415, .3, .5, "sine", .18]],
+    /* نغمة الدخول «نطّة الدبوس»: الضربة التقيلة على ٠٫٥ ثانية = لحظة نزول اللوجو على الأرض */
+    intro:    [[900, .05, .42, "sine", .05, 300], [110, .5, .3, "sine", .35, 70], [220, .5, .22, "triangle", .14], [523, .62, .55, "sine", .12], [659, .69, .55, "sine", .12], [784, .76, .55, "sine", .12], [1047, .83, .55, "sine", .12]],
     newReq:   [[880, 0, .16, "square"], [660, .2, .16, "square"], [880, .4, .26, "square"]],
   };
   var sctx = null;
@@ -303,7 +305,7 @@
       var t = sctx.currentTime + .02;
       SND[name].forEach(function (n) {
         var o = sctx.createOscillator(), g = sctx.createGain(), vol = n[4] || .22;
-        o.type = n[3] || "sine"; o.frequency.value = n[0];
+        o.type = n[3] || "sine"; o.frequency.setValueAtTime(n[0], t + n[1]); if (n[5]) o.frequency.exponentialRampToValueAtTime(n[5], t + n[1] + n[2]);
         g.gain.setValueAtTime(.0001, t + n[1]); g.gain.exponentialRampToValueAtTime(vol, t + n[1] + .015); g.gain.exponentialRampToValueAtTime(.0001, t + n[1] + n[2]);
         o.connect(g); g.connect(sctx.destination); o.start(t + n[1]); o.stop(t + n[1] + n[2] + .02);
       });
@@ -406,6 +408,16 @@
         + '<div class="t">المحطة' + (drv ? ' · سائق' : '') + '</div>'
         + '<div class="s">مشوارك بقى أسهل</div><div class="bar"><i></i></div>';
       (document.body || document.documentElement).appendChild(sp);
+      /* نغمة الدخول مع الحركة. لو أندرويد منع الصوت (مفيش لمسة لسه)، بتشتغل مع أول لمسة على شاشة الدخول */
+      var t0 = Date.now(), introDone = false;
+      var playIntro = function () { if (introDone) return; introDone = true; T.sound("intro"); };
+      try {
+        var A0 = global.AudioContext || global.webkitAudioContext; sctx = sctx || new A0();
+        if (sctx.state === "running") playIntro();
+        else sctx.resume().then(function () { if (sctx.state === "running" && Date.now() - t0 < 400) playIntro(); }).catch(function () {});
+      } catch (e) {}
+      var onTouch = function () { document.removeEventListener("pointerdown", onTouch, true); if (Date.now() - t0 < 15000) playIntro(); };
+      document.addEventListener("pointerdown", onTouch, true);
       setTimeout(function () { sp.classList.add("out"); setTimeout(function () { sp.remove(); }, 560); }, 1900);
     }
   } catch (e) {}

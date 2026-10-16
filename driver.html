@@ -452,6 +452,7 @@
       var ns = ar.id === "rNoShow";
       if(ns && !confirm("الراكب ماجاش؟ المشوار هيتلغي ومفيش رسم هيتخصم.")) return;
       ar.disabled = true;
+      if(ns) window.__mhFinishing = true;
       call(ns ? "noshow" : "arrived", { method: "POST", body: { requestId: arid } })
         .then(function(){ TT.sound(ns ? "cancel" : "arrived"); TT.toast(ns ? "المشوار اتلغى" : "الراكب وصله إشعار ✓"); try{ navigator.vibrate && navigator.vibrate(60); }catch(x){} })
         .catch(function(err){ TT.toast(err.message || "خطأ"); })
@@ -465,6 +466,7 @@
       var rel = (d.id === "rRelease");
       if(rel && !confirm("تسيب المشوار ويرجع لباقي السواقين؟")) return;
       d.disabled = true;
+      window.__mhFinishing = true;
       call("finish", { method: "POST", body: { requestId: rid, status: rel ? "released" : "done" } })
         .then(function(){ TT.sound(rel ? "cancel" : "done"); TT.toast(rel ? "رجع للسواقين" : "تمّت الرحلة ✓"); })
         .catch(function(err){ TT.toast(err.message || "خطأ"); })
@@ -524,15 +526,27 @@
       else try{ new Notification(t, o); }catch(e){}
     }
   }
-  $("alertsBtn").addEventListener("click", function(){
-    try{ actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); beep(); }catch(e){}
+  /* التنبيهات بتتفعّل لوحدها: أندرويد مش بيسمح بالصوت قبل أول لمسة، فأول لمسة في أي حتة في الشاشة بتشغّلها (من غير زرار) */
+  function enableAlerts(silent){
+    try{ actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); if(!silent) beep(); }catch(e){}
     if(TT.push && TT.push.ready()) TT.push.init("driver", hdr);
     else if("Notification" in window && Notification.permission === "default") Notification.requestPermission();
     keepAwake();
     try{ localStorage.setItem("tt-alerts", "1"); }catch(e){}
-    this.hidden = true;
-    TT.toast("التنبيهات شغالة ✓");
-  });
+    $("alertsBtn").hidden = true;
+  }
+  $("alertsBtn").addEventListener("click", function(){ enableAlerts(false); TT.toast("التنبيهات شغالة ✓"); });
+  $("alertsBtn").hidden = true;
+  function autoAlerts(){
+    if(!auth) return;
+    enableAlerts(true);
+    document.removeEventListener("pointerdown", autoAlerts, true);
+    document.removeEventListener("keydown", autoAlerts, true);
+  }
+  document.addEventListener("pointerdown", autoAlerts, true);
+  document.addEventListener("keydown", autoAlerts, true);
+  /* لو الإذن متاخد قبل كده، شغّل الإشعارات والشاشة المنوّرة على طول من غير لمسة */
+  if("Notification" in window && Notification.permission === "granted") setTimeout(function(){ if(auth){ if(TT.push && TT.push.ready()) TT.push.init("driver", hdr); keepAwake(); } }, 800);
   document.addEventListener("visibilitychange", function(){ if(!document.hidden && actx) keepAwake(); });
   function checkNew(list){
     list.forEach(function(j){
@@ -581,6 +595,9 @@
         W.innerHTML = '<span>⚠</span><span><b>رصيدك خلص — الطلبات وقفت.</b> اشحن من الإدارة أو الوكيل وهترجع تشتغل على طول.</span>';
       } else W.hidden = true;
 
+      /* المشوار اختفى من غير ما السائق يخلّصه = الراكب أو الإدارة لغوه */
+      if(window.__mhRide && !j.mine && !window.__mhFinishing){ TT.sound("cancel"); try{ navigator.vibrate && navigator.vibrate([200,100,200]); }catch(e){} TT.toast("الراكب لغى المشوار"); }
+      window.__mhRide = j.mine ? j.mine.id : null; window.__mhFinishing = false;
       renderRide(j.mine);
       if(baJob && (j.mine || !j.available.some(function(x){ return x.id === baJob; }))) hideBig();
       var hd = j.me.heading;

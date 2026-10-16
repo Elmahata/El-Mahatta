@@ -280,15 +280,6 @@ html,body{height:100%;overflow:hidden}
   <section id="stEnded" hidden>
     <h2 id="endTitle">تمّت الرحلة ✓</h2>
     <p class="hint" id="endMsg"></p>
-    <div id="rateBox" hidden style="margin-top:12px;text-align:center">
-      <div style="font-weight:700">إزاي كانت الرحلة؟</div>
-      <div id="stars" style="display:flex;gap:4px;justify-content:center;direction:ltr;margin:6px 0">
-        <button data-star="1" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="2" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="3" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="4" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="5" style="font-size:36px;background:none;border:0;cursor:pointer;color:var(--line)">★</button>
-      </div>
-      <div id="rateTags" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:4px 0 10px"></div>
-      <textarea id="rateNote" maxlength="200" rows="2" placeholder="اكتب رأيك في السائق (اختياري)" style="width:100%;margin-bottom:10px"></textarea>
-      <button class="btn btn-primary btn-wide" id="sendRate" disabled>ابعت التقييم</button>
-    </div>
     <button class="btn btn-primary btn-wide" id="newRide2" style="margin-top:12px">اطلب رحلة تانية</button>
     <button class="linkbtn" data-report id="endReport">حصلت مشكلة؟ بلّغ الإدارة</button>
   </section>
@@ -312,6 +303,22 @@ html,body{height:100%;overflow:hidden}
   </section>
 
   <div id="err" class="banner b-crit" hidden style="margin-top:12px"></div>
+</div>
+
+<div id="rateBox" hidden class="mh-rate" role="dialog" aria-modal="true" aria-labelledby="rateQ">
+<div class="mh-rate-card">
+  <button type="button" id="rateClose" class="mh-rate-x" aria-label="مش دلوقتي">✕</button>
+  <span class="av mh-rate-av" id="rateAv">س</span>
+  <div id="rateWho" style="font:700 17px var(--display)">—</div>
+  <div id="rateQ" style="color:var(--ink-2);font-size:14.5px">إزاي كانت الرحلة؟</div>
+  <div id="stars" style="display:flex;gap:4px;justify-content:center;direction:ltr;margin:6px 0">
+    <button data-star="1" style="font-size:40px;line-height:1;padding:2px 3px;transition:transform .2s var(--ease-spring),color .2s;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="2" style="font-size:40px;line-height:1;padding:2px 3px;transition:transform .2s var(--ease-spring),color .2s;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="3" style="font-size:40px;line-height:1;padding:2px 3px;transition:transform .2s var(--ease-spring),color .2s;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="4" style="font-size:40px;line-height:1;padding:2px 3px;transition:transform .2s var(--ease-spring),color .2s;background:none;border:0;cursor:pointer;color:var(--line)">★</button><button data-star="5" style="font-size:40px;line-height:1;padding:2px 3px;transition:transform .2s var(--ease-spring),color .2s;background:none;border:0;cursor:pointer;color:var(--line)">★</button>
+  </div>
+  <div id="rateTags" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center;margin:4px 0 10px"></div>
+  <textarea id="rateNote" maxlength="200" rows="2" placeholder="اكتب رأيك في السائق (اختياري)" style="width:100%;margin-bottom:10px"></textarea>
+  <button class="btn btn-primary btn-wide" id="sendRate" disabled>ابعت التقييم</button>
+  <button type="button" class="linkbtn" id="rateLater" style="margin-top:2px">مش دلوقتي</button>
+</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
@@ -604,6 +611,17 @@ html,body{height:100%;overflow:hidden}
     try{ v ? localStorage.setItem(LIVE, JSON.stringify(v)) : localStorage.removeItem(LIVE); }catch(e){}
   }
 
+  /* التوكتوك بيتحرك على الخريطة بنعومة بين كل تحديث والتاني (بدل ما ينطّ) */
+  function glide(mk, to){
+    var from = mk.getLatLng(), t0 = performance.now(), dur = 4200;
+    if(Math.abs(from.lat - to[0]) + Math.abs(from.lng - to[1]) > 0.02){ mk.setLatLng(to); return; }
+    if(mk._mhAnim) cancelAnimationFrame(mk._mhAnim);
+    (function step(now){
+      var k = Math.min(1, (now - t0) / dur), e = k < .5 ? 2*k*k : 1 - Math.pow(-2*k + 2, 2) / 2;
+      mk.setLatLng([from.lat + (to[0] - from.lat) * e, from.lng + (to[1] - from.lng) * e]);
+      if(k < 1) mk._mhAnim = requestAnimationFrame(step);
+    })(t0);
+  }
   function track(){
     if(!live) return;
     fetch("/api/track/" + encodeURIComponent(live.id) + "?token=" + encodeURIComponent(live.token))
@@ -643,7 +661,15 @@ html,body{height:100%;overflow:hidden}
           TT.sound("done");
           $("endTitle").textContent = "تمّت الرحلة ✓";
           $("endMsg").textContent = "شكراً لاستخدامك المحطة.";
-          rateFor = reportFor; stars = 0; paintStars(); $("rateBox").hidden = !rateFor;
+          rateFor = reportFor; stars = 0; paintStars();
+          if(rateFor){
+            var dn = (live && live.driver && live.driver.name) || $("dName").textContent || "السائق";
+            $("rateWho").textContent = dn === "—" ? "السائق" : dn;
+            var av = $("rateAv"), ph = $("dAv").style.backgroundImage;
+            av.textContent = ph ? "" : ($("rateWho").textContent.trim().charAt(0) || "س");
+            av.style.backgroundImage = ph || ""; av.style.backgroundSize = "cover"; av.style.backgroundPosition = "center";
+            setTimeout(function(){ $("rateBox").hidden = false; }, 700);
+          }
           setStep("ended");
         } else if(j.status === "cancelled"){
           stopPoll(); saveLive(null); clearLive();
@@ -772,7 +798,7 @@ html,body{height:100%;overflow:hidden}
     if(!j.driverLoc){ if(eta) eta.textContent = phase ? "" : "مستنّيين مكان السائق…"; return; }
     var d = [j.driverLoc.lat, j.driverLoc.lng];
     if(!liveL.drv) liveL.drv = L.marker(d, { icon:TT.driverIcon(j.driverLoc.h), interactive:false, zIndexOffset:1000 }).addTo(map);
-    else { liveL.drv.setLatLng(d); liveL.drv.setIcon(TT.driverIcon(j.driverLoc.h)); }
+    else { glide(liveL.drv, d); liveL.drv.setIcon(TT.driverIcon(j.driverLoc.h)); }
     if(!target) return;
     if(!liveL.tgt) liveL.tgt = L.marker([target.lat, target.lng], { icon:TT.markerIcon(phase ? "#BC4E1E" : "#0E7566", true), interactive:false }).addTo(map);
     if(liveL.phase !== phase){ liveL.tgt.setLatLng([target.lat, target.lng]); liveL.tgt.setIcon(TT.markerIcon(phase ? "#BC4E1E" : "#0E7566", true)); liveL.fitted = 0; liveL.at = 0; }
@@ -911,6 +937,10 @@ html,body{height:100%;overflow:hidden}
     }
   });
   var rateFor = null, stars = 0;
+  function closeRate(){ var b = $("rateBox"); if(b.hidden) return; b.classList.add("out"); setTimeout(function(){ b.hidden = true; b.classList.remove("out"); }, 260); }
+  $("rateClose").addEventListener("click", closeRate);
+  $("rateLater").addEventListener("click", closeRate);
+  $("rateBox").addEventListener("click", function(e){ if(e.target === this) closeRate(); });
   function paintStars(){
     [].forEach.call(document.querySelectorAll("[data-star]"), function(b){ b.style.color = +b.getAttribute("data-star") <= stars ? "#F5B301" : "var(--line)"; b.style.transform = +b.getAttribute("data-star") <= stars ? "scale(1.12)" : ""; b.style.transition = "transform .2s, color .2s"; });
     $("sendRate").disabled = !stars;
@@ -926,7 +956,7 @@ html,body{height:100%;overflow:hidden}
     if(!rateFor || !stars) return;
     var b = this; b.disabled = true;
     TT.api("rate", { method:"POST", body:{ id:rateFor.id, token:rateFor.token, stars:stars, note:$("rateNote").value.trim(), tags:Object.keys(rTags) } })
-      .then(function(){ TT.sound("confirm"); TT.toast("شكراً على تقييمك ✓"); $("rateBox").hidden = true; $("rateNote").value = ""; rTags = {}; })
+      .then(function(){ TT.sound("confirm"); TT.toast("شكراً على تقييمك ✓"); closeRate(); $("rateNote").value = ""; rTags = {}; })
       .catch(function(err){ TT.toast(err.message || "تعذّر الإرسال"); b.disabled = false; });
   });
 
