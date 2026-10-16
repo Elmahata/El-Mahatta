@@ -27,11 +27,12 @@
  *   DELETE /api/doc/:kind/:id        إدارة — حذف
  */
 
-const KINDS = ["zones", "places", "drivers", "requests", "config", "reports"];
+const KINDS = ["zones", "places", "drivers", "requests", "config", "reports", "riders"];
+const LOW_BAL = 5; /* أول ما الرصيد يوصل ٥ ج أو أقل، بيظهر بانر «اشحن» */
 const PUBLIC_KINDS = ["zones", "places", "config"];
 const MAX_BODY = 16 * 1024;
 const ONLINE_MS = 90 * 1000;              // يُعتبر السائق أونلاين إن نبض خلال هذه المدة
-const CLAIM_WINDOW_MS = 25 * 60 * 1000;   // الطلب الأقدم من ذلك لا يُعرض للقبول
+const CLAIM_WINDOW_MS = 10 * 60 * 1000;   // الطلب اللي محدش أخده خلال ١٠ دقايق بيتلغي لوحده
 
 const json = (data, status = 200) =>
   new Response(JSON.stringify(data), {
@@ -113,15 +114,27 @@ async function getDriver(req, env) {
 const addDays = (s, n) => { const d = new Date(s + "T00:00:00Z"); d.setUTCDate(d.getUTCDate() + n); return d.toISOString().slice(0, 10); };
 async function subCfg(env) {
   const p = (await getDoc(env, "config", "pricing")) || {};
-  return { on: Boolean(p.creditOn), from: p.creditFrom || "", fee: Number(p.tripFee) > 0 ? Number(p.tripFee) : 1 };
+  /* أوتوماتيك: كل مستخدم مجاني ١٢٠ يوم من يوم تسجيله، وبعدها الرصيد بيشتغل لوحده. الإدارة تقدر توقفه مؤقتاً (creditPaused) */
+  return { on: !p.creditPaused, freeDays: Number(p.freeDays) > 0 ? Number(p.freeDays) : FREE_DAYS, fee: Number(p.tripFee) > 0 ? Number(p.tripFee) : 1 };
 }
-/** حالة رصيد السائق: free | ok | low | stopped */
+const FREE_DAYS = 90;
+const joinedOf = (d) => +(d.joinedAt || d.createdAt || 0) || Date.now();
+/** حالة رصيد المستخدم (سائق أو راكب): free | ok | low | stopped */
 function subState(d, c) {
-  const today = todayStr();
-  if (!c.on || (c.from && today < c.from)) return { state: "free", until: c.on ? c.from : "", fee: c.fee, credit: +(d.credit || 0) };
+  const freeTill = joinedOf(d) + c.freeDays * 864e5;
+  if (!c.on || Date.now() < freeTill) return { state: "free" };
   const bal = +(d.credit || 0);
   if (bal < c.fee) return { state: "stopped", credit: bal, fee: c.fee };
-  return { state: bal < c.fee * 10 ? "low" : "ok", credit: bal, fee: c.fee, trips: Math.floor(bal / c.fee) };
+  return { state: bal <= LOW_BAL ? "low" : "ok", credit: bal, fee: c.fee, trips: Math.floor(bal / c.fee) };
+}
+/* رصيد الراكب: نفس النظام، والرسم بيتخصم من رصيده مش بيتضاف على الأجرة. المستند بيتحفظ بآخر ١٠ أرقام من الموبايل */
+const riderKey = (p) => digits(p).slice(-10);
+async function riderWallet(env, phone, c) {
+  const k = riderKey(phone);
+  let d = await getDoc(env, "riders", k);
+  /* أول مرة نشوف الراكب ده = يوم تسجيله (بداية الـ ٣ شهور المجانية) */
+  if (!d && k.length >= 9) { d = { id: k, phone: digits(phone), joinedAt: Date.now(), credit: 0 }; await putDoc(env, "riders", k, d); }
+  return { doc: d || {}, ...subState(d || {}, c) };
 }
 const subActive = (d, c) => !c || subState(d, c).state !== "stopped";
 const todayStr = () => new Date().toISOString().slice(0, 10);
@@ -260,19 +273,38 @@ async function pushTo(env, role, phone10, data) {
     const strs = Object.fromEntries(Object.entries(data).map(([k, v]) => [k, String(v ?? "")]));
     const r = await fetch("https://fcm.googleapis.com/v1/projects/" + sa.project_id + "/messages:send", {
       method: "POST", headers: { authorization: "Bearer " + at, "content-type": "application/json" },
-      body: JSON.stringify({ message: { token: p.token, data: strs, webpush: { headers: { Urgency: "high", TTL: data.kind === "request" ? "90" : "600" } } } }),
+      body: JSON.stringify({ message: { token: p.token, data: strs, android: { priority: "HIGH" }, webpush: { headers: { Urgency: "high", TTL: data.kind === "request" ? "120" : "600" } } } }),
     });
     if (r.status === 404 || r.status === 400) await env.DB.prepare("DELETE FROM docs WHERE kind=? AND id=?").bind("push", id).run();
     return r.ok;
   } catch (e) { return false; }
 }
-/* طلب جديد: لكل سائق أونلاين مش في مشوار (وعنده توكن) */
+/* الطلب بيوصل الأول للتكاتك اللي في نص قطر ٥٠٠ متر من مكان الراكب.
+   لو محدش قبل خلال دقيقة، الدايرة بتكبر لـ ١٫٥ كم، وبعد دقيقتين بيوصل لكل السواقين (علشان الطلب مايضيعش). */
+const RADIUS_M = 500;
+const RINGS = [[60e3, RADIUS_M], [120e3, 1500]];
+const LOC_FRESH_MS = 3 * 60e3;
+function meters(a, b) {
+  const R = 6371e3, t = Math.PI / 180, dLat = (b.lat - a.lat) * t, dLng = (b.lng - a.lng) * t;
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(x));
+}
+function reachM(age) { for (const [ms, m] of RINGS) if (age < ms) return m; return Infinity; }
+/** هل السائق ده جوه دايرة الطلب دلوقتي؟ age = بقاله قد إيه مفتوح */
+function inReach(r, d, age) {
+  const lim = reachM(age);
+  if (lim === Infinity) return true;
+  if (!r.from || !isFinite(+r.from.lat) || !isFinite(+r.from.lng)) return true;
+  if (!d.loc || Date.now() - d.loc.at > LOC_FRESH_MS) return false;
+  return meters(r.from, d.loc) <= lim;
+}
+/* طلب جديد: إشعار لكل سائق أونلاين مش في مشوار، وفي نص قطر ٥٠٠ متر من الراكب */
 async function pushDrivers(env, r) {
   if (!fcmSA(env)) return;
   try {
     const { drivers, requests } = await readDocs(env, ["drivers", "requests"]);
     const busy = new Set(requests.filter((x) => x.status === "assigned").map((x) => x.driverId));
-    const list = drivers.filter((d) => d.active !== false && d.online !== false && !busy.has(d.id) && Date.now() - (d.lastSeen || 0) < 12 * 3600e3);
+    const list = drivers.filter((d) => d.active !== false && d.online !== false && !busy.has(d.id) && Date.now() - (d.lastSeen || 0) < 12 * 3600e3 && inReach(r, d, 0));
     const body = (r.from && r.from.label ? r.from.label : "") + " ← " + (r.to && r.to.label ? r.to.label : "") + " · " + r.fare + " ج";
     await Promise.all(list.map((d) => pushTo(env, "driver", l10(d.phone), { kind: "request", title: "طلب جديد · " + r.fare + " ج", body, url: "/driver.html", tag: "req" })));
   } catch (e) {}
@@ -362,6 +394,12 @@ async function createRequest(env, b, source) {
       const used = mine.filter((r) => r.refCredit && r.status !== "cancelled").length;
       if (earned > used) refDiscount = REF_OFF;
     }
+  }
+  /* نظام الرصيد للراكب: لو شغال ورصيده أقل من رسم المشوار، مايقدرش يطلب من التطبيق (طلب التليفون من الإدارة بيعدّي) */
+  if (source === "app") {
+    const sc = await subCfg(env);
+    const w = await riderWallet(env, b.forOther ? digits(b.bookerPhone) : phone, sc);
+    if (w.state === "stopped") return { error: "رصيدك خلص — اشحن من الإدارة أو الوكيل علشان تطلب", status: 403 };
   }
   const discount = Math.min(refDiscount, fare - 5 > 0 ? refDiscount : 0);
   fare -= discount;
@@ -464,6 +502,10 @@ export async function onRequest({ request, env, params }) {
       if (!r) return json({ error: "طلب غير موجود" }, 404);
       if (!r.token || !safeEqual(url.searchParams.get("token"), r.token))
         return json({ error: "غير مصرّح" }, 401);
+      if (r.status === "pending" && Date.now() - openAt(r) >= CLAIM_WINDOW_MS) {
+        r.status = "cancelled"; r.cancelReason = "expired"; r.cancelledBy = "system"; r.cancelledAt = Date.now();
+        await putDoc(env, "requests", r.id, r);
+      }
       let driver = null, driverLoc = null;
       if (r.driverId && r.status === "assigned") {
         const d = await getDoc(env, "drivers", r.driverId);
@@ -505,6 +547,7 @@ export async function onRequest({ request, env, params }) {
       const r = await getDoc(env, "requests", str(b.id, 40));
       if (!r || !r.token || !safeEqual(b.token, r.token)) return json({ error: "غير مصرّح" }, 401);
       if (r.status === "done" || r.status === "cancelled") return json({ ok: true, status: r.status });
+      if (r.startedAt) return json({ error: "الرحلة بدأت خلاص — مينفعش تتلغي" }, 409);
       const reason = ["changed", "late", "noshow", "wrong", "other"].includes(b.reason) ? b.reason : "other";
       if (r.driverId && (reason === "late" || reason === "noshow")) {
         const d = await getDoc(env, "drivers", r.driverId);
@@ -689,6 +732,14 @@ export async function onRequest({ request, env, params }) {
       return json({ ok: true });
     }
 
+    /* رصيد الشحن للراكب — بيرجّع free طول ما النظام مقفول أو في الفترة المجانية */
+    if (route === "wallet" && method === "GET") {
+      const phone = digits(url.searchParams.get("phone"));
+      if (phone.length < 9) return json({ error: "رقم غير صحيح" }, 400);
+      const w = await riderWallet(env, phone, await subCfg(env));
+      return json(w.state === "low" || w.state === "stopped" ? { state: w.state, credit: w.credit, fee: w.fee } : { state: "free" });
+    }
+
     /* رصيد الدعوات للراكب */
     if (route === "referral" && method === "GET") {
       const phone = digits(url.searchParams.get("phone"));
@@ -792,6 +843,7 @@ export async function onRequest({ request, env, params }) {
       if (!me) return json({ error: "غير مصرّح" }, 401);
       const sc = await subCfg(env);
       const ss = subState(me, sc);
+      if (!me.joinedAt && !me.createdAt) { me.joinedAt = Date.now(); await putDoc(env, "drivers", me.id, me); }
       /* السائق اللي اشتراكه وقف يقدر يفتح الصفحة ويشوف الرسالة، بس مايقدرش ياخد مشاوير */
       if (ss.state === "stopped" && !(method === "GET") && sub !== "online" && sub !== "loc" && sub !== "finish" && sub !== "start") return json({ error: "رصيدك خلص — اشحن من الإدارة علشان تاخد مشاوير" }, 403);
 
@@ -837,12 +889,16 @@ export async function onRequest({ request, env, params }) {
         const open = (me.online === false || mine || blocked) ? [] : requests
           .filter((r) => r.status === "pending" && now >= openAt(r) && now - openAt(r) < CLAIM_WINDOW_MS)
           .filter((r) => !(r.skipDrivers || []).includes(me.id))
+          .filter((r) => inReach(r, me, now - openAt(r)))
           .filter((r) => now - openAt(r) >= PRIORITY_MS || zones.includes(r.from && r.from.zoneId));
-        const available = open
+        /* مشوار واحد بس: لو عنده مشوار شغال مابيشوفش طلبات تانية. والطلبات مترتبة من الأقرب لمكانه */
+        const myLoc = me.loc && now - me.loc.at < LOC_FRESH_MS ? me.loc : null;
+        const far = (r) => myLoc && r.from && isFinite(+r.from.lat) ? meters(r.from, myLoc) : Infinity;
+        const available = (mineFull ? [] : open)
           .filter((r) => !heading || (r.to && r.to.zoneId === heading.zoneId))
-          .sort((a, b) => openAt(b) - openAt(a))
+          .sort((a, b) => (far(a) - far(b)) || (openAt(b) - openAt(a)))
           .slice(0, 20)
-          .map(teaser);
+          .map((r) => ({ ...teaser(r), distM: isFinite(far(r)) ? Math.round(far(r)) : null }));
         const hidden = open.length - available.length;
 
         const done = requests.filter((r) => r.driverId === me.id && r.status === "done" && r.day === todayStr());
@@ -976,6 +1032,17 @@ export async function onRequest({ request, env, params }) {
           fresh.credit = +((+(fresh.credit || 0)) - sc.fee).toFixed(2);
           fresh.creditUsed = +((+(fresh.creditUsed || 0)) + sc.fee).toFixed(2);
           await putDoc(env, "drivers", me.id, fresh);
+          /* نفس الرسم من رصيد الراكب (صاحب الحساب اللي طلب) — مش بيتضاف على الأجرة */
+          if (r.source === "app") {
+            const rk = riderKey(r.bookerPhone || r.riderPhone);
+            if (rk.length >= 9) {
+              const rd = (await getDoc(env, "riders", rk)) || { id: rk, phone: r.bookerPhone || r.riderPhone, name: r.riderName };
+              rd.credit = +((+(rd.credit || 0)) - sc.fee).toFixed(2);
+              rd.creditUsed = +((+(rd.creditUsed || 0)) + sc.fee).toFixed(2);
+              await putDoc(env, "riders", rk, rd);
+              next.riderFee = sc.fee;
+            }
+          }
         }
         await putDoc(env, "requests", rid, next);
         if (next.status === "done") { try { await pushFam(env, r.bookerPhone || r.riderPhone, { type: "done", requestId: r.id, to: r.to && r.to.label }, true); } catch (e) {} }

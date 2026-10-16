@@ -313,11 +313,15 @@
     }
     lastIds = ids;
 
-    host.innerHTML = list.map(function(j){
+    var prevSeen = window.__seenJobs || {}; window.__seenJobs = {};
+    list.forEach(function(j){ window.__seenJobs[j.id] = 1; });
+    host.innerHTML = list.map(function(j, idx){
       var when = j.scheduledAt ? new Date(j.scheduledAt).toLocaleTimeString("ar-EG", { hour:"numeric", minute:"2-digit" }) : "";
-      return '<div class="job">'
+      return '<div class="job' + (prevSeen[j.id] ? '' : ' is-new') + (idx === 0 && j.distM != null ? ' is-near' : '') + '" style="--i:' + idx + '">'
+        + (idx === 0 && j.distM != null ? '<span class="job-near">الأقرب ليك</span>' : '')
         + '<div class="head"><span class="price">' + j.fare + '<small> ج</small></span>'
         + '<span class="chip c-neutral">' + (j.sameZone ? "داخل المنطقة" : "بين منطقتين") + '</span>'
+        + (j.distM != null ? '<span class="chip c-accent num">' + (j.distM < 1000 ? j.distM + ' م منك' : (j.distM/1000).toFixed(1) + ' كم منك') + '</span>' : '')
         + (when ? '<span class="chip c-warn">محجوز ' + when + '</span>' : '')
         + (j.forOther ? '<span class="chip c-neutral">لحد تاني</span>' : '')
         + '<span class="ago" data-ago="' + TT.esc(j.id) + '">' + TT.timeAgo(j.createdAt) + '</span></div>'
@@ -372,12 +376,7 @@
     if(r.to && r.to.lat != null){ rLayers.push(L.marker([r.to.lat, r.to.lng], { icon:TT.markerIcon("#BC4E1E", true) }).addTo(rMap)); pts.push([r.to.lat, r.to.lng]); }
     if(pts.length) rMap.fitBounds(pts, { padding:[36,36], maxZoom:17 });
     if(rRoute){ rMap.removeLayer(rRoute); rRoute = null; } rr = { at:0 }; rideEta("");
-    if(pts.length === 2){
-      TT.route(r.from, r.to).then(function(rt){
-        if(rMapId !== r.id) return;
-        rLayers.push(TT.animRoute(rMap, rt.coords, "#0E7566"));
-      });
-    }
+    /* مسار واحد بس: قبل الركوب من مكانك للراكب، وبعد الركوب من مكانك للوجهة (updRoute بترسمه من الـ GPS) */
     if(!navigator.geolocation){ rideEta("الموبايل ده مش بيدعم تحديد المكان"); }
     else if(watchId == null){
       watchId = navigator.geolocation.watchPosition(function(p){
@@ -505,7 +504,7 @@
     baJob = job.id; baLeft = BA_SECS;
     $("baFare").textContent = job.fare;
     $("baFrom").textContent = job.from.label; $("baTo").textContent = job.to.label;
-    $("baChip").textContent = (job.sameZone ? "داخل المنطقة" : "بين منطقتين") + (job.scheduledAt ? " · محجوز" : "");
+    $("baChip").textContent = (job.distM != null ? (job.distM < 1000 ? job.distM + " م منك · " : (job.distM/1000).toFixed(1) + " كم منك · ") : "") + (job.sameZone ? "داخل المنطقة" : "بين منطقتين") + (job.scheduledAt ? " · محجوز" : "");
     $("baTake").setAttribute("data-take", job.id); $("baTake").disabled = false; $("baTake").textContent = "خد المشوار";
     $("bigAlert").hidden = false; paintBig();
     /* بيقرا الطلب بصوت عالي بعد النغمة — للسواقين اللي مش بيقروا بسهولة */
@@ -580,20 +579,12 @@
 
       var sb = j.sub || {}, W = $("subWarn");
       function fmt(s){ return s ? new Date(s + "T00:00:00").toLocaleDateString("ar-EG", { day:"numeric", month:"long" }) : ""; }
-      W.hidden = false;
-      if(sb.state === "free"){
-        W.className = "banner b-note";
-        W.innerHTML = '<span>★</span><span><b>المحطة مجانية دلوقتي</b>' + (sb.until ? ' لحد ' + fmt(sb.until) + '. بعدها ' + sb.fee + ' ج بس عن كل مشوار بتخلّصه، من رصيد بتشحنه.' : ' — مفيش رسوم.') + '</span>';
-      } else if(sb.state === "ok"){
-        W.className = "banner b-note";
-        W.innerHTML = '<span>◆</span><span>رصيدك <b>' + sb.credit + ' ج</b> — يكفي حوالي ' + sb.trips + ' مشوار (' + sb.fee + ' ج للمشوار).</span>';
-      } else if(sb.state === "low"){
-        W.className = "banner b-warn";
-        W.innerHTML = '<span>⚠</span><span>رصيدك قرب يخلص: <b>' + sb.credit + ' ج</b> (' + sb.trips + ' مشوار بس). اشحن من الإدارة أو الوكيل.</span>';
-      } else if(sb.state === "stopped"){
-        W.className = "banner b-crit";
-        W.innerHTML = '<span>⚠</span><span><b>رصيدك خلص — الطلبات وقفت.</b> اشحن من الإدارة أو الوكيل وهترجع تشتغل على طول.</span>';
-      } else W.hidden = true;
+      /* البانر بيظهر بس لما الرصيد يوصل ٥ ج أو يخلص. في الفترة المجانية أو والرصيد كويس: مفيش أي حاجة ظاهرة */
+      W.hidden = !(sb.state === "low" || sb.state === "stopped");
+      if(!W.hidden){
+        W.className = ""; W.style.cssText = "display:flex;align-items:center;gap:6px;width:max-content;max-width:100%;margin:0 auto 8px;padding:4px 12px;border-radius:999px;font-size:12.5px;line-height:1.5;" + (sb.state === "low" ? "background:#F6EBCE;color:#5E4504" : "background:#F6DDD9;color:#7A2219");
+        W.innerHTML = sb.state === "low" ? '<b class="num">رصيدك ' + sb.credit + ' ج</b><span>· اشحن قريب</span>' : '<b>رصيدك خلص</b><span>· اشحن علشان الطلبات ترجع</span>';
+      }
 
       /* المشوار اختفى من غير ما السائق يخلّصه = الراكب أو الإدارة لغوه */
       if(window.__mhRide && !j.mine && !window.__mhFinishing){ TT.sound("cancel"); try{ navigator.vibrate && navigator.vibrate([200,100,200]); }catch(e){} TT.toast("الراكب لغى المشوار"); }

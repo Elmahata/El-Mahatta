@@ -41,7 +41,7 @@
   <div id="app" hidden>
     <div class="tabs" role="tablist">
       <button data-tab="earn" aria-selected="true">أرباحي</button>
-      <button data-tab="sub" aria-selected="false">اشتراكي</button>
+      <button data-tab="sub" aria-selected="false" hidden>رصيدي</button>
       <button data-tab="zones" aria-selected="false">مناطقي</button>
       <button data-tab="heading" aria-selected="false">رايح ناحية</button>
     </div>
@@ -146,6 +146,9 @@
   function fmt(s){ return s ? new Date(s + "T00:00:00").toLocaleDateString("ar-EG", { day:"numeric", month:"long", year:"numeric" }) : ""; }
   function renderSub(){
     var sb = (stats && stats.sub) || {}, c = $("subCard");
+    /* تبويب «رصيدي» مخفي طول الـ ٣ شهور المجانية، وبيظهر لوحده بعدها */
+    var tb = document.querySelector('[data-tab="sub"]'); if(tb) tb.hidden = sb.state === "free" || !sb.state;
+    if(sb.state === "free" || !sb.state) return;
     c.style.background = sb.state === "stopped" ? "var(--crit)" : sb.state === "low" ? "var(--warn)" : "var(--accent)";
     c.style.color = "#fff"; c.style.textAlign = "center";
     var big = sb.state === "free" ? "مجاني" : (sb.credit || 0) + " ج";

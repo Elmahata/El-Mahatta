@@ -108,24 +108,49 @@
         var q = function (k) { return c.box.querySelector('[data-k="' + k + '"]'); };
         q("av").textContent = (st.peer || "؟").charAt(0); q("nm").textContent = st.peer || "";
         q("lb").textContent = label;
-        var B = function (k, txt, bg) { return '<button data-a="' + k + '" style="width:72px;height:72px;border-radius:50%;border:0;background:' + bg + ';color:#fff;font:700 13px var(--body);cursor:pointer">' + txt + '</button>'; };
+        var IC = { end:'<path d="M3 15c5-4 13-4 18 0l-2 3-4-1v-3c-2-.6-4-.6-6 0v3l-4 1z" fill="currentColor"/>', yes:'<path d="M5 3h4l2 5-3 2a12 12 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A18 18 0 0 1 3 5a2 2 0 0 1 2-2z" fill="currentColor"/>',
+          mute: c.muted ? '<path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v4M3 3l18 18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>' : '<path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3zM5 11a7 7 0 0 0 14 0M12 18v4" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>',
+          spk:'<path d="M4 9h4l5-4v14l-5-4H4z" fill="currentColor"/>' + (c.spk ? '<path d="M16 8a5 5 0 0 1 0 8M19 5a9 9 0 0 1 0 14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"/>' : '') };
+        IC.no = IC.end;
+        var B = function (k, txt, bg, on) { return '<div style="display:flex;flex-direction:column;align-items:center;gap:8px"><button data-a="' + k + '" aria-label="' + txt + '" aria-pressed="' + (on ? 'true' : 'false') + '" style="width:72px;height:72px;border-radius:50%;border:0;background:' + bg + ';color:' + (on ? '#131E1C' : '#fff') + ';cursor:pointer;display:grid;place-items:center;transition:transform .15s"><svg viewBox="0 0 24 24" width="30" height="30">' + IC[k] + '</svg></button><span style="font:600 13px var(--body);color:#D6EBE6">' + txt + '</span></div>'; };
+        var spkB = B("spk", "سبيكر", c.spk ? "#fff" : "#2B3633", c.spk);
         q("act").innerHTML = state === "ringing" ? B("no", "رفض", "#A9382B") + B("yes", "رد", "#1C7449")
-          : state === "live" ? B("mute", c.muted ? "صوت" : "كتم", "#2B3633") + B("end", "إنهاء", "#A9382B")
-          : B("end", "إنهاء", "#A9382B");
+          : state === "live" ? B("mute", c.muted ? "مكتوم" : "كتم", c.muted ? "#fff" : "#2B3633", c.muted) + spkB + B("end", "قفل الخط", "#A9382B")
+          : spkB + B("end", "قفل الخط", "#A9382B");
         q("act").onclick = function (e) {
           var a = e.target.closest("[data-a]"); if (!a) return; a = a.getAttribute("data-a");
           if (a === "yes") answer(); else if (a === "no") { sig("decline"); hang(false); }
           else if (a === "mute") { c.muted = !c.muted; c.local && c.local.getAudioTracks().forEach(function (t) { t.enabled = !c.muted; }); ui("live", q("lb").textContent); }
+          else if (a === "spk") speaker(state, q("lb").textContent);
           else if (a === "end") hang(true);
         };
       }
-      function ring(on) {
+  /* السبيكر: بيحاول يحوّل الصوت لسماعة الموبايل الخارجية. لو الموبايل مش بيسمح، بيعلّي الصوت للآخر */
+      function speaker(state, lb) {
+        var c = st.call; if (!c) return;
+        c.spk = !c.spk;
+        var au = c.box && c.box.querySelector("audio");
+        if (au) {
+          au.volume = c.spk ? 1 : .7;
+          if (au.setSinkId && navigator.mediaDevices && navigator.mediaDevices.enumerateDevices) {
+            navigator.mediaDevices.enumerateDevices().then(function (ds) {
+              var outs = ds.filter(function (d) { return d.kind === "audiooutput"; });
+              var sp = outs.find(function (d) { return /speaker|سماعة/i.test(d.label); }) || outs.find(function (d) { return d.deviceId === "default"; });
+              var ear = outs.find(function (d) { return /earpiece|receiver|handset/i.test(d.label); });
+              var pick = c.spk ? sp : (ear || outs.find(function (d) { return d.deviceId === "communications"; }));
+              if (pick) au.setSinkId(pick.deviceId).catch(function () {});
+            }).catch(function () {});
+          }
+        }
+        ui(state, lb);
+      }
+      function ring(on, back) {
         var c = st.call; if (!c) return;
         clearInterval(c.ringT);
         if (!on) return;
         var beep = function () {
-          try { navigator.vibrate && navigator.vibrate([300, 150, 300]); } catch (e) {}
-          try { var A = c.ac || (c.ac = new (global.AudioContext || global.webkitAudioContext)()); var g = A.createGain(), osc = A.createOscillator(); osc.frequency.value = 660; g.gain.value = .12; osc.connect(g); g.connect(A.destination); osc.start(); osc.stop(A.currentTime + .5); } catch (e) {}
+          if (!back) { try { navigator.vibrate && navigator.vibrate([300, 150, 300]); } catch (e) {} }
+          try { var A = c.ac || (c.ac = new (global.AudioContext || global.webkitAudioContext)()); var g = A.createGain(), osc = A.createOscillator(); osc.frequency.value = back ? 425 : 660; g.gain.value = back ? .07 : .12; osc.connect(g); g.connect(A.destination); osc.start(); osc.stop(A.currentTime + (back ? 1 : .5)); } catch (e) {}
         };
         beep(); c.ringT = setInterval(beep, 1800);
       }
@@ -146,7 +171,7 @@
       function startCall() {
         if (st.call) return;
         st.call = { id: Math.random().toString(36).slice(2, 10), role: "caller" };
-        ui("calling", "بيرن…"); loop();
+        ui("calling", "بيرن…"); ring(true, true); loop();
         Promise.all([mic(), ice()]).then(function (r) {
           var c = st.call; if (!c) { r[0].getTracks().forEach(function (t) { t.stop(); }); return; }
           c.local = r[0]; c.pc = newPc(r[1]);

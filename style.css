@@ -333,3 +333,17 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px color-mix(in oklab,
 .mh-rate-x:active{transform:scale(.9);background:#EFC9C3}
 .mh-rate-av{width:64px;height:64px;font-size:24px;margin-bottom:4px;border:3px solid var(--surface);box-shadow:0 6px 16px -6px rgba(0,0,0,.35)}
 #stars button:active{transform:scale(1.25)}
+
+/* ===== كروت الطلبات عند السائق ===== */
+@keyframes mh-jobin{0%{opacity:0;transform:translateY(18px) scale(.97)}60%{opacity:1;transform:translateY(-3px) scale(1.01)}100%{transform:none}}
+@keyframes mh-jobglow{0%{box-shadow:0 0 0 0 rgba(14,117,102,.55)}70%{box-shadow:0 0 0 14px rgba(14,117,102,0)}100%{box-shadow:0 0 0 0 rgba(14,117,102,0)}}
+@keyframes mh-jobshine{from{transform:translateX(160%) skewX(-20deg)}to{transform:translateX(-260%) skewX(-20deg)}}
+@keyframes mh-nearpulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+#jobs .job{position:relative;overflow:hidden;animation:mh-jobin .5s var(--ease-out) both;animation-delay:calc(var(--i,0) * 60ms)}
+#jobs .job.is-new{animation:mh-jobin .55s var(--ease-spring) both, mh-jobglow 1.4s .3s ease-out 2;animation-delay:calc(var(--i,0) * 60ms), calc(var(--i,0) * 60ms + .3s);border-color:var(--accent)}
+#jobs .job.is-new::after{content:"";position:absolute;top:0;bottom:0;left:0;width:36%;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,255,255,.65),transparent);animation:mh-jobshine 1s .35s ease-in-out both}
+#jobs .job.is-near{border:2px solid var(--accent);background:linear-gradient(180deg,color-mix(in oklab,var(--accent-soft) 55%,var(--surface)),var(--surface) 60%)}
+#jobs .job-near{position:absolute;top:0;inset-inline-start:0;background:var(--accent);color:#fff;font:700 11.5px var(--body);padding:3px 10px;border-end-end-radius:10px;animation:mh-nearpulse 1.8s ease-in-out infinite}
+#jobs .job.is-near .head{padding-top:14px}
+#jobs .job .price{display:inline-block}
+#jobs .job.is-new .price{animation:mh-pop .5s .25s var(--ease-spring) both}

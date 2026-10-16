@@ -135,7 +135,7 @@
           week: cfgDoc && cfgDoc.week != null ? cfgDoc.week : 30,
           month: cfgDoc && cfgDoc.month != null ? cfgDoc.month : 100,
           grace: cfgDoc && cfgDoc.grace != null ? cfgDoc.grace : 3,
-          creditOn: Boolean(cfgDoc && cfgDoc.creditOn), creditFrom: (cfgDoc && cfgDoc.creditFrom) || "",
+          creditPaused: Boolean(cfgDoc && cfgDoc.creditPaused),
           tripFee: cfgDoc && +cfgDoc.tripFee > 0 ? +cfgDoc.tripFee : 1,
           adminPhone: (cfgDoc && cfgDoc.adminPhone) || "",
         },
@@ -311,17 +311,8 @@
       });
     } catch (e) {}
   };
-  /* صوت بيقرا الكلام بالعربي (لو الموبايل فيه صوت عربي) */
-  T.say = function (text) {
-    if (!T.soundOn() || !global.speechSynthesis) return;
-    try {
-      var u = new SpeechSynthesisUtterance(text), vs = speechSynthesis.getVoices();
-      var v = vs.filter(function (x) { return /^ar[-_]EG/i.test(x.lang); })[0] || vs.filter(function (x) { return /^ar/i.test(x.lang); })[0];
-      if (v) u.voice = v; u.lang = v ? v.lang : "ar-EG"; u.rate = .95;
-      speechSynthesis.cancel(); speechSynthesis.speak(u);
-    } catch (e) {}
-  };
-  if (global.speechSynthesis) try { speechSynthesis.getVoices(); } catch (e) {}
+  /* الكلام المنطوق متشال دلوقتي — الجمل بتظهر مكتوبة بس. الدالة فاضية علشان أي مكان بيناديها مايعملش غلط */
+  T.say = function () {};
   /* أول دوسة في الصفحة بتفتح الصوت (أندرويد بيمنع الصوت قبل أي دوسة) */
   document.addEventListener("pointerdown", function un() { try { var A = global.AudioContext || global.webkitAudioContext; sctx = sctx || new A(); sctx.resume(); } catch (e) {} document.removeEventListener("pointerdown", un, true); }, true);
 

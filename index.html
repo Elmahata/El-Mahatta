@@ -272,7 +272,8 @@ html,body{height:100%;overflow:hidden}
     <a class="btn btn-ghost btn-wide" id="shareTrip" target="_blank" rel="noopener" href="#" style="margin-top:8px">شارك رحلتك مع أهلك</a>
     <button class="btn btn-wide" id="sosBtn" type="button" style="margin-top:8px;background:#FBE9E6;color:#A9382B;border:1px solid #F0C6BF;font-weight:700">⚠ طوارئ</button>
     <p class="hint" style="margin-top:12px;text-align:center">استنّى في مكانك، وادفع <b id="dFare2"></b> جنيه نقداً عند الوصول.</p>
-    <button class="btn btn-ghost btn-wide" id="newRide" style="margin-top:10px">اطلب رحلة تانية</button>
+    <button class="btn btn-wide" id="riderCancel" type="button" style="margin-top:10px;background:var(--surface);color:#A9382B;border:1.5px solid #F0C6BF;font-weight:700">الغي الطلب</button>
+    <button class="btn btn-ghost btn-wide" id="newRide" style="margin-top:10px" hidden>اطلب رحلة تانية</button>
     <button class="linkbtn" data-report>السائق طلب أكتر من السعر؟ بلّغ</button>
   </section>
 
@@ -456,17 +457,21 @@ html,body{height:100%;overflow:hidden}
     $("locate").hidden = !(picking && mapMode);
 
     if(picking){
-      $("pickTitle").textContent = (s === "from") ? "فين هتركب؟" : "رايح فين؟";
+      $("pickTitle").textContent = (s === "from") ? "هتركب منين؟" : "رايح فين؟";
       $("pickDot").style.background = (s === "from") ? "var(--accent)" : "var(--fare)";
       $("confirmPick").textContent = (s === "from") ? "تأكيد مكان الركوب" : "تأكيد الوجهة";
       $("backPick").hidden = (s === "from");
       $("gpsPick").hidden = (s !== "from");
       $("pinBody").setAttribute("fill", (s === "from") ? "#0E7566" : "#BC4E1E");
-      renderQuick(true);
-      $("listMode").hidden = mapMode; $("mapMode").hidden = !mapMode;
-      $("pickHint").textContent = mapMode ? "حرّك الخريطة لحد ما الدبوس يبقى على المكان بالظبط" : "اختار من القايمة، والخريطة هتوريك المشوار";
-      $("plSearch").value = ""; renderList();
-      if(mapMode) updatePick();
+      /* مكان الركوب: من موقعي (GPS) بس دلوقتي. القايمة والخريطة للوجهة بس */
+      var gpsOnly = (s === "from");
+      if(gpsOnly) mapMode = false;
+      $("pin").hidden = !(mapMode && !gpsOnly); $("pinShadow").hidden = $("pin").hidden; $("locate").hidden = $("pin").hidden;
+      $("quick").hidden = gpsOnly; if(!gpsOnly) renderQuick(true);
+      $("listMode").hidden = gpsOnly || mapMode; $("mapMode").hidden = gpsOnly || !mapMode;
+      $("pickHint").textContent = gpsOnly ? "دوس الزرار، والسائق هيجيلك على مكانك بالظبط" : mapMode ? "حرّك الخريطة لحد ما الدبوس يبقى على المكان بالظبط" : "اكتب أو اختار المكان اللي رايحه";
+      $("plSearch").value = ""; if(!gpsOnly) renderList();
+      if(mapMode && !gpsOnly) updatePick();
     }
     if(s === "confirm"){ renderConfirm(); updMore(); if(!$("rName").value.trim() || !$("rPhone").value.trim()) $("moreOpts").open = true; }
     drawAll();
@@ -653,12 +658,13 @@ html,body{height:100%;overflow:hidden}
           drawLive(j);
           $("lateBox").hidden = !(j.assignedAt && !j.startedAt && !j.arrivedAt && Date.now() - j.assignedAt > 15 * 6e4);
           arrAt = j.startedAt ? 0 : (j.arrivedAt || 0);
+          $("riderCancel").hidden = Boolean(j.startedAt);
           if(arrAt && arrSeen !== j.id){ arrSeen = j.id; arrivedAlert(j); }
           arrPaint();
         } else if(j.status === "done"){
           stopPoll(); saveLive(null); clearLive();
           histUpdate(j.id, { status:"done", fare:j.fare });
-          TT.sound("done");
+          TT.sound("done"); setTimeout(checkWallet, 1500);
           $("endTitle").textContent = "تمّت الرحلة ✓";
           $("endMsg").textContent = "شكراً لاستخدامك المحطة.";
           rateFor = reportFor; stars = 0; paintStars();
@@ -675,8 +681,8 @@ html,body{height:100%;overflow:hidden}
           stopPoll(); saveLive(null); clearLive();
           histUpdate(j.id, { status:"cancelled" });
           TT.sound("cancel");
-          $("endTitle").textContent = "الطلب اتلغى";
-          $("endMsg").textContent = j.cancelReason === "noshow" ? "السائق وصل واستنّاك ٣ دقايق، والمشوار اتلغى. تقدر تطلب تاني في أي وقت." : "تقدر تطلب تاني في أي وقت.";
+          $("endTitle").textContent = j.cancelReason === "expired" ? "معلش، مالقيناش توكتوك فاضي" : "الطلب اتلغى";
+          $("endMsg").textContent = j.cancelReason === "expired" ? "عدّى ١٠ دقايق ومحدش من السواقين القريبين أخد الطلب. جرّب تطلب تاني كمان شوية." : j.cancelReason === "noshow" ? "السائق وصل واستنّاك ٣ دقايق، والمشوار اتلغى. تقدر تطلب تاني في أي وقت." : "تقدر تطلب تاني في أي وقت.";
           setStep("ended");
         } else {
           var mins = Math.round((Date.now() - (j.createdAt||Date.now()))/6e4);
@@ -831,7 +837,7 @@ html,body{height:100%;overflow:hidden}
     function finish(){
       if(done) return; done = true; navigator.geolocation.clearWatch(w); clearTimeout(t);
       b.disabled = false; $("gpsTxt").textContent = "اركب من موقعي دلوقتي (GPS)";
-      if(!best){ TT.toast("مش قادرين نحدد مكانك — شغّل الـ GPS أو اختار من القايمة"); return; }
+      if(!best){ gpsHelp(); return; }
       var ll = L.latLng(best.latitude, best.longitude), d = describe(ll);
       map.setView(ll, 18);
       TT.reverse(ll.lat, ll.lng).then(function(name){
@@ -843,10 +849,26 @@ html,body{height:100%;overflow:hidden}
     /* بنستنى لحد ٨ ثواني علشان ناخد أدق قراءة (أحسن من ٢٠ متر بنوقف على طول) */
     var w = navigator.geolocation.watchPosition(function(p){
       if(!best || p.coords.accuracy < best.accuracy) best = p.coords;
+      var gh = document.getElementById("gpsHelp"); if(gh) gh.remove();
       if(best.accuracy <= 20) finish();
     }, function(){ finish(); }, { enableHighAccuracy:true, maximumAge:0, timeout:15000 });
     var t = setTimeout(finish, 8000);
   });
+
+  /* لو الـ GPS قافل أو التطبيق مش مسموحله بالمكان: رسالة بالخطوات */
+  function gpsHelp(){
+    var old = document.getElementById("gpsHelp"); if(old) old.remove();
+    var el = document.createElement("div"); el.id = "gpsHelp"; el.setAttribute("role","alert");
+    el.className = "banner b-warn"; el.style.cssText = "margin:8px 0;flex-direction:column;align-items:stretch;gap:6px";
+    el.innerHTML = '<b>محتاجين مكانك علشان السائق يوصلك</b>'
+      + '<span>١) انزل من فوق الشاشة وشغّل <b>الموقع (GPS)</b>.</span>'
+      + '<span>٢) لو سألك التطبيق عن المكان، دوس <b>سماح</b>.</span>'
+      + '<span>٣) لو مسألكش: اضغط على أيقونة المحطة كتير ← <b>معلومات التطبيق</b> ← <b>الأذونات</b> ← <b>الموقع</b> ← <b>السماح أثناء الاستخدام</b>.</span>'
+      + '<button class="btn btn-primary btn-sm" type="button" style="margin-top:4px">جرّب تاني</button>';
+    el.querySelector("button").addEventListener("click", function(){ el.remove(); $("gpsPick").click(); });
+    $("gpsPick").insertAdjacentElement("afterend", el);
+    TT.sound && TT.sound("error");
+  }
 
   $("confirmPick").addEventListener("click", function(){
     var c = map.getCenter(), d = describe(c);
@@ -991,6 +1013,14 @@ html,body{height:100%;overflow:hidden}
     riderCancel("late", true).then(function(){ $("lateBox").hidden = true; setStep("search"); TT.toast("الطلب رجع للسواقين ✓"); })
       .catch(function(e){ TT.toast(e.message); }).then(function(){ b.disabled = false; });
   });
+  $("riderCancel").addEventListener("click", function(){
+    if(!confirm("متأكد إنك عايز تلغي الطلب؟ السائق هيتبلّغ.")) return;
+    var b = this; b.disabled = true;
+    riderCancel("changed").then(function(){
+      TT.sound("cancel"); TT.toast("الطلب اتلغى");
+      stopPoll(); saveLive(null); clearLive(); reset();
+    }).catch(function(e){ TT.toast(e.message); }).then(function(){ b.disabled = false; });
+  });
   $("lateCancel").addEventListener("click", function(){
     if(!confirm("تلغي الطلب؟")) return;
     riderCancel("noshow").then(function(){ TT.toast("اتلغى"); }).catch(function(e){ TT.toast(e.message); });
@@ -1074,7 +1104,22 @@ html,body{height:100%;overflow:hidden}
     TT.riderGate(getJSON(ME, {}), function(me){
       setJSON(ME, me);
       if(!forOther){ $("rName").value = me.name; $("rPhone").value = me.phone; }
+      checkWallet();
     });
+    checkWallet();
+  }
+  /* رصيد الراكب: مخفي تماماً في الفترة المجانية. بيظهر بانر صغير بس لما يوصل ٥ ج أو يخلص */
+  function checkWallet(){
+    var me = getJSON(ME, {}); if(!me.phone) return;
+    TT.api("wallet?phone=" + encodeURIComponent(me.phone), { retry:false }).then(function(w){
+      var el = document.getElementById("walletPill");
+      if(!(w.state === "low" || w.state === "stopped")){ if(el) el.remove(); return; }
+      if(!el){ el = document.createElement("div"); el.id = "walletPill"; el.setAttribute("role","status");
+        el.style.cssText = "position:fixed;left:50%;transform:translateX(-50%);top:calc(64px + env(safe-area-inset-top,0px));z-index:450;display:flex;align-items:center;gap:6px;width:max-content;max-width:100%;padding:4px 12px;border-radius:999px;font-size:12.5px;line-height:1.5;box-shadow:0 4px 14px -6px rgba(0,0,0,.3)";
+        document.body.appendChild(el); }
+      el.style.background = w.state === "low" ? "#F6EBCE" : "#F6DDD9"; el.style.color = w.state === "low" ? "#5E4504" : "#7A2219";
+      el.innerHTML = w.state === "low" ? '<b class="num">رصيدك ' + w.credit + ' ج</b><span>· اشحن قريب</span>' : '<b>رصيدك خلص</b><span>· اشحن من الإدارة أو الوكيل</span>';
+    }).catch(function(){});
   }
   var role = ""; try { role = localStorage.getItem("mh-role") || ""; } catch(e){}
   if(role === "rider") openRider();
