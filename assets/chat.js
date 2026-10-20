@@ -32,7 +32,8 @@
         if (!st.alive) return;
         api(o, "GET", null, st.after).then(function (j) {
           st.me = j.me; st.peer = j.peer; st.open = j.open;
-          j.m.forEach(function (m) { st.msgs.push(m); st.after = Math.max(st.after, m.at); });
+          st.ids = st.ids || {};
+          j.m.forEach(function (m) { st.after = Math.max(st.after, m.at); if (m.i && st.ids[m.i]) return; if (m.i) st.ids[m.i] = 1; st.msgs.push(m); });
           var hadNew = j.m.some(function (m) { return m.f !== st.me && !m.sys; });
           if (hadNew) { if (TT.sound) TT.sound("msg"); if (!st.sheet) { try { navigator.vibrate && navigator.vibrate(120); } catch (e) {} } }
           j.s.forEach(function (s) { st.after = Math.max(st.after, s.at); onSig(s, j.now); });
@@ -154,6 +155,8 @@
         };
         beep(); c.ringT = setInterval(beep, 1800);
       }
+      /* الـ SDP لازم كل سطر فيه يخلص بـ \r\n — لو اتشال من الآخر المكالمة بتبوظ */
+      function fixSdp(x) { x = String(x || "").replace(/\r?\n/g, "\r\n"); return /\r\n$/.test(x) ? x : x + "\r\n"; }
       function newPc(cfg) {
         var c = st.call, pc = new RTCPeerConnection(cfg);
         pc.ontrack = function (e) { var au = c.box && c.box.querySelector("audio"); if (au) au.srcObject = e.streams[0]; };
@@ -171,9 +174,10 @@
       function startCall() {
         if (st.call) return;
         st.call = { id: Math.random().toString(36).slice(2, 10), role: "caller" };
-        ui("calling", "بيرن…"); ring(true, true); loop();
+        ui("calling", "بنجهّز المايك…"); loop();
         Promise.all([mic(), ice()]).then(function (r) {
           var c = st.call; if (!c) { r[0].getTracks().forEach(function (t) { t.stop(); }); return; }
+          ui("calling", "بيرن…"); ring(true, true);
           c.local = r[0]; c.pc = newPc(r[1]);
           c.local.getTracks().forEach(function (t) { c.pc.addTrack(t, c.local); });
           return c.pc.createOffer().then(function (of) { return c.pc.setLocalDescription(of); })
@@ -188,11 +192,11 @@
         Promise.all([mic(), ice()]).then(function (r) {
           c.local = r[0]; c.pc = newPc(r[1]);
           c.local.getTracks().forEach(function (t) { c.pc.addTrack(t, c.local); });
-          return c.pc.setRemoteDescription({ type: "offer", sdp: c.offer })
+          return c.pc.setRemoteDescription({ type: "offer", sdp: fixSdp(c.offer) })
             .then(function () { return c.pc.createAnswer(); }).then(function (a) { return c.pc.setLocalDescription(a); })
             .then(function () { return gathered(c.pc); })
             .then(function () { return sig("answer", { sdp: c.pc.localDescription.sdp }); });
-        }).catch(function (e) { TT.toast(e.message); sig("decline"); hang(false); });
+        }).catch(function (e) { TT.toast(/[a-z]{4}/i.test(e && e.message || "") ? "المكالمة مااتوصلتش — جرّب تاني أو ابعت رسالة" : e.message); sig("decline"); hang(false); });
       }
       function hang(tell) {
         var c = st.call; if (!c) return;
@@ -214,7 +218,7 @@
         } else if (!c || s.call !== c.id) {
           return;
         } else if (s.type === "answer" && c.pc) {
-          c.pc.setRemoteDescription({ type: "answer", sdp: s.sdp }).catch(function () {});
+          c.pc.setRemoteDescription({ type: "answer", sdp: fixSdp(s.sdp) }).catch(function () { TT.toast("المكالمة مااتوصلتش — جرّب تاني"); hang(true); });
           ui("calling", "بيتوصّل…");
         } else if (s.type === "decline") { TT.toast("مش قادر يرد دلوقتي"); hang(false); }
         else if (s.type === "bye") { hang(false); }

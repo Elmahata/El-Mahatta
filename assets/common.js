@@ -227,13 +227,13 @@
     var k = [a.lat, a.lng, b.lat, b.lng].map(function (x) { return (+x).toFixed(4); }).join(",");
     if (RC[k]) return RC[k];
     var km = T.dist(a, b) * 1.3;
-    var straight = { coords: [[a.lat, a.lng], [b.lat, b.lng]], km: km, min: Math.max(1, Math.round(km / 15 * 60)), road: false };
+    var straight = { coords: [[a.lat, a.lng], [b.lat, b.lng]], km: km, min: Math.max(2, Math.round(km / 15 * 60) + 1), road: false };
     RC[k] = fetch("https://router.project-osrm.org/route/v1/driving/" + a.lng + "," + a.lat + ";" + b.lng + "," + b.lat + "?overview=full&geometries=geojson")
       .then(function (r) { return r.json(); })
       .then(function (j) {
         var rt = j && j.routes && j.routes[0]; if (!rt) throw new Error("no route");
         /* التوكتوك أبطأ من العربية — ×١.٤ على الوقت */
-        var out = { coords: rt.geometry.coordinates.map(function (p) { return [p[1], p[0]]; }), km: rt.distance / 1000, min: Math.max(1, Math.round(rt.duration / 60 * 1.4)), road: true };
+        var out = { coords: rt.geometry.coordinates.map(function (p) { return [p[1], p[0]]; }), km: rt.distance / 1000, min: Math.max(2, Math.round(Math.max(rt.duration / 60 * 1.4, rt.distance / 1000 / 15 * 60)) + 1), road: true };
         /* لفّة مش منطقية (أطول من ٣ أضعاف الخط المستقيم) = غالباً نقطة متحددة غلط أو كوبري مشاه — نرجع للتقدير */
         if (out.km > Math.max(8, km * 3)) { straight.odd = true; return straight; }
         return out;
@@ -317,15 +317,33 @@
   document.addEventListener("pointerdown", function un() { try { var A = global.AudioContext || global.webkitAudioContext; sctx = sctx || new A(); sctx.resume(); } catch (e) {} document.removeEventListener("pointerdown", un, true); }, true);
 
   /* شارة ترتيب السائق: ذهبي / فضي / برونزي / جديد */
-  var TIERS = { gold: ["ذهبي", "#8A6508", "#FFF3C4", "#F5C842"], silver: ["فضي", "#4A565D", "#EEF1F3", "#C0C8CE"], bronze: ["برونزي", "#7A4019", "#F6E3D3", "#CD7F32"], "new": ["سائق جديد", "#0A5A4E", "#D6EBE6", "#0E7566"] };
+  var TIERS = { normal: ["سائق عادي", "#0A5A4E", "#D6EBE6", "#12897A"], gold: ["ذهبي", "#8A6508", "#FFF3C4", "#F5C842"], silver: ["فضي", "#4A565D", "#EEF1F3", "#C0C8CE"], bronze: ["برونزي", "#7A4019", "#F6E3D3", "#CD7F32"], "new": ["سائق جديد", "#0A5A4E", "#D6EBE6", "#0E7566"] };
   T.tierBadge = function (d) {
     if (!d) return "";
-    var t = TIERS[d.tier], stars = d.rating ? '<span class="num" style="font-weight:800;color:#8A6508">★ ' + d.rating + '</span><span style="opacity:.75">(' + d.ratingCount + ')</span>' : "";
-    var medal = t ? '<span class="tier tier-' + d.tier + '" style="display:inline-flex;align-items:center;gap:5px;background:' + t[2] + ';color:' + t[1] + ';border-radius:999px;padding:2px 10px 2px 4px;font-weight:700;font-size:12.5px">'
+    var t = (d.tier === "gold" || d.tier === "silver") ? TIERS[d.tier] : TIERS.normal || null, stars = d.rating ? '<span class="num" style="font-weight:800;color:#8A6508">★ ' + d.rating + '</span><span style="opacity:.75">(' + d.ratingCount + ')</span>' : "";
+    var medal = t ? '<span class="tier tier-' + ((d.tier === "gold" || d.tier === "silver") ? d.tier : "normal") + '" style="display:inline-flex;align-items:center;gap:5px;background:' + t[2] + ';color:' + t[1] + ';border-radius:999px;padding:2px 10px 2px 4px;font-weight:700;font-size:12.5px">'
       + '<span style="width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff 0%,' + t[3] + ' 45%,' + t[1] + ' 100%);box-shadow:0 0 0 1.5px ' + t[3] + '"></span>' + t[0] + '</span>' : "";
     return '<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:13px">' + medal + stars + '</span>';
   };
 
+  /* سؤال تأكيد جوه التطبيق (بدل confirm بتاع المتصفح) — بيرجّع Promise<true/false> */
+  T.ask = function (msg, o) {
+    o = o || {};
+    return new Promise(function (res) {
+      var ov = document.createElement("div");
+      ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true");
+      ov.style.cssText = "position:fixed;inset:0;z-index:7000;background:rgba(19,30,28,.5);display:flex;align-items:center;justify-content:center;padding:24px;animation:mh-fade .2s both";
+      ov.innerHTML = '<div style="width:100%;max-width:340px;background:var(--surface);color:var(--ink);border-radius:18px;padding:20px;box-shadow:0 24px 60px -20px rgba(0,0,0,.5);animation:mh-pop .35s var(--ease-spring) both;display:flex;flex-direction:column;gap:14px">'
+        + '<div style="font:700 18px/1.5 var(--display);text-align:center">' + T.esc(msg) + '</div>'
+        + (o.sub ? '<div class="hint" style="text-align:center;margin-top:-6px">' + T.esc(o.sub) + '</div>' : '')
+        + '<div style="display:flex;gap:10px"><button type="button" data-a="0" class="btn btn-ghost" style="flex:1;min-height:48px">' + T.esc(o.no || "لأ") + '</button>'
+        + '<button type="button" data-a="1" class="btn" style="flex:1;min-height:48px;font-weight:700;color:#fff;background:' + (o.danger === false ? "var(--accent)" : "#A9382B") + '">' + T.esc(o.yes || "أيوه") + '</button></div></div>';
+      var done = function (v) { ov.remove(); res(v); };
+      ov.addEventListener("click", function (e) { var b = e.target.closest("[data-a]"); if (b) done(b.getAttribute("data-a") === "1"); else if (e.target === ov) done(false); });
+      document.body.appendChild(ov);
+      setTimeout(function () { var n = ov.querySelector('[data-a="0"]'); n && n.focus(); }, 30);
+    });
+  };
   /* المسار المتحرك: حدّ أبيض + خط بيترسم + نقط ماشية فوقه في اتجاه المشوار */
   T.animRoute = function (map, coords, color) {
     var g = L.layerGroup().addTo(map);
@@ -343,6 +361,7 @@
   /* احتفال صغير: لما السائق يقبل (عند الراكب)، أو لما السائق ياخد المشوار */
   T.celebrate = function (o) {
     o = o || {};
+    if (document.hidden) { var w = function () { if (!document.hidden) { document.removeEventListener("visibilitychange", w); T.celebrate(o); } }; document.addEventListener("visibilitychange", w); return; }
     try { navigator.vibrate && navigator.vibrate([40, 60, 90]); } catch (e) {}
     if (!o.silent) T.sound(o.sound || "accepted");
     var el = document.createElement("div");
@@ -360,10 +379,47 @@
     el.addEventListener("click", close);
     setTimeout(close, o.ms || 2200);
   };
+  /* Auto-fit: الخريطة بتتظبط على قد المسار بالظبط، مع مسافة صغيرة في الأطراف.
+     بتحسب الجزء الظاهر من الخريطة (فوق الشيت اللي تحت، وتحت الشريط اللي فوق) */
+  T.fitRoute = function (map, bounds, o) {
+    o = o || {};
+    if (!map || !bounds) return;
+    if (!bounds.isValid && bounds.length) bounds = L.latLngBounds(bounds);
+    if (!bounds.isValid || !bounds.isValid()) return;
+    var el = map.getContainer(), H = el.clientHeight, W = el.clientWidth, top = 0, bot = 0;
+    var sheet = o.sheet && document.querySelector(o.sheet), bar = o.bar && document.querySelector(o.bar);
+    if (sheet && !sheet.hidden) bot = Math.max(0, Math.min(H * 0.75, H - sheet.getBoundingClientRect().top + el.getBoundingClientRect().top));
+    if (bar) top = Math.max(0, bar.getBoundingClientRect().bottom - el.getBoundingClientRect().top);
+    var side = Math.round(Math.max(20, Math.min(48, W * 0.08)));
+    var gap = Math.round(Math.max(18, Math.min(40, (H - top - bot) * 0.1)));
+    /* مشوار قصير جداً: مانقرّبش لدرجة الخريطة تبقى شوارع من غير معالم */
+    var ne = bounds.getNorthEast(), sw = bounds.getSouthWest();
+    if (map.distance(ne, sw) < 120) bounds = bounds.pad(1.2);
+    map.fitBounds(bounds, { paddingTopLeft: [side, top + gap], paddingBottomRight: [side, bot + gap], maxZoom: o.maxZoom || 17, animate: o.animate !== false, duration: .6 });
+  };
+  /* بيعيد الـ fit لما الشاشة تتغيّر أو الشيت يكبر/يصغر */
+  T.autoFit = function (map, getBounds, o) {
+    var t = null, run = function () { clearTimeout(t); t = setTimeout(function () { var b = getBounds(); if (b) { map.invalidateSize(); T.fitRoute(map, b, o); } }, 180); };
+    window.addEventListener("resize", run);
+    window.addEventListener("orientationchange", run);
+    var s = o && o.sheet && document.querySelector(o.sheet);
+    if (s && window.ResizeObserver) new ResizeObserver(run).observe(s);
+    return run;
+  };
   /* توكتوك صغير على الخريطة (للتكاتك القريبة) */
-  T.tukIcon = function (busy) {
-    return L.divIcon({ className: "mh-tuk", iconSize: [32, 32], iconAnchor: [16, 16],
-      html: '<span style="display:grid;place-items:center;width:32px;height:32px;border-radius:50%;background:#fff;box-shadow:0 4px 10px -3px rgba(19,30,28,.45),0 0 0 2px ' + (busy ? "#BC4E1E" : "#0E7566") + '"><img src="/assets/logo.png" alt="" style="height:22px;width:auto"></span>' });
+  T.tukIcon = function (busy, h) {
+    var rot = h != null && !isNaN(+h) ? +h : 0;
+    return L.divIcon({ className: "mh-tuk", iconSize: [26, 34], iconAnchor: [13, 17],
+      html: '<div style="transform:rotate(' + rot + 'deg);filter:drop-shadow(0 3px 3px rgba(19,30,28,.35))' + (busy ? ';opacity:.95' : '') + '">' + T.tukSvg(busy ? "busy" : "normal", 22) + '</div>' });
+  };
+  /* خريطة صغيرة ثابتة (من غير تحميل خريطة كاملة): بلاطة OSM واحدة والدبوس في النص */
+  T.miniMap = function (lat, lng, z) {
+    z = z || 16; var n = Math.pow(2, z), x = (lng + 180) / 360 * n, r = lat * Math.PI / 180, y = (1 - Math.log(Math.tan(r) + 1 / Math.cos(r)) / Math.PI) / 2 * n;
+    var tx = Math.floor(x), ty = Math.floor(y), px = Math.round((x - tx) * 256), py = Math.round((y - ty) * 256), tiles = "";
+    for (var dx = -1; dx <= 1; dx++) for (var dy = -1; dy <= 1; dy++)
+      tiles += '<img alt="" loading="lazy" src="https://tile.openstreetmap.org/' + z + '/' + (tx + dx) + '/' + (ty + dy) + '.png" style="position:absolute;width:256px;height:256px;left:calc(50% - ' + px + 'px + ' + (dx * 256) + 'px);top:calc(50% - ' + py + 'px + ' + (dy * 256) + 'px)">';
+    return '<div class="mini-map" aria-label="مكان الراكب على الخريطة">' + tiles
+      + '<span class="mm-pulse"></span><span class="mm-pin"></span></div>';
   };
   /* بيحرّك ماركرات حسب مفتاح: اللي اختفى بيتشال، والجديد بيظهر، والموجود بيتزحلق */
   T.syncMarkers = function (map, store, list, iconFn, tipFn) {
@@ -375,11 +431,32 @@
     });
     Object.keys(store).forEach(function (k) { if (!seen[k]) { map.removeLayer(store[k]); delete store[k]; } });
   };
-  /* أيقونة السائق على الخريطة، بسهم بيلف مع اتجاهه */
-  T.driverIcon = function (h) {
-    var arrow = h != null ? '<div style="position:absolute;inset:-9px;transform:rotate(' + (+h) + 'deg)"><div style="position:absolute;top:0;left:50%;margin-left:-6px;width:0;height:0;border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:9px solid #131E1C"></div></div>' : '';
-    return L.divIcon({ className: "", iconSize: [32, 32], iconAnchor: [16, 16],
-      html: '<div style="position:relative;width:32px;height:32px">' + arrow + '<div style="position:absolute;inset:0;border-radius:50%;background:#131E1C;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);display:grid;place-items:center;color:#fff;font:800 13px/1 \'Readex Pro\',sans-serif">س</div></div>' });
+  /* أيقونة السائق: توكتوك من فوق (2a) بلون ترتيبه، ومقدّمته بتلف مع اتجاهه، وحواليه نبض بنفس اللون */
+  var TUK = {
+    gold:   { b: "#D29A1E", r: "#9C6B0A", a: "#FFE7A8", p: "#E8B23A", mark: "star" },
+    silver: { b: "#6F8590", r: "#4E616B", a: "#E3EBEF", p: "#8FA3AD", mark: "bar" },
+    normal: { b: "#0E7566", r: "#0A5A4E", a: "#D6EBE6", p: "#12897A", mark: "" },
+    busy:   { b: "#BC4E1E", r: "#8E3A15", a: "#F9E6DA", p: "#E0784A", mark: "" }
+  };
+  T.tukSvg = function (tier, w) {
+    var k = TUK[tier] || TUK.normal, mark = k.mark === "star"
+      ? '<path d="M20 28.6l1.9 3.9 4.3.6-3.1 3 .7 4.3-3.8-2-3.8 2 .7-4.3-3.1-3 4.3-.6z" fill="#FFF6D8" stroke="#7A5205" stroke-width=".8" stroke-linejoin="round"/>'
+      : k.mark === "bar" ? '<rect x="14" y="32" width="12" height="3.2" rx="1.6" fill="#fff"/><rect x="14" y="37" width="12" height="3.2" rx="1.6" fill="#fff" opacity=".8"/>' : "";
+    w = w || 30;
+    return '<svg width="' + w + '" height="' + Math.round(w * 1.4) + '" viewBox="0 0 40 56" aria-hidden="true">'
+      + '<defs><linearGradient id="mhsh" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".7"/><stop offset=".45" stop-color="#fff" stop-opacity=".12"/><stop offset=".6" stop-color="#fff" stop-opacity="0"/><stop offset=".8" stop-color="#fff" stop-opacity=".22"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>'
+      + '<rect x="17.5" y=".5" width="5" height="8" rx="2" fill="#1B2422"/><rect x="3" y="36" width="5" height="12" rx="2" fill="#1B2422"/><rect x="32" y="36" width="5" height="12" rx="2" fill="#1B2422"/>'
+      + '<path d="M20 4C25.5 4 28.5 8 29.5 13L33 43C33.5 49 30.5 53 25 53H15C9.5 53 6.5 49 7 43L10.5 13C11.5 8 14.5 4 20 4Z" fill="' + k.b + '" stroke="#fff" stroke-width="2"/>'
+      + '<path d="M13 15.5C15 13 25 13 27 15.5L27.6 20H12.4Z" fill="' + k.a + '"/>'
+      + '<rect x="10.5" y="21" width="19" height="28" rx="5" fill="' + k.r + '"/><rect x="10.5" y="21" width="19" height="28" rx="5" fill="url(#mhsh)"/>'
+      + '<rect x="13" y="24" width="14" height="3" rx="1.5" fill="' + k.a + '" opacity=".6"/><circle cx="20" cy="7.5" r="1.7" fill="#FFF6D8"/>' + mark + '</svg>';
+  };
+  T.driverIcon = function (h, tier) {
+    tier = (tier === "gold" || tier === "silver") ? tier : "normal";
+    var k = TUK[tier], rot = h != null && !isNaN(+h) ? +h : 0;
+    return L.divIcon({ className: "", iconSize: [56, 56], iconAnchor: [28, 28],
+      html: '<div class="mh-drv mh-drv-' + tier + '" style="--pc:' + k.p + '"><span class="p"></span><span class="p p2"></span>'
+        + '<div class="tk" style="transform:rotate(' + rot + 'deg)">' + T.tukSvg(tier, 26) + '</div></div>' });
   };
   T.etaText = function (rt) { return rt.min + " دقيقة · " + rt.km.toFixed(1) + " كم"; };
 

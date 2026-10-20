@@ -177,6 +177,17 @@
     <div class="stats" id="stats"></div>
     <div class="card">
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <h2 style="margin:0">سجل الموافقات على الشروط</h2>
+        <span class="hint" id="cnSum"></span>
+        <div style="margin-inline-start:auto;display:flex;gap:6px">
+          <button class="btn btn-ghost btn-sm" id="cnLoad">اعرض السجل</button>
+          <button class="btn btn-ghost btn-sm" id="cnCsv" hidden>نزّل Excel (CSV)</button>
+        </div>
+      </div>
+      <div id="cnList" style="margin-top:12px;overflow-x:auto"></div>
+    </div>
+    <div class="card">
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <h2 style="margin:0">فين الطلب عالي؟</h2>
         <span class="hint">آخر ٧ أيام</span>
         <div style="margin-inline-start:auto;display:flex;gap:4px" id="heatTabs">
@@ -263,7 +274,8 @@
   var pin = null, S = { zones:[], places:[], drivers:[], requests:[], cfg:{same:15,cross:20,sub:200} };
   var filt = "open", timer = null, pmap = null, pLayers = [], selPlace = null;
 
-  try{ pin = localStorage.getItem(KEY); }catch(e){}
+  /* الرقم السرّي بيتحفظ لحد ما تقفل التاب بس، مش على الجهاز */
+  try{ localStorage.removeItem(KEY); pin = sessionStorage.getItem(KEY); }catch(e){}
 
   function api(path, opts){ opts = opts || {}; opts.pin = pin; return TT.api(path, opts); }
   var save = function(kind, id, body){ return api("doc/"+kind+"/"+id, { method:"PUT", body:body }).then(load); };
@@ -275,13 +287,38 @@
     var v = $("pin").value.trim(); if(!v) return;
     var b = this; b.disabled = true; b.textContent = "…";
     TT.api("login", { method:"POST", body:{ pin:v } })
-      .then(function(){ pin = v; try{ localStorage.setItem(KEY, v); }catch(e){} start(); })
+      .then(function(){ pin = v; try{ sessionStorage.setItem(KEY, v); }catch(e){} start(); })
       .catch(function(e){ $("gErr").textContent = e.message; $("gErr").hidden = false; })
       .then(function(){ b.disabled = false; b.textContent = "دخول"; });
   });
   $("pin").addEventListener("keydown", function(e){ if(e.key === "Enter") $("enter").click(); });
 
   /* ---------- تبويبات ---------- */
+  /* سجل الموافقات */
+  var cnRows = [];
+  function cnFmt(t){ if(!t) return ""; var d = new Date(t); return isNaN(d) ? "" : d.toLocaleString("ar-EG", { dateStyle:"short", timeStyle:"short" }); }
+  $("cnLoad").addEventListener("click", function(){
+    var b = this; b.disabled = true; b.textContent = "…";
+    api("consents").then(function(j){
+      cnRows = j.consents || [];
+      var dr = cnRows.filter(function(c){ return c.role === "driver"; }).length;
+      $("cnSum").textContent = cnRows.length + " موافقة · " + (cnRows.length - dr) + " راكب · " + dr + " سائق";
+      $("cnCsv").hidden = !cnRows.length;
+      $("cnList").innerHTML = cnRows.length ? '<table style="width:100%;border-collapse:collapse;font-size:13px"><thead><tr style="color:var(--ink-2)"><th style="padding:6px;text-align:start">النوع</th><th style="padding:6px;text-align:start">الرقم</th><th style="padding:6px;text-align:start">الإصدار</th><th style="padding:6px;text-align:start">وقت الموافقة</th><th style="padding:6px;text-align:start">IP</th></tr></thead><tbody>'
+        + cnRows.slice(0, 200).map(function(c){ return '<tr style="border-top:1px solid var(--line)"><td style="padding:6px">' + (c.role === "driver" ? "سائق" : "راكب") + '</td><td style="padding:6px" dir="ltr">' + TT.esc(c.phone || "لسه ماسجّلش") + '</td><td style="padding:6px">' + TT.esc(c.v) + '</td><td style="padding:6px">' + cnFmt(c.serverAt) + '</td><td style="padding:6px" dir="ltr">' + TT.esc(c.ip || "") + '</td></tr>'; }).join("")
+        + '</tbody></table>' : '<p class="hint">لسه مفيش موافقات.</p>';
+    }).catch(function(e){ $("cnList").innerHTML = '<p class="hint">' + TT.esc(e.message) + '</p>'; })
+      .finally(function(){ b.disabled = false; b.textContent = "حدّث السجل"; });
+  });
+  $("cnCsv").addEventListener("click", function(){
+    var q = function(x){ return '"' + String(x == null ? "" : x).replace(/"/g, '""') + '"'; };
+    var lines = [["النوع","الرقم","الإصدار","وقت الموافقة (الجهاز)","وقت التسجيل (السيرفر)","IP","الجهاز","المتصفح"].map(q).join(",")]
+      .concat(cnRows.map(function(c){ return [c.role === "driver" ? "سائق" : "راكب", c.phone, c.v, c.acceptedAt, c.serverAt ? new Date(c.serverAt).toISOString() : "", c.ip, c.device, c.ua].map(q).join(","); }));
+    var url = URL.createObjectURL(new Blob(["\ufeff" + lines.join("\n")], { type: "text/csv;charset=utf-8" }));
+    var l = document.createElement("a"); l.href = url; l.download = "consents-" + new Date().toISOString().slice(0,10) + ".csv"; l.click();
+    setTimeout(function(){ URL.revokeObjectURL(url); }, 2000);
+  });
+
   var tabs = ["live","drivers","reports","zones","places","admin"];
   tabs.forEach(function(t){
     $("tab-"+t).addEventListener("click", function(){
@@ -393,17 +430,18 @@
           + '<span class="'+(d.isOnline?"dot-on":"dot-off")+'" title="'+(d.isOnline?"أونلاين":"مش متصل")+'"></span>'
           + '<strong>'+TT.esc(d.name)+'</strong>'+sChip+lChip
           + (d.lateCount ? '<span class="chip c-warn num" title="مرات الراكب قال إنه اتأخر أو مجاش">اتأخر '+d.lateCount+'</span>' : '')
-          + (d.ratingCount ? (function(){ var n = d.ratingCount, a = d.ratingSum / n, t = n < 5 ? "new" : a >= 4.8 && n >= 75 ? "gold" : a >= 4.5 && n >= 25 ? "silver" : a >= 4 ? "bronze" : ""; var last = (d.reviews || []).slice(-3).reverse().map(function(r){ return r.s + "★ " + ((r.t || []).join("، ") + " " + (r.n || "")).trim(); }).join(" | "); return '<span title="' + TT.esc(last || "مفيش تعليقات") + '">' + TT.tierBadge({ tier:t, rating:+a.toFixed(1), ratingCount:n }) + '</span>'; })() : '')
+          + (d.ratingCount ? (function(){ var n = d.ratingCount, a = d.ratingSum / n, t = n >= 100 && a >= 4.8 ? "gold" : n >= 30 && a >= 4.5 ? "silver" : ""; var last = (d.reviews || []).slice(-3).reverse().map(function(r){ return r.s + "★ " + ((r.t || []).join("، ") + " " + (r.n || "")).trim(); }).join(" | "); return '<span title="' + TT.esc(last || "مفيش تعليقات") + '">' + TT.tierBadge({ tier:t, rating:+a.toFixed(1), ratingCount:n }) + '</span>'; })() : '')
           + '<span class="meta">'+(d.active===false?"موقوف":(d.isOnline?"أونلاين":"مش متصل"))+'</span></div>'
           + '<div class="leg"><span class="num">'+TT.esc(d.phone||"—")+'</span><span class="arrow">·</span>'
           + 'لوحة <span class="num">'+TT.esc(d.plate||"—")+'</span><span class="arrow">·</span>'
-          + 'كود <span class="code">'+TT.esc(d.code||"—")+'</span></div>'
+          + 'كود <button type="button" class="code" style="border:0;background:var(--inset);border-radius:6px;padding:1px 8px;cursor:pointer;font:inherit" onclick="this.textContent=this.textContent===\'••••\'?this.dataset.c:\'••••\'" data-c="'+TT.esc(d.code||"—")+'">••••</button></div>'
           + (d.zoneId ? '<div class="leg"><span class="zchip"><span class="zdot" style="background:'+TT.zoneColor(S.zones,d.zoneId)+'"></span>'+TT.esc(TT.zoneName(S.zones,d.zoneId))+'</span></div>' : "")
           + '<div class="actions">'
           + (dFree ? '' : [50,100,200].map(function(v){ return '<button class="btn btn-primary btn-sm" data-topup="'+TT.esc(d.id)+'" data-amt="'+v+'">شحن '+v+' ج</button>'; }).join("")
           + '<button class="btn btn-ghost btn-sm" data-topup="'+TT.esc(d.id)+'" data-amt="">مبلغ تاني</button>')
           + '<button class="btn btn-ghost btn-sm" data-photo="'+TT.esc(d.id)+'">'+(d.photo?'غيّر الصورة':'+ صورة')+'</button>'
           + '<button class="btn btn-ghost btn-sm" data-vill="'+TT.esc(d.id)+'">'+(d.village?'من '+TT.esc(d.village):'+ البلد')+'</button>'
+          + '<button class="btn btn-ghost btn-sm" data-tiercap="'+TT.esc(d.id)+'" title="تنزيل المستوى بإيدك">'+(d.tierCap === "normal" ? "المستوى: عادي (يدوي)" : d.tierCap === "silver" ? "أقصاه فضي (يدوي)" : "المستوى: تلقائي")+'</button>'
           + '<button class="btn btn-ghost btn-sm" data-code="'+TT.esc(d.id)+'">كود جديد</button>'
           + '<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://wa.me/'+TT.waNum(d.phone)+'?text='
             + encodeURIComponent("كود دخولك على تطبيق المحطة للسائق: "+(d.code||"")+"\nالرابط: "+location.origin+"/driver.html\nافتحه ودوس «فعّل صوت الطلبات».")+'">ابعتله الكود</a>'
@@ -618,6 +656,7 @@
         + '<a class="btn btn-ghost btn-sm" href="tel:'+TT.esc(r.riderPhone)+'">اتصل بالراكب</a>'
         + (d ? '<a class="btn btn-ghost btn-sm" href="tel:'+TT.esc(d.phone)+'">اتصل بالسائق</a>' : '')
         + (r.status!=="closed" ? '<button class="btn btn-ghost btn-sm" data-closerep="'+TT.esc(r.id)+'">اتحلّ — اقفل</button>' : '')
+        + (r.status!=="closed" && d ? '<button class="btn btn-ghost btn-sm" style="color:#A9382B" data-confirmrep="'+TT.esc(r.id)+'" title="البلاغ صح — بيمنع السائق من الفضي ٣٠ يوم ومن الذهبي ٦٠ يوم">البلاغ صح — اقفل</button>' : '')
         + '</div></div>';
     }).join("");
   }
@@ -805,7 +844,7 @@
 
   document.addEventListener("click", function(e){
     if(!e.target.closest) return;
-    var el = e.target.closest("[data-cancel],[data-renew],[data-topup],[data-code],[data-toggle],[data-deld],[data-renz],[data-delz],[data-sel],[data-renp],[data-delp],[data-closerep]");
+    var el = e.target.closest("[data-cancel],[data-renew],[data-topup],[data-code],[data-toggle],[data-deld],[data-renz],[data-delz],[data-sel],[data-renp],[data-delp],[data-closerep],[data-confirmrep],[data-tiercap]");
     if(!el) return;
     var id, c;
     if((id = el.getAttribute("data-topup"))){
@@ -827,6 +866,13 @@
       c.subUntil = addDays(from, kind === "week" ? 7 : 30);
       c.paidLog = (c.paidLog || []).concat([{ amount: amount, kind: kind, at: Date.now(), to: c.subUntil }]).slice(-60);
       save("drivers", id, c).then(function(){ TT.toast("اتجدّد لحد " + c.subUntil); });
+    } else if((id = el.getAttribute("data-confirmrep"))){
+      var rp = clone(TT.byId(S.reports,id)), rq = TT.byId(S.requests, rp.requestId || ""), dv = rq && rq.driverId ? clone(TT.byId(S.drivers, rq.driverId)) : null;
+      rp.status = "closed"; rp.closedAt = Date.now(); rp.confirmed = true; save("reports", id, rp);
+      if(dv){ dv.lastConfirmedReport = Date.now(); save("drivers", dv.id, dv).then(function(){ TT.toast("اتسجّل على " + dv.name); }); }
+    } else if((id = el.getAttribute("data-tiercap"))){
+      c = clone(TT.byId(S.drivers,id)); var nx = { "":"silver", silver:"normal", normal:"" }[c.tierCap || ""];
+      c.tierCap = nx; save("drivers", id, c).then(function(){ TT.toast(nx === "normal" ? "المستوى اتنزّل لـ «عادي»" : nx === "silver" ? "أقصى مستوى: فضي" : "المستوى رجع تلقائي"); });
     } else if((id = el.getAttribute("data-closerep"))){
       c = clone(TT.byId(S.reports,id)); c.status = "closed"; c.closedAt = Date.now(); save("reports", id, c);
     } else if((id = el.getAttribute("data-cancel"))){
@@ -881,9 +927,9 @@
         var now = Date.now(), busy = {};
         (S.requests || []).forEach(function(r){ if(r.status === "assigned" && r.driverId) busy[r.driverId] = 1; });
         var list = (S.drivers || []).filter(function(x){ return x.isOnline && x.loc && now - x.loc.at < 2 * 60 * 1000; })
-          .map(function(x){ return { k:x.id, lat:x.loc.lat, lng:x.loc.lng, name:x.name, busy:!!busy[x.id], ago:Math.round((now - x.loc.at) / 1000) }; });
-        Object.keys(aStore).forEach(function(k){ var m = list.filter(function(p){ return p.k === k; })[0]; if(m) aStore[k].setIcon(TT.tukIcon(m.busy)); });
-        TT.syncMarkers(am, aStore, list, function(p){ return TT.tukIcon(p.busy); }, function(p){ return TT.esc(p.name) + (p.busy ? " · في مشوار" : " · فاضي"); });
+          .map(function(x){ return { k:x.id, lat:x.loc.lat, lng:x.loc.lng, name:x.name, busy:!!busy[x.id], h:x.loc.h, ago:Math.round((now - x.loc.at) / 1000) }; });
+        Object.keys(aStore).forEach(function(k){ var m = list.filter(function(p){ return p.k === k; })[0]; if(m) aStore[k].setIcon(TT.tukIcon(m.busy, m.h)); });
+        TT.syncMarkers(am, aStore, list, function(p){ return TT.tukIcon(p.busy, p.h); }, function(p){ return TT.esc(p.name) + (p.busy ? " · في مشوار" : " · فاضي"); });
         $("allMapHint").textContent = list.length ? list.length + " أونلاين · " + list.filter(function(p){ return p.busy; }).length + " في مشوار" : "مفيش حد أونلاين ومكانه واصل";
         if(!fitted && list.length){ fitted = true; am.fitBounds(L.latLngBounds(list.map(function(p){ return [p.lat, p.lng]; })), { padding:[40,40], maxZoom:16 }); }
       };

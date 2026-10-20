@@ -347,3 +347,39 @@ input:focus,select:focus,textarea:focus{box-shadow:0 0 0 4px color-mix(in oklab,
 #jobs .job.is-near .head{padding-top:14px}
 #jobs .job .price{display:inline-block}
 #jobs .job.is-new .price{animation:mh-pop .5s .25s var(--ease-spring) both}
+
+/* ===== أيقونة السائق: توكتوك + نبض بلون الترتيب ===== */
+@keyframes mh-drvpulse{0%{transform:scale(.35);opacity:.55}100%{transform:scale(1.25);opacity:0}}
+.mh-drv{position:relative;width:56px;height:56px;display:grid;place-items:center;pointer-events:none}
+.mh-drv .p{position:absolute;inset:4px;border-radius:50%;background:var(--pc);opacity:0;animation:mh-drvpulse 2.2s cubic-bezier(.22,1,.36,1) infinite}
+.mh-drv .p2{animation-delay:1.1s}
+.mh-drv-gold .p{animation-duration:1.8s}.mh-drv-gold .p2{animation-delay:.9s}
+.mh-drv .tk{position:relative;z-index:1;transition:transform .6s cubic-bezier(.22,1,.36,1);filter:drop-shadow(0 4px 4px rgba(19,30,28,.35))}
+.mh-drv-gold .tk{filter:drop-shadow(0 4px 6px rgba(156,107,10,.55))}
+@media (prefers-reduced-motion:reduce){.mh-drv .p{animation:none;opacity:.18;transform:scale(.9)}.mh-drv .p2{display:none}}
+
+/* ===== كارت مستوى السائق (١٠–١٥٪ من الشاشة) ===== */
+.mh-lvl{--c:#0E7566;--c2:#D6EBE6;--ink:#0A5A4E;--pc:#12897A;display:flex;align-items:center;gap:14px;min-height:clamp(86px,13vh,124px);padding:12px 16px;border-radius:20px;
+  background:linear-gradient(135deg,var(--c2) 0%,#fff 70%);border:1.5px solid color-mix(in oklab,var(--c) 35%,transparent);box-shadow:0 14px 30px -20px var(--c);animation:mh-up .5s var(--ease-out) both;position:relative;overflow:hidden}
+.mh-lvl-silver{--c:#6F8590;--c2:#E3EBEF;--ink:#3E4F57;--pc:#8FA3AD}
+.mh-lvl-gold{--c:#D29A1E;--c2:#FFF0C7;--ink:#7A5205;--pc:#E8B23A}
+.mh-lvl-gold::after{content:"";position:absolute;top:0;bottom:0;left:0;width:30%;pointer-events:none;background:linear-gradient(90deg,transparent,rgba(255,255,255,.7),transparent);animation:mh-sweep 4s 1s ease-in-out infinite}
+.mh-lvl .ic{position:relative;flex:none;width:clamp(70px,11vh,96px);height:clamp(70px,11vh,96px);display:grid;place-items:center;border-radius:50%;background:#fff;box-shadow:inset 0 0 0 3px var(--c)}
+.mh-lvl .ic .p{position:absolute;inset:0;border-radius:50%;background:var(--pc);opacity:0;animation:mh-drvpulse 2.2s cubic-bezier(.22,1,.36,1) infinite}
+.mh-lvl .ic .p2{animation-delay:1.1s}
+.mh-lvl-gold .ic .p{animation-duration:1.8s}.mh-lvl-gold .ic .p2{animation-delay:.9s}
+.mh-lvl .tk{position:relative;z-index:1;filter:drop-shadow(0 5px 5px rgba(19,30,28,.3));transform:rotate(-18deg)}
+.mh-lvl .tx{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.mh-lvl .t1{display:flex;align-items:baseline;gap:8px;flex-wrap:nowrap;white-space:nowrap;font:800 clamp(18px,2.6vh,22px)/1.25 var(--display);color:var(--ink)}
+.mh-lvl .rt{font:800 clamp(16px,2.4vh,20px) var(--display);color:#9C6B0A;white-space:nowrap;direction:ltr;unicode-bidi:isolate}
+.mh-lvl .t2{font-size:13px;color:var(--ink-2)}
+.mh-lvl .bar{height:7px;border-radius:7px;background:color-mix(in oklab,var(--c) 18%,#fff);overflow:hidden;margin-top:4px}
+.mh-lvl .bar i{display:block;height:100%;width:0;border-radius:7px;background:linear-gradient(90deg,var(--c),var(--pc));transition:width .9s var(--ease-out)}
+.mh-lvl .t3{font-size:12.5px;font-weight:600;color:var(--ink)}
+@media (prefers-reduced-motion:reduce){.mh-lvl .ic .p{animation:none;opacity:.15}.mh-lvl .ic .p2{display:none}.mh-lvl-gold::after{display:none}}
+
+/* خريطة صغيرة لمكان الراكب في كارت الطلب */
+.mini-map{position:relative;height:96px;margin:8px 0 6px;border-radius:12px;overflow:hidden;background:#F2EFE9;border:1px solid var(--line)}
+.mini-map img{max-width:none;pointer-events:none;user-select:none}
+.mini-map .mm-pin{position:absolute;left:50%;top:50%;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:#0E7566;border:3px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);z-index:2}
+.mini-map .mm-pulse{position:absolute;left:50%;top:50%;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;background:#12897A;opacity:0;animation:mh-drvpulse 2s cubic-bezier(.22,1,.36,1) infinite;z-index:1}

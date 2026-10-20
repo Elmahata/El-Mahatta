@@ -21,7 +21,8 @@
 .bars button[aria-pressed="true"] i{background:var(--accent)}
 .bars button[aria-pressed="true"]{color:var(--ink);font-weight:700}
 .opt{display:flex;align-items:center;gap:10px;width:100%;text-align:start;padding:12px 13px;border-radius:10px;border:1.5px solid var(--line);background:var(--surface);color:var(--ink);font-family:var(--body);font-size:14.5px;font-weight:600;cursor:pointer;margin-bottom:7px}
-.opt[aria-pressed="true"]{border-color:var(--accent);background:var(--accent-soft,#D6EBE6)}
+.opt[aria-pressed="true"]{border-color:var(--accent);background:#D6EBE6;color:#0A5A4E;font-weight:700}
+.opt[aria-pressed="true"] *{color:#0A5A4E !important;opacity:1 !important}
 .opt:disabled{opacity:.45;cursor:default}
 .sw{width:12px;height:12px;border-radius:3px;flex:none}
 .big{font:800 42px/1 var(--display)}
@@ -97,6 +98,7 @@
 </div>
 
 <script src="/assets/common.js"></script>
+<script src="/assets/terms.js" data-role="driver"></script>
 <script>
 (function(){
   "use strict";
@@ -127,10 +129,10 @@
     $("wkRides").textContent = d.reduce(function(s,x){ return s + x.rides; }, 0);
     $("rating").textContent = stats.rating ? stats.rating + " ★" : "—";
     $("ratingL").textContent = stats.ratingCount ? "تقييمك (" + stats.ratingCount + " تقييم)" : "لسه مفيش تقييمات";
-    var nextT = stats.tier === "gold" ? "إنت في أعلى ترتيب 👏" : stats.tier === "silver" ? "للذهبي: ٤٫٨ ★ و٧٥ تقييم" : stats.tier === "bronze" ? "للفضي: ٤٫٥ ★ و٢٥ تقييم" : stats.tier === "new" ? "بعد ٥ تقييمات هيظهر ترتيبك" : "حسّن تقييمك لـ ٤ ★ علشان تاخد البرونزي";
+    var nextT = stats.tier === "gold" ? "إنت في أعلى مستوى 👏" : stats.tier === "silver" ? "للذهبي: ٤٫٨ ★ و١٠٠ تقييم، وتلغي أقل من ٥٪" : "للفضي: ٤٫٥ ★ و٣٠ تقييم";
     $("tierBox").innerHTML = '<div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="flex:1;font-weight:700">ترتيبك</span>' + TT.tierBadge({ tier:stats.tier, rating:stats.rating, ratingCount:stats.ratingCount }) + '<div class="hint" style="width:100%">' + nextT + '</div></div>';
     $("revBox").innerHTML = (stats.reviews || []).length ? '<div class="hint" style="margin:10px 0 6px">آخر آراء الركاب</div>' + stats.reviews.map(function(r){
-      return '<div class="card" style="padding:10px 13px;margin-bottom:6px"><div style="display:flex;gap:8px;align-items:center"><b style="color:#F5B301" class="num">' + "★★★★★".slice(0, r.s) + '<span style="color:var(--line)">' + "★★★★★".slice(r.s) + '</span></b><span class="hint" style="margin-inline-start:auto">' + new Date(r.at).toLocaleDateString("ar-EG",{ day:"numeric", month:"short" }) + '</span></div>'
+      return '<div class="card" style="padding:10px 13px;margin-bottom:6px"><div style="display:flex;gap:8px;align-items:center"><b style="color:#F5B301" class="num">' + ("★".repeat(Math.max(0, Math.min(5, +r.s || 0))) + "☆".repeat(5 - Math.max(0, Math.min(5, +r.s || 0)))) + '<span style="color:var(--line)">' + "★★★★★".slice(r.s) + '</span></b><span class="hint" style="margin-inline-start:auto">' + new Date(r.at).toLocaleDateString("ar-EG",{ day:"numeric", month:"short" }) + '</span></div>'
         + ((r.t || []).length ? '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">' + r.t.map(function(t){ return '<span class="chip c-neutral">' + TT.esc(t) + '</span>'; }).join("") + '</div>' : '')
         + (r.n ? '<div style="margin-top:6px">' + TT.esc(r.n) + '</div>' : '') + '</div>';
     }).join("") : "";

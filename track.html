@@ -82,7 +82,7 @@
           L.marker(a, { icon: TT.markerIcon("#0E7566", true) }).addTo(map).bindTooltip(j.from.label);
           L.marker(b, { icon: TT.markerIcon("#BC4E1E", true) }).addTo(map).bindTooltip(j.to.label);
           var line = L.polyline([a, b], { color:"#0E7566", weight:4 }).addTo(map);
-          map.fitBounds(line.getBounds(), { padding:[40,40], maxZoom:17 });
+          TT.fitRoute(map, line.getBounds());
         }
       })
       .catch(function(e){ $("err").textContent = e.message; $("err").hidden = false; });

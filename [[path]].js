@@ -25,6 +25,8 @@
  *   GET    /api/state                إدارة — كل البيانات
  *   PUT    /api/doc/:kind/:id        إدارة — إضافة/تعديل
  *   DELETE /api/doc/:kind/:id        إدارة — حذف
+ *   POST   /api/consent              عام — تسجيل موافقة على الشروط (الإصدار + الوقت + الرقم + IP)
+ *   GET    /api/consents             إدارة — سجل الموافقات
  */
 
 const KINDS = ["zones", "places", "drivers", "requests", "config", "reports", "riders"];
@@ -141,7 +143,15 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 /* ترتيب السائق: متوسط التقييم + عدد التقييمات (علشان تقييم واحد ٣ نجوم مايظلمش سائق جديد) */
 function tierOf(d) {
   const n = d.ratingCount || 0, avg = n ? d.ratingSum / n : 0;
-  const t = n < 5 ? "new" : avg >= 4.8 && n >= 75 ? "gold" : avg >= 4.5 && n >= 25 ? "silver" : avg >= 4 ? "bronze" : "";
+  /* ٣ مستويات: عادي / فضي (٤٫٥ ★ و٣٠ تقييم) / ذهبي (٤٫٨ ★ و١٠٠ تقييم).
+     متوسط متوازن: كأن كل سائق بادئ بـ ٥ تقييمات ٥ نجوم، علشان أول تقييم وحش مايظلمهوش.
+     بلاغ «طلب أكتر من السعر» اتأكد في آخر ٣٠ يوم (فضي) / ٦٠ يوم (ذهبي) بيمنع المستوى. والإدارة تقدر تنزّله بإيدها. */
+  const bal = (d.ratingSum + 25) / (n + 5), now = Date.now(), lastBad = d.lastConfirmedReport || 0;
+  const cancels = d.releaseCount || 0, taken = (d.rideCount || n) + cancels, cancelRate = taken ? cancels / taken : 0;
+  let t = "normal";
+  if (n >= 100 && bal >= 4.8 && cancelRate < 0.05 && now - lastBad > 60 * 864e5) t = "gold";
+  else if (n >= 30 && bal >= 4.5 && now - lastBad > 30 * 864e5) t = "silver";
+  if (d.tierCap === "normal" || (d.tierCap === "silver" && t === "gold")) t = d.tierCap;
   return { rating: n ? +avg.toFixed(1) : null, ratingCount: n, tier: t };
 }
 /* وقت القاهرة — للمشاوير الثابتة */
@@ -289,6 +299,48 @@ function meters(a, b) {
   const x = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * t) * Math.cos(b.lat * t) * Math.sin(dLng / 2) ** 2;
   return 2 * R * Math.asin(Math.sqrt(x));
 }
+/* أي طلب محدش أخده في ١٠ دقايق بيتلغي من السيرفر نفسه (مش مستني موبايل الراكب) */
+async function expireStale(env, requests) {
+  const now = Date.now(), stale = requests.filter((r) => r.status === "pending" && now - openAt(r) >= CLAIM_WINDOW_MS && now >= openAt(r));
+  for (const r of stale.slice(0, 25)) {
+    r.status = "cancelled"; r.cancelReason = "expired"; r.cancelledBy = "system"; r.cancelledAt = now;
+    try { await putDoc(env, "requests", r.id, r); } catch (e) {}
+  }
+  return stale.length;
+}
+/* ===== أكتر من سائق يوافق، والراكب يختار =====
+   السائق بيدوس «وافق» ← بيتضاف لـ offers. الراكب بيشوفهم مترتبين من الأقرب ويختار.
+   لو الراكب مااختارش في دقيقة من أول موافقة، السيرفر بيختار الأقرب لوحده. */
+const AUTO_PICK_MS = 60 * 1000;
+const MAX_OFFERS = 8;
+function liveOffers(r, drivers, busy) {
+  const now = Date.now(), byId = new Map(drivers.map((d) => [d.id, d]));
+  return (r.offers || []).map((o) => {
+    const d = byId.get(o.d);
+    if (!d || busy.has(d.id) || d.online === false || d.active === false || now - (d.lastSeen || 0) > 3 * 60e3) return null;
+    const loc = d.loc && now - d.loc.at < LOC_FRESH_MS ? d.loc : null;
+    const m = loc && r.from && isFinite(+r.from.lat) ? Math.round(meters(r.from, loc)) : o.distM;
+    return { d, at: o.at, distM: m != null ? m : null, etaMin: m != null ? Math.max(1, Math.round((m * 1.3) / 250)) : null };
+  }).filter(Boolean).sort((a, b) => (a.distM ?? 1e9) - (b.distM ?? 1e9) || a.at - b.at);
+}
+const busySet = (requests) => new Set(requests.filter((x) => x.status === "assigned" && x.driverId).map((x) => x.driverId));
+/* التعيين ذرّي: أول تحديث يوصل والطلب لسه pending هو اللي بيكسب */
+async function assignTo(env, r, d) {
+  const next = { ...r, status: "assigned", driverId: d.id, assignedAt: Date.now() };
+  const res = await env.DB.prepare(
+    `UPDATE docs SET data=?, updated=? WHERE kind='requests' AND id=? AND json_extract(data,'$.status')='pending'`
+  ).bind(JSON.stringify(next), Date.now(), r.id).run();
+  if (!res.meta || res.meta.changes !== 1) return null;
+  try { await pushTo(env, "driver", l10(d.phone), { kind: "ride", title: "الراكب اختارك ✓", body: "روح للراكب — " + ((r.from && r.from.label) || ""), url: "/driver.html", tag: "ride-" + r.id }); } catch (e) {}
+  try { await pushTo(env, "rider", l10(next.bookerPhone || next.riderPhone), { kind: "ride", title: d.name + " جاي ليك", body: "السعر " + next.fare + " ج — افتح علشان تشوفه على الخريطة", url: "/", tag: "ride-" + r.id }); } catch (e) {}
+  return next;
+}
+async function autoPick(env, r, drivers, requests) {
+  if (r.status !== "pending" || !(r.offers || []).length || Date.now() - r.offers[0].at < AUTO_PICK_MS) return null;
+  const best = liveOffers(r, drivers, busySet(requests))[0];
+  return best ? assignTo(env, r, best.d) : null;
+}
+
 function reachM(age) { for (const [ms, m] of RINGS) if (age < ms) return m; return Infinity; }
 /** هل السائق ده جوه دايرة الطلب دلوقتي؟ age = بقاله قد إيه مفتوح */
 function inReach(r, d, age) {
@@ -427,7 +479,33 @@ export async function onRequest({ request, env, params }) {
   try {
     /* ================= عام ================= */
 
-    if (route === "public" && method === "GET") return json(await readDocs(env, PUBLIC_KINDS));
+    if (route === "public" && method === "GET") {
+      const pub = await readDocs(env, PUBLIC_KINDS);
+      /* الأماكن اللي اتحددت تلقائياً وطلعت بعيد عن البلد (أكتر من ٤ كم) مابتظهرش للراكب لحد ما الإدارة تراجعها */
+      if (Array.isArray(pub.places)) {
+        const C = { lat: 30.7964, lng: 31.6261 };
+        pub.places = pub.places.filter((p) => !p.auto || p.lat == null || meters(C, { lat: +p.lat, lng: +p.lng }) <= 4000);
+      }
+      return json(pub);
+    }
+
+    /* سجل الموافقة على الشروط — دليل إن المستخدم وافق (إمتى، وعلى أنهي إصدار، ومن أنهي جهاز) */
+    if (route === "consent" && method === "POST") {
+      const b = await parseBody(request);
+      const role = b.role === "driver" ? "driver" : "rider";
+      const v = str(b.v, 10), device = str(b.device, 40).replace(/[^\w-]/g, "");
+      if (!v || device.length < 8) return json({ error: "بيانات ناقصة" }, 400);
+      const id = role + "-" + device + "-" + v;
+      const old = (await getDoc(env, "consents", id)) || {};
+      const phone = digits(b.phone).slice(0, 15) || old.phone || "";
+      await putDoc(env, "consents", id, {
+        id, role, v, device, phone,
+        acceptedAt: old.acceptedAt || str(b.at, 40), serverAt: old.serverAt || Date.now(),
+        linkedAt: phone && !old.phone ? Date.now() : (old.linkedAt || 0),
+        ip: old.ip || str(request.headers.get("cf-connecting-ip"), 64), ua: old.ua || str(request.headers.get("user-agent"), 200),
+      });
+      return json({ ok: true });
+    }
 
     if (route === "otp" && sub === "start" && method === "POST") {
       const b = await parseBody(request);
@@ -506,11 +584,24 @@ export async function onRequest({ request, env, params }) {
         r.status = "cancelled"; r.cancelReason = "expired"; r.cancelledBy = "system"; r.cancelledAt = Date.now();
         await putDoc(env, "requests", r.id, r);
       }
+      let offers = [], autoAt = null;
+      if (r.status === "pending" && (r.offers || []).length) {
+        const { drivers, requests } = await readDocs(env, ["drivers", "requests"]);
+        const picked = await autoPick(env, r, drivers, requests);
+        if (picked) Object.assign(r, picked);
+        else {
+          autoAt = r.offers[0].at + AUTO_PICK_MS;
+          offers = liveOffers(r, drivers, busySet(requests)).map((x) => ({
+            id: x.d.id, name: (x.d.name || "").trim().split(/\s+/)[0] || "سائق", photo: x.d.photo || "",
+            distM: x.distM, etaMin: x.etaMin, ...tierOf(x.d),
+          }));
+        }
+      }
       let driver = null, driverLoc = null;
       if (r.driverId && r.status === "assigned") {
         const d = await getDoc(env, "drivers", r.driverId);
         if (d) {
-          driver = { name: d.name, phone: d.phone, plate: d.plate, photo: d.photo || "", village: d.village || "", ...tierOf(d) };
+          driver = { name: d.name, plate: d.plate, photo: d.photo || "", village: d.village || "", ...tierOf(d) };
           if (d.loc && Date.now() - d.loc.at < 2 * 60 * 1000) driverLoc = d.loc;
         }
       }
@@ -520,7 +611,22 @@ export async function onRequest({ request, env, params }) {
         code: r.status === "assigned" ? r.code : null, startedAt: r.startedAt || null,
         arrivedAt: r.arrivedAt || null, cancelReason: r.cancelReason || null,
         shareToken: r.shareToken || null, reported: Boolean(r.reported),
+        offers, autoPickAt: autoAt, now: Date.now(),
       });
+    }
+
+    /* الراكب بيختار سائق من اللي وافقوا */
+    if (route === "pick" && method === "POST") {
+      const b = await parseBody(request);
+      const r = await getDoc(env, "requests", str(b.id, 40));
+      if (!r || !r.token || !safeEqual(b.token, r.token)) return json({ error: "غير مصرّح" }, 401);
+      if (r.status !== "pending") return json({ error: "الطلب اتقفل خلاص" }, 409);
+      const { drivers, requests } = await readDocs(env, ["drivers", "requests"]);
+      const o = liveOffers(r, drivers, busySet(requests)).find((x) => x.d.id === str(b.driverId, 40));
+      if (!o) return json({ error: "السائق ده مابقاش متاح — اختار حد تاني" }, 409);
+      const next = await assignTo(env, r, o.d);
+      if (!next) return json({ error: "الطلب اتقفل خلاص" }, 409);
+      return json({ ok: true });
     }
 
     /* «شارك رحلتك»: الأهل يشوفوا الحالة واسم السائق ولوحته — من غير أي أرقام تليفونات */
@@ -554,7 +660,7 @@ export async function onRequest({ request, env, params }) {
         if (d) await putDoc(env, "drivers", d.id, { ...d, lateCount: (d.lateCount || 0) + 1, lateLog: [...(d.lateLog || []), { at: Date.now(), rid: r.id }].slice(-20) });
       }
       if (b.rebook && r.status === "assigned" && !r.startedAt) {
-        await putDoc(env, "requests", r.id, { ...r, status: "pending", driverId: "", assignedAt: null, skipDrivers: [...(r.skipDrivers || []), r.driverId].slice(-5), rebooked: (r.rebooked || 0) + 1 });
+        await putDoc(env, "requests", r.id, { ...r, status: "pending", driverId: "", assignedAt: null, offers: [], skipDrivers: [...(r.skipDrivers || []), r.driverId].slice(-5), rebooked: (r.rebooked || 0) + 1 });
         return json({ ok: true, status: "pending" });
       }
       await putDoc(env, "requests", r.id, { ...r, status: "cancelled", cancelledBy: "rider", cancelReason: reason, cancelledAt: Date.now() });
@@ -793,7 +899,7 @@ export async function onRequest({ request, env, params }) {
       if (r.token && safeEqual(url.searchParams.get("token"), r.token)) who = "r";
       else { const me = await getDriver(request, env); if (me && me.id === r.driverId) who = "d"; }
       if (!who) return json({ error: "غير مصرّح" }, 401);
-      const open = r.driverId && (r.status === "assigned" || (r.status === "done" && Date.now() - (r.finishedAt || 0) < 30 * 60 * 1000));
+      const open = r.driverId && (r.status === "assigned" || (r.status === "done" && Date.now() - (r.finishedAt || 0) < 5 * 60 * 1000));
       const c = (await getDoc(env, "chat", r.id)) || { m: [], s: [] };
       if (method === "GET") {
         const after = +url.searchParams.get("after") || 0;
@@ -812,7 +918,7 @@ export async function onRequest({ request, env, params }) {
         if (b.sig && typeof b.sig === "object") {
           const t = str(b.sig.type, 12);
           if (!["offer", "answer", "bye", "decline"].includes(t)) return json({ error: "نوع غير معروف" }, 400);
-          c.s = c.s.filter((x) => now - x.at < 5 * 60 * 1000).concat([{ i: uid(), f: who, type: t, call: str(b.sig.call, 20), sdp: str(b.sig.sdp, 12000), at: now }]).slice(-20);
+          c.s = c.s.filter((x) => now - x.at < 5 * 60 * 1000).concat([{ i: uid(), f: who, type: t, call: str(b.sig.call, 20), sdp: String(b.sig.sdp ?? "").slice(0, 15000), at: now }]).slice(-20);
           if (t === "offer") c.m = c.m.concat([{ i: uid(), f: who, sys: "call", t: "", at: now }]).slice(-200);
         } else {
           const t = str(b.text, 500);
@@ -868,10 +974,20 @@ export async function onRequest({ request, env, params }) {
 
       if (sub === "feed" && method === "GET") {
         try { await runRepeats(env); } catch (e) {}
-        me.lastSeen = Date.now();
-        await putDoc(env, "drivers", me.id, me);
+        /* بنكتب «آخر ظهور» مرة كل ٣٠ ثانية بس — الكتابة كل ٤ ثواني كانت بتعمل ضغط (503) */
+        if (Date.now() - (me.lastSeen || 0) > 30000) { me.lastSeen = Date.now(); await putDoc(env, "drivers", me.id, me); }
         const { requests } = await readDocs(env, ["requests"]);
         const now = Date.now();
+        if (now - (globalThis.__mhSweep || 0) > 60000) { globalThis.__mhSweep = now; try { await expireStale(env, requests); } catch (e) {} }
+        /* الراكب مااختارش في دقيقة؟ نختار الأقرب له */
+        const due = requests.filter((r) => r.status === "pending" && (r.offers || []).length && now - r.offers[0].at >= AUTO_PICK_MS);
+        if (due.length && now - (globalThis.__mhPick || 0) > 8000) {
+          globalThis.__mhPick = now;
+          try {
+            const { drivers } = await readDocs(env, ["drivers"]);
+            for (const r of due.slice(0, 10)) { const n = await autoPick(env, r, drivers, requests); if (n) Object.assign(r, n); }
+          } catch (e) {}
+        }
 
         /* مشواره الحالي بالتفاصيل كاملة */
         const mineFull = requests
@@ -898,12 +1014,12 @@ export async function onRequest({ request, env, params }) {
           .filter((r) => !heading || (r.to && r.to.zoneId === heading.zoneId))
           .sort((a, b) => (far(a) - far(b)) || (openAt(b) - openAt(a)))
           .slice(0, 20)
-          .map((r) => ({ ...teaser(r), distM: isFinite(far(r)) ? Math.round(far(r)) : null }));
+          .map((r) => ({ ...teaser(r), distM: isFinite(far(r)) ? Math.round(far(r)) : null, offered: (r.offers || []).some((o) => o.d === me.id), offers: (r.offers || []).length }));
         const hidden = open.length - available.length;
 
         const done = requests.filter((r) => r.driverId === me.id && r.status === "done" && r.day === todayStr());
         return json({
-          me: { id: me.id, name: me.name, plate: me.plate, online: me.online !== false, zones, heading },
+          me: { id: me.id, name: me.name, plate: me.plate, online: me.online !== false, zones, heading, ...tierOf(me) },
           sub: ss,
           available: blocked ? [] : available, mine, hidden,
           today: { rides: done.length, earned: done.reduce((s, r) => s + (r.fare || 0), 0) },
@@ -962,6 +1078,22 @@ export async function onRequest({ request, env, params }) {
         if (!r) return json({ error: "الطلب غير موجود" }, 404);
         if (r.status !== "pending") return json({ error: "سائق تاني خد المشوار" }, 409);
         if (Date.now() < openAt(r)) return json({ error: "الطلب ده محجوز لبعدين" }, 409);
+
+        /* طلبات التطبيق: موافقة بس، والراكب هو اللي بيختار. طلبات التليفون (الإدارة): أول واحد ياخدها */
+        if (r.source !== "phone") {
+          const offers = Array.isArray(r.offers) ? r.offers : [];
+          if (offers.some((o) => o.d === me.id)) return json({ ok: true, offered: true });
+          if (offers.length >= MAX_OFFERS) return json({ error: "الراكب وصله موافقات كفاية" }, 409);
+          const myLoc = me.loc && Date.now() - me.loc.at < LOC_FRESH_MS ? me.loc : null;
+          const o = { d: me.id, at: Date.now(), distM: myLoc && r.from && isFinite(+r.from.lat) ? Math.round(meters(r.from, myLoc)) : null };
+          const res = await env.DB.prepare(
+            `UPDATE docs SET data=json_insert(json_set(data,'$.offers',json(coalesce(json_extract(data,'$.offers'),'[]'))),'$.offers[#]',json(?)), updated=?
+             WHERE kind='requests' AND id=? AND json_extract(data,'$.status')='pending'`
+          ).bind(JSON.stringify(o), Date.now(), rid).run();
+          if (!res.meta || res.meta.changes !== 1) return json({ error: "الطلب اتقفل" }, 409);
+          if (!offers.length) try { await pushTo(env, "rider", l10(r.bookerPhone || r.riderPhone), { kind: "ride", title: "سواقين وافقوا على طلبك 🛺", body: "افتح واختار السائق اللي يناسبك", url: "/", tag: "ride-" + rid }); } catch (e) {}
+          return json({ ok: true, offered: true });
+        }
 
         /* القبول ذرّي: الشرط جوّه جملة UPDATE نفسها، فأول طلب يوصل للقاعدة هو الفائز */
         const next = { ...r, status: "assigned", driverId: me.id, assignedAt: Date.now() };
@@ -1025,6 +1157,12 @@ export async function onRequest({ request, env, params }) {
         const next = b.status === "released"
           ? { ...r, status: "pending", driverId: "", assignedAt: null, startedAt: null, arrivedAt: null }
           : { ...r, status: "done", finishedAt: Date.now(), day: todayStr() };
+        /* عدّادات المستوى: كام مشوار خلص وكام مرة ساب المشوار */
+        try {
+          if (next.status === "done" && r.status !== "done") me.rideCount = (me.rideCount || 0) + 1;
+          if (b.status === "released") me.releaseCount = (me.releaseCount || 0) + 1;
+          await putDoc(env, "drivers", me.id, me);
+        } catch (e) {}
         /* نظام الرصيد: رسم المشوار بيتخصم مرة واحدة بس لما يخلص */
         if (next.status === "done" && !r.feeTaken && ss.state !== "free") {
           next.fee = sc.fee; next.feeTaken = true;
@@ -1068,9 +1206,16 @@ export async function onRequest({ request, env, params }) {
       return out.error ? json({ error: out.error }, out.status) : json(out);
     }
 
+    if (route === "consents" && method === "GET") {
+      const { consents } = await readDocs(env, ["consents"]);
+      consents.sort((a, b) => (b.serverAt || 0) - (a.serverAt || 0));
+      return json({ consents });
+    }
+
     if (route === "state" && method === "GET") {
       const all = await readDocs(env, KINDS);
       const now = Date.now();
+      try { await expireStale(env, all.requests || []); } catch (e) {}
       all.drivers = all.drivers.map((d) => ({
         ...d, isOnline: d.online !== false && now - (d.lastSeen || 0) < ONLINE_MS,
       }));

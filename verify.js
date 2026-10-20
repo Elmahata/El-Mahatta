@@ -28,7 +28,7 @@
     if (s && s.token && last10(s.phone) === last10(phone)) return Promise.resolve(s.token);
 
     return post("otp/start", { phone: phone, role: role }).then(function (st) {
-      if (st.skip) { setSess(role, { phone: phone, token: st.token }); return st.token; }
+      if (st.skip) { setSess(role, { phone: phone, token: st.token }); if (global.MHConsent) global.MHConsent.sync(); return st.token; }
       return new Promise(function (resolve, reject) {
         var ov = document.createElement("div");
         ov.style.cssText = "position:fixed;inset:0;z-index:5000;background:rgba(19,30,28,.55);display:flex;align-items:flex-end;justify-content:center";
@@ -62,6 +62,7 @@
           var b = this; b.disabled = true; err("");
           post("otp/verify", { id: id, code: code }).then(function (j) {
             setSess(role, { phone: phone, token: j.token });
+            if (global.MHConsent) global.MHConsent.sync();
             close(); resolve(j.token);
           }).catch(function (e) { err(e.message); $("otpIn").value = ""; $("otpIn").focus(); }).finally(function () { b.disabled = false; });
         });
@@ -86,15 +87,15 @@
       + '<div class="field" style="margin:0"><label for="gName">اسمك</label><input id="gName" autocomplete="name" placeholder="الاسم"></div>'
       + '<div class="field" style="margin:0"><label for="gPhone">رقم موبايلك (عليه واتساب)</label><input id="gPhone" inputmode="tel" autocomplete="tel" placeholder="01xxxxxxxxx" dir="ltr"></div>'
       + '<p id="gErr" style="margin:0;color:var(--crit);font-size:14px" hidden></p>'
-      + '<button class="btn btn-primary btn-wide" id="gGo">ابعتلي الكود</button>'
-      + '<a href="/privacy.html" class="hint" style="text-align:center">سياسة الخصوصية</a></div>';
+      + '<button class="btn btn-primary btn-wide" id="gGo">يلّا ندخل</button>'
+      + '<a href="/terms.html" target="_blank" rel="noopener" class="hint" style="text-align:center">الشروط والأحكام وسياسة الخصوصية</a></div>';
     document.body.appendChild(ov);
     var q = function (id) { return ov.querySelector("#" + id); };
     q("gName").value = (me && me.name) || ""; q("gPhone").value = (me && me.phone) || "";
     q("gGo").addEventListener("click", function () {
       var name = q("gName").value.trim(), phone = q("gPhone").value.replace(/\D/g, "");
       var e = q("gErr"); e.hidden = true;
-      if (!name) { q("gName").focus(); return; }
+      if (!name) { e.textContent = "اكتب اسمك الأول"; e.hidden = false; q("gName").focus(); return; }
       if (!/^01\d{9}$/.test(phone)) { e.textContent = "اكتب رقم موبايل مصري صحيح (١١ رقم يبدأ بـ 01)"; e.hidden = false; return; }
       var b = this; b.disabled = true;
       TT.verify(phone, "rider").then(function () { ov.remove(); onDone && onDone({ name: name, phone: phone }); })

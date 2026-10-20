@@ -81,7 +81,7 @@
       <p class="hint">اكتب رقم موبايلك والكود اللي أخدته من الإدارة.</p>
       <div style="margin-top:14px">
         <div class="field"><label for="ph">رقم الموبايل</label><input id="ph" inputmode="tel" placeholder="01xxxxxxxxx"></div>
-        <div class="field"><label for="cd">الكود</label><input id="cd" inputmode="numeric" maxlength="6" placeholder="••••"></div>
+        <div class="field"><label for="cd">الكود</label><input id="cd" type="password" inputmode="numeric" maxlength="6" placeholder="••••" autocomplete="current-password"></div>
         <label style="display:flex;gap:10px;align-items:center;min-height:44px;margin:-4px 0 8px;cursor:pointer"><input type="checkbox" id="remember" checked style="width:20px;height:20px;accent-color:var(--accent)"><span>احفظ الدخول على الموبايل ده</span></label>
         <button class="btn btn-primary btn-wide" id="go">دخول</button>
         <p class="hint" id="gateErr" style="margin-top:10px;color:var(--crit)" hidden></p>
@@ -95,6 +95,17 @@
   <section id="app" class="stack" hidden>
 
     <div id="subWarn" class="banner b-warn" hidden></div>
+
+    <!-- كارت مستوى السائق: لونه ونبضه على قد ترتيبه -->
+    <div id="lvl" class="mh-lvl mh-lvl-normal" hidden>
+      <div class="ic"><span class="p"></span><span class="p p2"></span><div class="tk" id="lvlTk"></div></div>
+      <div class="tx">
+        <div class="t1"><span id="lvlName">سائق عادي</span><span class="rt num" id="lvlRate"></span></div>
+        <div class="t2" id="lvlCount">لسه مفيش تقييمات</div>
+        <div class="bar" aria-hidden="true"><i id="lvlBar"></i></div>
+        <div class="t3" id="lvlNext"></div>
+      </div>
+    </div>
     <button type="button" id="trainBtn" class="banner b-note" style="border:0;width:100%;text-align:start;cursor:pointer;font:inherit;min-height:48px;align-items:center">
       <span>▶</span><span id="trainTxt"><b>جرّب مشوار تجريبي</b> — دقيقة واحدة تتعلّم فيها تقبل وتأكد الكود وتخلّص الرحلة. مفيش راكب حقيقي.</span>
     </button>
@@ -196,6 +207,7 @@
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="/assets/common.js"></script>
+<script src="/assets/terms.js" data-role="driver"></script>
 <script src="/assets/chat.js"></script>
 <script src="/assets/fcm-config.js"></script>
 <script src="/assets/push.js"></script>
@@ -223,11 +235,19 @@
     idleW = navigator.geolocation.watchPosition(function(p){
       var now = Date.now(), pt = { lat:p.coords.latitude, lng:p.coords.longitude };
       var moved = !idleLast || TT.dist(idleLast, pt) > 0.05;
-      if((moved && now - idleAt > 30000) || now - idleAt > 90000){
+      var big = idleLast && TT.dist(idleLast, pt) > 0.3;
+      if(big || (moved && now - idleAt > 20000) || now - idleAt > 45000){
         idleAt = now; idleLast = pt;
         fetch("/api/driver/loc", { method:"POST", headers:hdr(), body:JSON.stringify({ lat:pt.lat, lng:pt.lng, h:p.coords.heading, idle:true }) }).catch(function(){});
       }
     }, function(){}, { enableHighAccuracy:true, maximumAge:15000, timeout:30000 });
+    /* لو السائق واقف مكانه watchPosition مش بيشتغل — فبنبعت آخر مكان كل ٤٥ ثانية */
+    clearInterval(window.__mhBeat);
+    window.__mhBeat = setInterval(function(){
+      if(idleW == null || !idleLast || Date.now() - idleAt < 40000) return;
+      idleAt = Date.now();
+      fetch("/api/driver/loc", { method:"POST", headers:hdr(), body:JSON.stringify({ lat:idleLast.lat, lng:idleLast.lng, idle:true }) }).catch(function(){});
+    }, 15000);
   }
   function hdr(){
     return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "content-type": "application/json" };
@@ -267,6 +287,7 @@
       .then(function(j){
         auth = { phone: phone, code: code, name: j.driver.name };
         try{ localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); (rem ? localStorage : sessionStorage).setItem(KEY, JSON.stringify(auth)); }catch(x){}
+        if(window.MHConsent) MHConsent.sync();
         start();
         if(TT.push && "Notification" in window && Notification.permission === "granted") TT.push.init("driver", hdr);
       })
@@ -292,10 +313,35 @@
     call("online", { method: "POST", body: { online: on } }).then(tick).catch(function(){});
   });
 
+  /* ---------- مستوى السائق ---------- */
+  function renderLvl(me){
+    var tier = (me.tier === "gold" || me.tier === "silver") ? me.tier : "normal", n = me.ratingCount || 0, r = me.rating;
+    window.__mhTier = tier;
+    var box = $("lvl"); box.hidden = false;
+    if(box.getAttribute("data-t") !== tier){
+      box.setAttribute("data-t", tier); box.className = "mh-lvl mh-lvl-" + tier;
+      $("lvlTk").innerHTML = TT.tukSvg(tier, 40);
+    }
+    $("lvlName").textContent = tier === "gold" ? "سائق ذهبي" : tier === "silver" ? "سائق فضي" : "سائق عادي";
+    $("lvlRate").textContent = r ? "★ " + r : "";
+    $("lvlCount").textContent = n ? "من " + n + " تقييم" : "لسه مفيش تقييمات — أول رحلاتك هتحدد مستواك";
+    /* التقدّم للدرجة اللي بعدها (نفس حدود السيرفر: فضي ٤٫٥ و٣٠ تقييم · ذهبي ٤٫٨ و١٠٠ تقييم) */
+    var need = tier === "gold" ? null : tier === "silver" ? { n:100, r:4.8, to:"الذهبي" } : { n:30, r:4.5, to:"الفضي" }, pct = 100, msg;
+    if(!need){ msg = "إنت في أعلى مستوى 👏 حافظ عليه"; }
+    else {
+      pct = Math.round(Math.min(1, n / need.n) * (r && r >= need.r ? 1 : n ? .85 : 1) * 100);
+      var left = Math.max(0, need.n - n);
+      msg = left ? "فاضل " + left + " تقييم للمستوى " + need.to + (r && r < need.r ? " · ومحتاج تقييمك يبقى " + need.r + " ★" : "")
+        : (r && r < need.r ? "علّي تقييمك لـ " + need.r + " ★ علشان توصل " + need.to : "قربت توصل " + need.to);
+    }
+    $("lvlBar").style.width = pct + "%";
+    $("lvlNext").textContent = msg;
+  }
+
   /* ---------- العرض ---------- */
   function renderJobs(list){
     var host = $("jobs");
-    var ids = list.map(function(j){ return j.id; }).join(",");
+    var ids = list.map(function(j){ return j.id + (j.offered ? "+" + j.offers : ""); }).join(",");
     $("cnt").hidden = !list.length;
     $("cnt").textContent = list.length;
 
@@ -325,11 +371,14 @@
         + (when ? '<span class="chip c-warn">محجوز ' + when + '</span>' : '')
         + (j.forOther ? '<span class="chip c-neutral">لحد تاني</span>' : '')
         + '<span class="ago" data-ago="' + TT.esc(j.id) + '">' + TT.timeAgo(j.createdAt) + '</span></div>'
+        + (j.from && j.from.lat != null ? TT.miniMap(+j.from.lat, +j.from.lng) : '')
         + '<div class="route">'
-        + '<div class="r"><span class="d" style="background:var(--accent)"></span><div><b>' + TT.esc(j.from.label) + '</b><span class="n">الانطلاق</span></div></div>'
+        + '<div class="r"><span class="d" style="background:var(--accent)"></span><div><b>' + TT.esc(String(j.from.label || "").replace(/^موقعي\s*·\s*/, "")) + '</b><span class="n">مكان الراكب</span></div></div>'
         + '<div class="r"><span class="d" style="background:var(--fare)"></span><div><b>' + TT.esc(j.to.label) + '</b><span class="n">الوصول</span></div></div>'
         + '</div>'
-        + '<button class="btn btn-primary btn-take" data-take="' + TT.esc(j.id) + '">خد المشوار</button>'
+        + (j.offered
+          ? '<button class="btn btn-ghost btn-take" disabled style="opacity:1;border:1.5px dashed var(--accent);color:var(--accent-ink)">✓ وافقت — مستني الراكب يختار' + (j.offers > 1 ? ' (' + j.offers + ' سواقين وافقوا)' : '') + '</button>'
+          : '<button class="btn btn-primary btn-take" data-take="' + TT.esc(j.id) + '">' + (j.source === "phone" ? "خد المشوار" : "وافق على المشوار") + '</button>')
         + '</div>';
     }).join("");
   }
@@ -357,7 +406,7 @@
       if(!rRoute) rRoute = TT.animRoute(rMap, rt.coords, phase ? "#BC4E1E" : "#0E7566");
       else rRoute.setLatLngs(rt.coords);
       rideEta((phase ? "للوجهة: " : "للراكب: ") + TT.etaText(rt));
-      if(refit) rMap.fitBounds(rRoute.getBounds(), { padding:[30,30], maxZoom:17 });
+      if(refit) TT.fitRoute(rMap, rRoute.getBounds().extend([me.lat, me.lng]));
     });
   }
   function drawRideMap(r){
@@ -374,20 +423,22 @@
     var pts = [];
     if(r.from && r.from.lat != null){ rLayers.push(L.marker([r.from.lat, r.from.lng], { icon:TT.markerIcon("#0E7566", true) }).addTo(rMap).bindTooltip("الراكب هنا", { permanent:true, direction:"top", offset:[0,-30] })); pts.push([r.from.lat, r.from.lng]); }
     if(r.to && r.to.lat != null){ rLayers.push(L.marker([r.to.lat, r.to.lng], { icon:TT.markerIcon("#BC4E1E", true) }).addTo(rMap)); pts.push([r.to.lat, r.to.lng]); }
-    if(pts.length) rMap.fitBounds(pts, { padding:[36,36], maxZoom:17 });
+    if(pts.length) TT.fitRoute(rMap, L.latLngBounds(pts), { animate:false });
+    if(!window.__mhDrvFit){ window.__mhDrvFit = TT.autoFit(rMap, function(){ return rRoute ? rRoute.getBounds() : null; }); }
     if(rRoute){ rMap.removeLayer(rRoute); rRoute = null; } rr = { at:0 }; rideEta("");
     /* مسار واحد بس: قبل الركوب من مكانك للراكب، وبعد الركوب من مكانك للوجهة (updRoute بترسمه من الـ GPS) */
     if(!navigator.geolocation){ rideEta("الموبايل ده مش بيدعم تحديد المكان"); }
     else if(watchId == null){
       watchId = navigator.geolocation.watchPosition(function(p){
         var ll = [p.coords.latitude, p.coords.longitude], me = { lat:ll[0], lng:ll[1] };
-        if(!meDot) meDot = L.marker(ll, { icon:TT.driverIcon(p.coords.heading), interactive:false, zIndexOffset:1000 }).addTo(rMap);
-        else { meDot.setLatLng(ll); meDot.setIcon(TT.driverIcon(p.coords.heading)); }
+        if(!meDot) meDot = L.marker(ll, { icon:TT.driverIcon(p.coords.heading, window.__mhTier), interactive:false, zIndexOffset:1000 }).addTo(rMap);
+        else { meDot.setLatLng(ll); var tk = meDot.getElement && meDot.getElement() && meDot.getElement().querySelector(".tk"); if(tk && p.coords.heading != null && !isNaN(p.coords.heading)) tk.style.transform = "rotate(" + p.coords.heading + "deg)"; }
         /* بيبعت مكانك للراكب كل ٥ ثواني — وانت في مشوار بس */
         if(Date.now() - lastSent > 5000){
           lastSent = Date.now();
           fetch("/api/driver/loc", { method:"POST", headers:hdr(), body:JSON.stringify({ lat:me.lat, lng:me.lng, h:p.coords.heading }) }).catch(function(){});
         }
+        if(window.__mhRide && window.__mhRide.to) window.__mhToDist = TT.dist(me, window.__mhRide.to) * 1000;
         updRoute(me);
       }, function(e){ if(e && e.code === 1) rideEta("افتح تحديد المكان (GPS) علشان الراكب يشوفك جاي"); }, { enableHighAccuracy:true, maximumAge:5000 });
     }
@@ -407,11 +458,12 @@
     if(!chat || chatId !== r.id){ chatId = r.id; chat = TT.chat.mount({ rid: r.id, headers: function(){ return { "x-driver-phone": auth.phone, "x-driver-code": auth.code }; }, msgBtn: $("rMsg"), callBtn: $("rNet") }); }
     $("rNavA").href = navUrl(r.from);
     $("rNavB").href = navUrl(r.to);
-    $("rDone").setAttribute("data-rid", r.id);
+    $("rDone").setAttribute("data-rid", r.id); window.__mhRide = r;
     $("rRelease").setAttribute("data-rid", r.id);
     $("rStart").setAttribute("data-rid", r.id);
     $("codeGate").hidden = Boolean(r.startedAt);
     $("rDone").hidden = !r.startedAt;
+    $("rRelease").hidden = Boolean(r.startedAt);
     $("rArrived").hidden = Boolean(r.arrivedAt || r.startedAt);
     $("rArrived").setAttribute("data-rid", r.id); $("rNoShow").setAttribute("data-rid", r.id);
     waitAt = r.startedAt ? 0 : (r.arrivedAt || 0); waitPaint();
@@ -436,9 +488,12 @@
       if(busy) return;
       busy = true;
       var id = t.getAttribute("data-take");
-      t.disabled = true; t.textContent = "جارٍ الحجز…";
+      t.disabled = true; t.textContent = "جارٍ الإرسال…";
       call("claim", { method: "POST", body: { requestId: id } })
-        .then(function(){ TT.say("المشوار بقى بتاعك. روح للراكب"); TT.celebrate({ dark:true, title:"المشوار بقى بتاعك ✓", sub:"روح للراكب — دوس «ودّيني للراكب» علشان الخريطة تفتح", ms:1900 }); })
+        .then(function(res){
+          if(res && res.offered){ (window.__mhOffered = window.__mhOffered || {})[id] = 1; TT.say("وافقت. لو الراكب اختارك المشوار هيظهرلك"); TT.toast("موافقتك وصلت للراكب ✓ لو اختارك هيظهرلك المشوار على طول"); return; }
+          TT.say("المشوار بقى بتاعك. روح للراكب"); TT.celebrate({ dark:true, title:"المشوار بقى بتاعك ✓", sub:"روح للراكب — دوس «ودّيني للراكب» علشان الخريطة تفتح", ms:1900 });
+        })
         .catch(function(err){ TT.toast(err.message || "تعذّر الحجز"); })
         .then(function(){ lastIds = ""; return tick(); })
         .then(function(){ busy = false; }, function(){ busy = false; });
@@ -463,7 +518,9 @@
     if(d){
       var rid = d.getAttribute("data-rid"); if(!rid) return;
       var rel = (d.id === "rRelease");
-      if(rel && !confirm("تسيب المشوار ويرجع لباقي السواقين؟")) return;
+      var q = rel ? TT.ask("تسيب المشوار لسائق تاني؟", { sub:"الطلب هيرجع لباقي السواقين.", yes:"أيوه، سيبه", no:"لأ" })
+        : (window.__mhToDist != null && window.__mhToDist > 400 ? TT.ask("لسه بعيد عن الوجهة (" + Math.round(window.__mhToDist) + " م)", { sub:"متأكد إن الرحلة خلصت؟", yes:"أيوه، خلصت", no:"لأ", danger:false }) : Promise.resolve(true));
+      q.then(function(ok){ if(!ok) return;
       d.disabled = true;
       window.__mhFinishing = true;
       call("finish", { method: "POST", body: { requestId: rid, status: rel ? "released" : "done" } })
@@ -471,6 +528,7 @@
         .catch(function(err){ TT.toast(err.message || "خطأ"); })
         .then(function(){ lastIds = ""; return tick(); })
         .then(function(){ d.disabled = false; }, function(){ d.disabled = false; });
+      });
     }
   });
 
@@ -570,10 +628,12 @@
     if(!auth) return Promise.resolve();
     return call("feed").then(function(j){
       $("who").textContent = j.me.name + (j.me.plate ? " · لوحة " + j.me.plate : "");
+      renderLvl(j.me);
       $("onl").checked = j.me.online;
       idleTrack(j.me.online && !j.mine);
       $("pulse").hidden = !j.me.online;
       $("onlSt").textContent = j.me.online ? "بستقبل مشاوير" : "مش بستقبل دلوقتي";
+      $("onlSub").textContent = j.me.online ? "سيب الصفحة مفتوحة علشان توصلك الطلبات" : "مفيش طلبات هتوصلك";
       $("tRides").textContent = j.today.rides;
       $("tEarn").textContent = j.today.earned;
 
@@ -595,8 +655,14 @@
       $("headBan").hidden = !hd;
       if(hd) $("headBan").innerHTML = '<span>➤</span><span><b>رايح ناحية ' + TT.esc(TT.zoneName(zonesCache, hd.zoneId) || "") + '</b> — بتشوف الطلبات اللي على طريقك بس' + (j.hidden ? ' (' + j.hidden + ' متخبّيين)' : '') + '. دوس للإلغاء.</span>';
       if(!j.mine){ checkNew(j.available); renderJobs(j.available); }
+      /* وافقت على طلب واختفى ومابقاش بتاعك = الراكب اختار حد تاني */
+      var ofd = window.__mhOffered || {};
+      Object.keys(ofd).forEach(function(id){
+        if(j.mine && j.mine.id === id){ delete ofd[id]; TT.celebrate({ dark:true, title:"الراكب اختارك ✓", sub:"روح للراكب — دوس «ودّيني للراكب»", ms:1900 }); TT.say("الراكب اختارك. روح للراكب"); }
+        else if(!j.available.some(function(x){ return x.id === id; })){ delete ofd[id]; if(!j.mine) TT.toast("الراكب اختار سائق أقرب — استنى الطلب الجاي"); }
+      });
       $("feedHint").textContent = j.me.online
-        ? "أول سائق يضغط «خد المشوار» ياخده"
+        ? "وافق على المشوار — الراكب بيشوف اللي وافقوا ويختار (الأقرب فرصته أكبر)"
         : "افتح استقبال المشاوير علشان تشوف الطلبات";
     }).catch(function(err){
       if(err.status === 401 || err.status === 403){
