@@ -4,7 +4,7 @@
 DELETE FROM docs WHERE kind IN ('zones','places','config');
 
 INSERT INTO docs (kind,id,data,updated) VALUES
-('config','pricing','{"same":15,"cross":20,"paidFrom":"","week":30,"month":100,"grace":3}',0);
+('config','pricing','{"same":10,"cross":15,"cutKm":2,"paidFrom":"","week":30,"month":100,"grace":3}',0);
 
 INSERT INTO docs (kind,id,data,updated) VALUES
 ('zones','z0','{"id":"z0","name":"وسط البلد — التحرير","official":false,"order":0}',0),

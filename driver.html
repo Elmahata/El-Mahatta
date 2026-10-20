@@ -189,7 +189,7 @@
     <div id="feedWrap">
       <div class="card" style="padding:13px 16px">
         <h2 style="margin:0">طلبات متاحة <span class="chip c-warn num" id="cnt" hidden></span></h2>
-        <p class="hint" id="feedHint">أول سائق يضغط «خد المشوار» ياخده</p>
+        <p class="hint" id="feedHint">وافق على المشوار — الراكب بيشوف اللي وافقوا ويختار</p>
       </div>
       <div id="jobs" style="margin-top:12px"></div>
     </div>
@@ -366,7 +366,7 @@
       return '<div class="job' + (prevSeen[j.id] ? '' : ' is-new') + (idx === 0 && j.distM != null ? ' is-near' : '') + '" style="--i:' + idx + '">'
         + (idx === 0 && j.distM != null ? '<span class="job-near">الأقرب ليك</span>' : '')
         + '<div class="head"><span class="price">' + j.fare + '<small> ج</small></span>'
-        + '<span class="chip c-neutral">' + (j.sameZone ? "داخل المنطقة" : "بين منطقتين") + '</span>'
+        + '<span class="chip c-neutral">' + (j.sameZone ? "مشوار قصير" : "مشوار طويل") + '</span>'
         + (j.distM != null ? '<span class="chip c-accent num">' + (j.distM < 1000 ? j.distM + ' م منك' : (j.distM/1000).toFixed(1) + ' كم منك') + '</span>' : '')
         + (when ? '<span class="chip c-warn">محجوز ' + when + '</span>' : '')
         + (j.forOther ? '<span class="chip c-neutral">لحد تاني</span>' : '')
@@ -421,7 +421,7 @@
     rMapId = r.id;
     rLayers.forEach(function(l){ rMap.removeLayer(l); }); rLayers = [];
     var pts = [];
-    if(r.from && r.from.lat != null){ rLayers.push(L.marker([r.from.lat, r.from.lng], { icon:TT.markerIcon("#0E7566", true) }).addTo(rMap).bindTooltip("الراكب هنا", { permanent:true, direction:"top", offset:[0,-30] })); pts.push([r.from.lat, r.from.lng]); }
+    if(r.from && r.from.lat != null){ rLayers.push(L.marker([r.from.lat, r.from.lng], { icon:TT.markerIcon("#0E7566", true) }).addTo(rMap).bindTooltip("مكان الركوب", { permanent:true, direction:"top", offset:[0,-30] })); pts.push([r.from.lat, r.from.lng]); }
     if(r.to && r.to.lat != null){ rLayers.push(L.marker([r.to.lat, r.to.lng], { icon:TT.markerIcon("#BC4E1E", true) }).addTo(rMap)); pts.push([r.to.lat, r.to.lng]); }
     if(pts.length) TT.fitRoute(rMap, L.latLngBounds(pts), { animate:false });
     if(!window.__mhDrvFit){ window.__mhDrvFit = TT.autoFit(rMap, function(){ return rRoute ? rRoute.getBounds() : null; }); }
@@ -555,15 +555,15 @@
   function paintBig(){
     var p = Math.max(0, baLeft) / BA_SECS * 100;
     $("baRing").style.background = "conic-gradient(#fff 0 " + p + "%, rgba(255,255,255,.2) " + p + "% 100%)";
-    $("baSecs").textContent = "باقي " + Math.max(0, baLeft) + " ثانية · أول واحد يقبل ياخده";
+    $("baSecs").textContent = "باقي " + Math.max(0, baLeft) + " ثانية · وافق، والراكب هيختار من اللي وافقوا";
     if(baLeft <= 0) hideBig();
   }
   function showBig(job){
     baJob = job.id; baLeft = BA_SECS;
     $("baFare").textContent = job.fare;
     $("baFrom").textContent = job.from.label; $("baTo").textContent = job.to.label;
-    $("baChip").textContent = (job.distM != null ? (job.distM < 1000 ? job.distM + " م منك · " : (job.distM/1000).toFixed(1) + " كم منك · ") : "") + (job.sameZone ? "داخل المنطقة" : "بين منطقتين") + (job.scheduledAt ? " · محجوز" : "");
-    $("baTake").setAttribute("data-take", job.id); $("baTake").disabled = false; $("baTake").textContent = "خد المشوار";
+    $("baChip").textContent = (job.distM != null ? (job.distM < 1000 ? job.distM + " م منك · " : (job.distM/1000).toFixed(1) + " كم منك · ") : "") + (job.sameZone ? "مشوار قصير" : "مشوار طويل") + (job.scheduledAt ? " · محجوز" : "");
+    $("baTake").setAttribute("data-take", job.id); $("baTake").disabled = false; $("baTake").textContent = job.source === "phone" ? "خد المشوار" : "وافق على المشوار";
     $("bigAlert").hidden = false; paintBig();
     /* بيقرا الطلب بصوت عالي بعد النغمة — للسواقين اللي مش بيقروا بسهولة */
     setTimeout(function(){ if(baJob === job.id) TT.say("طلب جديد. من " + (job.from && job.from.label || "") + "، إلى " + (job.to && job.to.label || "") + ". بـ " + job.fare + " جنيه"); }, 1300);

@@ -210,8 +210,8 @@
     <div class="card">
       <h2>إعدادات التسعير</h2>
       <div class="row" style="margin-top:12px">
-        <div class="field"><label for="cSame">داخل نفس المنطقة (ج)</label><input id="cSame" type="number" min="0" step="1" value="15"></div>
-        <div class="field"><label for="cCross">بين منطقتين (ج)</label><input id="cCross" type="number" min="0" step="1" value="20"></div>
+        <div class="field"><label for="cSame">مشوار قصير — لحد ٢ كم (ج)</label><input id="cSame" type="number" min="0" step="1" value="10"></div>
+        <div class="field"><label for="cCross">مشوار طويل — أكتر من ٢ كم (ج)</label><input id="cCross" type="number" min="0" step="1" value="15"></div>
       </div>
       <div class="banner b-note" style="margin-bottom:12px"><span>★</span><span><b>المحطة مجانية بالكامل</b> — مفيش اشتراك ولا عمولة على السواقين. الراكب بيدفع الأجرة بس، كاش للسائق.</span></div>
       <div hidden>
@@ -365,7 +365,7 @@
       }
       return '<div class="item '+(r.status==="pending"?"waiting":(r.status==="assigned"?"assigned":""))+'">'
         + '<div class="item-head"><strong>'+TT.esc(r.riderName||"راكب")+'</strong>'+chip
-        + '<span class="chip c-neutral">'+(r.sameZone?"داخل المنطقة":"بين منطقتين")+'</span>'
+        + '<span class="chip c-neutral">'+(r.sameZone?"مشوار قصير":"مشوار طويل")+'</span>'
         + (r.source==="phone" ? '<span class="chip c-accent">بالتليفون</span>' : '')
         + (r.scheduledAt ? '<span class="chip c-warn">محجوز '+new Date(r.scheduledAt).toLocaleString("ar-EG",{ weekday:"short", hour:"numeric", minute:"2-digit" })+'</span>' : '')
         + (r.forOther ? '<span class="chip c-neutral">مطلوب لحد تاني</span>' : '')
@@ -544,7 +544,7 @@
     var inZ = done.filter(function(r){ return r.sameZone; }), cr = done.filter(function(r){ return !r.sameZone; });
     $("mix").innerHTML = done.length
       ? '<div class="tscroll"><table><thead><tr><th>النوع</th><th class="num">العدد</th><th class="num">النسبة</th><th class="num">الإجمالي</th></tr></thead><tbody>'
-        + [["داخل المنطقة",inZ],["بين منطقتين",cr]].map(function(g){
+        + [["مشوار قصير",inZ],["مشوار طويل",cr]].map(function(g){
             var pct = Math.round(g[1].length/done.length*100);
             var sum = g[1].reduce(function(s,r){ return s+(r.fare||0); },0);
             return '<tr><td>'+g[0]+'</td><td class="num">'+g[1].length+'</td><td class="num">'+pct+'%</td><td class="num">'+sum+' ج</td></tr>';

@@ -400,7 +400,7 @@ async function createRequest(env, b, source) {
   if (!name || phone.length < 9) return { error: "الاسم ورقم الموبايل مطلوبان", status: 400 };
 
   const { places, config, zones = [] } = await readDocs(env, PUBLIC_KINDS);
-  const cfg = config.find((c) => c.id === "pricing") || { same: 15, cross: 20 };
+  const cfg = config.find((c) => c.id === "pricing") || { same: 10, cross: 15 };
 
   const pick = (idKey, objKey) => {
     const pid = str(b[idKey], 40);
@@ -415,12 +415,22 @@ async function createRequest(env, b, source) {
   if (!from || !to) return { error: "حدّد مكان الركوب والوجهة", status: 400 };
 
   /* السعر يُحسب هنا فقط — لا يُقرأ من العميل */
-  const same = Boolean(from.zoneId && to.zoneId && from.zoneId === to.zoneId);
-  let fare = same ? cfg.same : cfg.cross;
-  /* سعر خاص لكل منطقة (لو الإدارة حددته) — للتوسع لمراكز تانية */
-  const zf = zones.find((z) => z.id === from.zoneId), zt = zones.find((z) => z.id === to.zoneId);
-  if (same && zf && Number(zf.same) > 0) fare = Number(zf.same);
-  if (!same) { const zc = Math.max(Number(zf && zf.cross) || 0, Number(zt && zt.cross) || 0); if (zc > 0) fare = zc; }
+  /* بالمسافة: خط مستقيم × ١٫٣ ≈ مسافة الشوارع. لحد cutKm (٢ كم) = سعر المشوار القصير، أكتر = الطويل.
+     لو مكان مالوش إحداثيات: نرجع للمناطق (نفس المنطقة = قصير، بين منطقتين = طويل) */
+  const hasXY = (p) => p && p.lat != null && p.lng != null && isFinite(+p.lat) && isFinite(+p.lng);
+  const cutKm = Number(cfg.cutKm) > 0 ? Number(cfg.cutKm) : 2;
+  let same, fare, distKm = null;
+  if (hasXY(from) && hasXY(to)) {
+    distKm = Math.round(meters({ lat: +from.lat, lng: +from.lng }, { lat: +to.lat, lng: +to.lng }) * 1.3 / 100) / 10;
+    same = distKm <= cutKm;
+    fare = same ? cfg.same : cfg.cross;
+  } else {
+    same = Boolean(from.zoneId && to.zoneId && from.zoneId === to.zoneId);
+    fare = same ? cfg.same : cfg.cross;
+    const zf = zones.find((z) => z.id === from.zoneId), zt = zones.find((z) => z.id === to.zoneId);
+    if (same && zf && Number(zf.same) > 0) fare = Number(zf.same);
+    if (!same) { const zc = Math.max(Number(zf && zf.cross) || 0, Number(zt && zt.cross) || 0); if (zc > 0) fare = zc; }
+  }
   const now = Date.now();
 
   /* احجز لبعدين: من ٢٠ دقيقة لحد ٧ أيام */
@@ -460,13 +470,13 @@ async function createRequest(env, b, source) {
   await putDoc(env, "requests", id, {
     id, token: tok, shareToken: share, code: rideCode(), source,
     riderName: name, riderPhone: phone, note: str(b.note, 140), from, to, ip: str(b.__ip, 64),
-    fare, sameZone: same, status: "pending", driverId: "",
+    fare, sameZone: same, distKm, status: "pending", driverId: "",
     createdAt: now, day: todayStr(), scheduledAt,
     forOther: Boolean(b.forOther), bookerPhone: b.forOther ? digits(b.bookerPhone).slice(0, 15) : "",
     discount, refBy: discount && refBy ? refBy : "", refCredit: Boolean(discount && !refBy),
   });
   if (!scheduledAt || scheduledAt - now < 15 * 60e3) await pushDrivers(env, { from, to, fare });
-  return { ok: true, id, token: tok, shareToken: share, fare, sameZone: same, discount, scheduledAt, refCode: refCode(phone) };
+  return { ok: true, id, token: tok, shareToken: share, fare, sameZone: same, distKm, discount, scheduledAt, refCode: refCode(phone) };
 }
 
 export async function onRequest({ request, env, params }) {
@@ -571,7 +581,11 @@ export async function onRequest({ request, env, params }) {
         })
         .filter((p) => !isFinite(lat) || !isFinite(lng) || (Math.abs(p.lat - lat) < 0.05 && Math.abs(p.lng - lng) < 0.05))
         .slice(0, 25);
-      return json({ count: out.length, drivers: out });
+      /* قريب = في نص كيلو (نفس أول دايرة بيوصلها الطلب). غير كده بنقول أقرب واحد على بعد كام */
+      const ds = isFinite(lat) && isFinite(lng) ? out.map((p) => meters({ lat, lng }, p)) : [];
+      const near = ds.length ? ds.filter((m) => m <= RADIUS_M).length : out.length;
+      const nearestM = ds.length ? Math.round(Math.min(...ds)) : null;
+      return json({ count: out.length, near, nearestM, drivers: out });
     }
 
     /* متابعة الراكب — بيانات السائق تظهر فقط بعد ما يَقبل */

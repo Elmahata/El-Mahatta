@@ -380,7 +380,7 @@
   TT.api("public").then(function(raw){
     var s = TT.shape(raw);
     state.zones = s.zones; state.places = s.places; state.cfg = s.cfg;
-    $("prices").textContent = s.cfg.same + " ج داخل المنطقة · " + s.cfg.cross + " ج بين منطقتين";
+    $("prices").textContent = s.cfg.same + " ج لحد ٢ كم · " + s.cfg.cross + " ج أكتر من ٢ كم";
     var admin = (s.cfg.adminPhone || "").replace(/\D/g,"");
     if(admin){ $("supCall").href = "tel:" + admin; $("supWa").href = "https://wa.me/" + TT.waNum(admin); }
     else { $("supCall").hidden = true; $("supWa").hidden = true; }

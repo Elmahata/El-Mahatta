@@ -64,8 +64,12 @@
     /* السعر يُعرض هنا للمستخدم؛ الخادم يعيد حسابه عند التأكيد ولا يثق بالعميل */
     fareFor: function (state, fromId, toId) {
       var a = T.byId(state.places, fromId), b = T.byId(state.places, toId);
-      var cfg = state.cfg || { same: 15, cross: 20 };
+      var cfg = state.cfg || { same: 10, cross: 15 };
       if (!a || !b) return { amount: cfg.cross, same: false, known: false };
+      if (a.lat != null && b.lat != null && isFinite(+a.lat) && isFinite(+b.lat)) {
+        var sh = T.dist({ lat: +a.lat, lng: +a.lng }, { lat: +b.lat, lng: +b.lng }) * 1.3 <= (+cfg.cutKm > 0 ? +cfg.cutKm : 2);
+        return { amount: sh ? cfg.same : cfg.cross, same: sh, known: true };
+      }
       var same = Boolean(a.zoneId && b.zoneId && a.zoneId === b.zoneId);
       return { amount: same ? cfg.same : cfg.cross, same: same, known: Boolean(a.zoneId && b.zoneId) };
     },
@@ -127,8 +131,9 @@
         drivers: raw.drivers || [],
         requests: raw.requests || [],
         cfg: {
-          same: cfgDoc && cfgDoc.same != null ? cfgDoc.same : 15,
-          cross: cfgDoc && cfgDoc.cross != null ? cfgDoc.cross : 20,
+          same: cfgDoc && cfgDoc.same != null ? cfgDoc.same : 10,
+          cross: cfgDoc && cfgDoc.cross != null ? cfgDoc.cross : 15,
+          cutKm: cfgDoc && +cfgDoc.cutKm > 0 ? +cfgDoc.cutKm : 2,
           sub: cfgDoc && cfgDoc.sub != null ? cfgDoc.sub : 200,
           freeUntil: (cfgDoc && cfgDoc.freeUntil) || "",
           paidFrom: (cfgDoc && cfgDoc.paidFrom) || "",

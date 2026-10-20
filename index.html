@@ -415,11 +415,18 @@ html,body{height:100%;overflow:hidden}
       zoneId: best.zoneId
     };
   }
+  /* نفس حساب السيرفر: بالمسافة (خط مستقيم × ١٫٣) لحد cutKm = قصير، أكتر = طويل. ولو مفيش إحداثيات نرجع للمناطق */
   function fareOf(){
-    var c = state.cfg;
-    if(!trip.from || !trip.to) return { amount:c.same, same:true, known:false };
-    var same = Boolean(trip.from.zoneId && trip.to.zoneId && trip.from.zoneId === trip.to.zoneId);
-    return { amount: zoneFare(trip.from.zoneId, trip.to.zoneId), same:same, known: Boolean(trip.from.zoneId && trip.to.zoneId) };
+    var c = state.cfg, a = trip.from, b = trip.to;
+    if(!a || !b) return { amount:c.same, same:true, known:false };
+    var xy = function(p){ return p.lat != null && p.lng != null && isFinite(+p.lat) && isFinite(+p.lng); };
+    if(xy(a) && xy(b)){
+      var km = Math.round(TT.dist({ lat:+a.lat, lng:+a.lng }, { lat:+b.lat, lng:+b.lng }) * 1.3 * 10) / 10;
+      var short = km <= (+c.cutKm > 0 ? +c.cutKm : 2);
+      return { amount: short ? c.same : c.cross, same:short, known:true, km:km };
+    }
+    var same = Boolean(a.zoneId && b.zoneId && a.zoneId === b.zoneId);
+    return { amount: zoneFare(a.zoneId, b.zoneId), same:same, known: Boolean(a.zoneId && b.zoneId) };
   }
   /* نفس حساب السيرفر: سعر المنطقة لو متحدد، وإلا السعر العام */
   function zoneFare(a, b){
@@ -627,7 +634,9 @@ html,body{height:100%;overflow:hidden}
     $("fareBox").classList.toggle("nofare", !f.known);
     $("fareCap").innerHTML = !f.known
       ? '<b>جنيهاً</b> — تقديري، هيتأكد لما السائق يقبل.'
-      : f.same
+      : f.km != null
+        ? '<b>جنيهاً</b> — ' + (f.same ? 'مشوار قصير' : 'مشوار طويل') + ' (حوالي ' + f.km + ' كم)، سعر ثابت بلا مفاصلة.<br>يُدفع نقداً عند الوصول.'
+        : f.same
         ? '<b>جنيهاً</b> — داخل ' + TT.esc(trip.from.zone) + '، سعر ثابت بلا مفاصلة.<br>يُدفع نقداً عند الوصول.'
         : '<b>جنيهاً</b> — من ' + TT.esc(trip.from.zone) + ' إلى ' + TT.esc(trip.to.zone) + '.<br>سعر ثابت، يُدفع نقداً عند الوصول.';
   }
@@ -712,7 +721,7 @@ html,body{height:100%;overflow:hidden}
           $("dFare").textContent = j.fare + " ج نقداً";
           $("dFare2").textContent = j.fare;
           if(!window.__chat || window.__chatId !== j.id){ window.__chatId = j.id; window.__chat = TT.chat.mount({ rid: j.id, token: live.token, msgBtn: $("dMsg"), callBtn: $("dNet") }); }
-          $("codeBox").hidden = !j.code;
+          $("codeBox").hidden = !j.code || Boolean(j.startedAt);
           $("dCode").textContent = j.code || "—";
           reportFor = { id: live.id, token: live.token };
           var shareUrl = location.origin + "/track.html?id=" + encodeURIComponent(live.id) + "&s=" + encodeURIComponent(j.shareToken || "");
@@ -726,12 +735,15 @@ html,body{height:100%;overflow:hidden}
           $("lateBox").hidden = !(j.assignedAt && !j.startedAt && !j.arrivedAt && Date.now() - j.assignedAt > 15 * 6e4);
           arrAt = j.startedAt ? 0 : (j.arrivedAt || 0);
           $("riderCancel").hidden = Boolean(j.startedAt);
+          $("codeBox").hidden = !j.code || Boolean(j.startedAt);
+          if(j.arrivedAt && !j.startedAt && $("dEta")) $("dEta").textContent = "";
           $("mTitle").textContent = j.startedAt ? "في الطريق للوجهة 🛺" : j.arrivedAt ? "السائق وصل ✓ انزل له" : "سائق جاي ليك ✓";
           $("mHint").textContent = j.startedAt ? "استمتع بالمشوار،" : j.arrivedAt ? "السائق مستنّيك تحت،" : "استنّى في مكانك،";
           if(arrAt && arrSeen !== j.id){ arrSeen = j.id; arrivedAlert(j); }
           arrPaint();
         } else if(j.status === "done"){
           stopPoll(); saveLive(null); clearLive();
+          if(window.__chat){ window.__chat.stop(); window.__chat = null; window.__chatId = null; }
           histUpdate(j.id, { status:"done", fare:j.fare });
           TT.sound("done"); setTimeout(checkWallet, 1500);
           $("endTitle").textContent = "حمدالله على السلامة ✓";
@@ -748,6 +760,7 @@ html,body{height:100%;overflow:hidden}
           setStep("ended");
         } else if(j.status === "cancelled"){
           stopPoll(); saveLive(null); clearLive();
+          if(window.__chat){ window.__chat.stop(); window.__chat = null; window.__chatId = null; }
           histUpdate(j.id, { status:"cancelled" });
           TT.sound("cancel");
           $("endTitle").textContent = j.cancelReason === "expired" ? "معلش، مالقيناش توكتوك فاضي" : "الطلب اتلغى";
@@ -894,7 +907,7 @@ html,body{height:100%;overflow:hidden}
         if(!liveL.drv) return;
         if(!liveL.line) liveL.line = TT.animRoute(map, rt.coords, phase ? "#BC4E1E" : "#131E1C");
         else liveL.line.setLatLngs(rt.coords);
-        if(eta) eta.textContent = (phase ? "هتوصل خلال " : "السائق هيوصلك خلال ") + TT.etaText(rt);
+        if(eta) eta.textContent = (!phase && j.arrivedAt) ? "" : (phase ? "هتوصل خلال " : "السائق هيوصلك خلال ") + TT.etaText(rt);
         /* بيتظبط أول مرة، ولما الراكب يركب (المسار بيتغيّر)، ولو التوكتوك خرج برّه الجزء الظاهر */
         if(!window.__mhFitB || !layers.length) window.__mhFitB = function(){ return liveL.line ? liveL.line.getBounds().extend(liveL.drv ? liveL.drv.getLatLng() : liveL.line.getBounds().getCenter()) : null; };
         var vis = map.getBounds().pad(-0.12);
@@ -1151,12 +1164,15 @@ html,body{height:100%;overflow:hidden}
     clearTimeout(nearT); nearT = setTimeout(nearby, 15000);
     var show = step === "from" || step === "to" || step === "confirm" || step === "search";
     if(!show || document.hidden){ TT.syncMarkers(map, nearStore, [], TT.tukIcon); $("nearPill").hidden = true; return; }
-    var c = map.getCenter();
+    /* بنحسب من مكان الركوب اللي الراكب اختاره (مش من نص الخريطة) */
+    var c = trip.from && trip.from.lat != null && isFinite(+trip.from.lat) ? { lat:+trip.from.lat, lng:+trip.from.lng } : map.getCenter();
     fetch("/api/nearby?lat=" + c.lat.toFixed(4) + "&lng=" + c.lng.toFixed(4)).then(function(r){ return r.json(); }).then(function(j){
       TT.syncMarkers(map, nearStore, j.drivers || [], function(){ return TT.tukIcon(false); });
-      var n = j.count || 0;
+      var n = j.near != null ? j.near : (j.count || 0), all = j.count || 0, m = j.nearestM;
       $("nearPill").hidden = false;
-      $("nearTxt").textContent = n ? (n === 1 ? "توكتوك واحد قريب منك" : n === 2 ? "توكتوكين قريبين منك" : n <= 10 ? n + " تكاتك قريبة منك" : n + " توكتوك قريب منك") : "مفيش تكاتك أونلاين دلوقتي";
+      $("nearTxt").textContent = n ? (n === 1 ? "توكتوك واحد قريب منك" : n === 2 ? "توكتوكين قريبين منك" : n <= 10 ? n + " تكاتك قريبة منك" : n + " توكتوك قريب منك")
+        : all ? "أقرب توكتوك على بعد " + (m != null ? (m < 1000 ? Math.round(m / 50) * 50 + " م" : (m / 1000).toFixed(1) + " كم") : "شوية")
+        : "مفيش تكاتك أونلاين دلوقتي";
     }).catch(function(){});
   }
   document.addEventListener("visibilitychange", function(){ if(!document.hidden) nearby(); });
