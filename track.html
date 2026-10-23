@@ -42,8 +42,9 @@
         <div class="st" id="s4"><span class="b"></span><div>وصل بالسلامة<small id="t4"></small></div></div>
       </div>
     </div>
+    <div id="eta" style="font-weight:700;color:var(--accent-ink);text-align:center;min-height:1.4em"></div>
     <div id="map"></div>
-    <p class="hint" style="text-align:center">الصفحة دي مش بتبيّن أي أرقام تليفونات. بتتحدّث لوحدها كل ١٠ ثواني.</p>
+    <p class="hint" style="text-align:center">الصفحة دي مش بتبيّن أي أرقام تليفونات. التوكتوك بيتحدّث لوحده كل ثانيتين.</p>
   </section>
 </div>
 
@@ -53,7 +54,7 @@
 (function(){
   "use strict";
   var $ = TT.$, q = new URLSearchParams(location.search);
-  var id = q.get("id"), s = q.get("s"), map = null, drawn = false, timer = null;
+  var id = q.get("id"), s = q.get("s"), map = null, drawn = false, timer = null, lv = { at:0 };
   function hm(ts){ return ts ? new Date(ts).toLocaleTimeString("ar-EG", { hour:"numeric", minute:"2-digit" }) : ""; }
   function load(){
     fetch("/api/share/" + encodeURIComponent(id || "") + "?s=" + encodeURIComponent(s || ""))
@@ -81,14 +82,37 @@
           var a = [j.from.lat, j.from.lng], b = [j.to.lat, j.to.lng];
           L.marker(a, { icon: TT.markerIcon("#0E7566", true) }).addTo(map).bindTooltip(j.from.label);
           L.marker(b, { icon: TT.markerIcon("#BC4E1E", true) }).addTo(map).bindTooltip(j.to.label);
-          var line = L.polyline([a, b], { color:"#0E7566", weight:4 }).addTo(map);
+          var line = L.polyline([a, b], { color:"#0E7566", weight:4, opacity:.35, dashArray:"6 8" }).addTo(map);
           TT.fitRoute(map, line.getBounds());
         }
+        live(j, st, started);
       })
       .catch(function(e){ $("err").textContent = e.message; $("err").hidden = false; });
   }
+  /* التوكتوك لايف عند الأهل: بيتحدّث كل ثانيتين وبيمشي على المسار بين كل نقطة والتانية */
+  function live(j, st, started){
+    if(!map) return;
+    var dl = j.driverLoc, tier = j.driver && j.driver.tier, phase = started ? 1 : 0, target = phase ? j.to : j.from;
+    if(st !== "assigned" || !dl){ if(lv.drv){ map.removeLayer(lv.drv); lv.drv = null; } if(lv.line){ map.removeLayer(lv.line); lv.line = null; } $("eta").textContent = ""; return; }
+    var d = [dl.lat, dl.lng];
+    if(!lv.drv) lv.drv = L.marker(d, { icon:TT.driverIcon(dl.h, tier), interactive:false, zIndexOffset:1000 }).addTo(map);
+    else if(!(lv.last && lv.last[0] === d[0] && lv.last[1] === d[1])) TT.glidePath(lv.drv, d, lv.coords, 2000, function(h){ var el = lv.drv.getElement && lv.drv.getElement(), tk = el && el.querySelector(".tk"); if(tk && TT.rotTo) TT.rotTo(tk, h); else lv.drv.setIcon(TT.driverIcon(h, tier)); });
+    lv.last = d;
+    if(!target || target.lat == null) return;
+    var moved = !lv.lp || TT.dist(lv.lp, dl) > 0.06 || lv.phase !== phase;
+    if(moved && Date.now() - lv.at > 8000){
+      lv.at = Date.now(); lv.lp = dl; var ph = lv.phase; lv.phase = phase;
+      TT.route(dl, target).then(function(rt){
+        if(!lv.drv) return;
+        lv.coords = rt.road ? rt.coords : null;
+        if(!lv.line) lv.line = TT.animRoute(map, rt.coords, phase ? "#BC4E1E" : "#131E1C"); else lv.line.setLatLngs(rt.coords);
+        $("eta").textContent = (phase ? "هيوصل خلال " : "السائق هيوصل خلال ") + TT.etaText(rt);
+        if(ph !== phase || !map.getBounds().pad(-0.12).contains(d)) TT.fitRoute(map, lv.line.getBounds().extend(d));
+      });
+    }
+  }
   load();
-  timer = setInterval(function(){ if(!document.hidden) load(); }, 10000);
+  timer = setInterval(function(){ if(!document.hidden) load(); }, 2000);
 })();
 </script>
 <a href="tel:122" aria-label="اتصل بالنجدة ١٢٢" style="position:fixed;left:16px;bottom:calc(16px + env(safe-area-inset-bottom));z-index:900;display:flex;align-items:center;gap:8px;background:#A9382B;color:#fff;text-decoration:none;border-radius:999px;padding:12px 18px;font:700 15px var(--body);min-height:48px;box-shadow:0 10px 24px -10px rgba(169,56,43,.9)"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M6.6 10.8a15.1 15.1 0 0 0 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1A17 17 0 0 1 3 4c0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1z"/></svg>النجدة ١٢٢</a>

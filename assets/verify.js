@@ -10,7 +10,10 @@
   function getSess(role) {
     try {
       var s = JSON.parse(localStorage.getItem(key(role)) || "null");
-      return s && s.at && Date.now() - s.at < DAYS ? s : null;
+      if (!(s && s.at && Date.now() - s.at < DAYS)) return null;
+      /* كل مرة يفتح التطبيق المدة بتتجدد — يفضل داخل طول ما بيستخدمه */
+      if (Date.now() - s.at > 864e5) { s.at = Date.now(); localStorage.setItem(key(role), JSON.stringify(s)); }
+      return s;
     } catch (e) { return null; }
   }
   function setSess(role, s) { s.at = Date.now(); try { localStorage.setItem(key(role), JSON.stringify(s)); } catch (e) {} }

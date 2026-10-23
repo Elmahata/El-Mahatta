@@ -15,19 +15,19 @@
     var s = role === "driver" ? (read("tt-driver") || read("tt-driver", sessionStorage)) : read("mh-sess-rider");
     return s && s.phone ? String(s.phone).replace(/\D/g, "") : "";
   }
+  var TXT = role === "driver"
+    ? "قرأت الشروط والأحكام وسياسة الخصوصية ووافقت عليها، وأقرّ بأني مقدّم خدمة مستقل ولست موظفاً لدى إدارة المنصة، وأن رخصي وتأميني ساريان وصحيحان وأني مسئول عنهما، وأن الرصيد رسوم خدمة غير قابلة للاسترداد، وأوافق على جمع بياناتي وموقعي ومعالجتها."
+    : "قرأت الشروط والأحكام وسياسة الخصوصية ووافقت عليها، وأوافق على جمع رقمي وموقعي ومعالجتهما وتخزينهما على خوادم قد تكون خارج مصر، وأقرّ بأن السن اللي هسجّل بيه صحيح.";
   function sync() {
     var rec = read(K); if (!rec || rec.v !== V) return;
     var ph = phone();
     if (rec.sent && rec.phone === ph) return;
-    fetch("/api/consent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: role, v: V, at: rec.at, phone: ph, device: device() }) })
+    fetch("/api/consent", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ role: role, v: V, at: rec.at, phone: ph, device: device(), text: TXT }) })
       .then(function (r) { if (r.ok) { rec.sent = true; rec.phone = ph; try { localStorage.setItem(K, JSON.stringify(rec)); } catch (e) {} } })
       .catch(function () {});
   }
   window.MHConsent = { sync: sync };
   var cur = read(K); if (cur && cur.v === V) { sync(); return; }
-  var TXT = role === "driver"
-    ? "قرأت الشروط والأحكام وسياسة الخصوصية ووافقت عليها، وأقرّ بأني مقدّم خدمة مستقل ولست موظفاً لدى إدارة المنصة، وأن رخصي وتأميني ساريان وصحيحان وأني مسئول عنهما، وأن الرصيد رسوم خدمة غير قابلة للاسترداد، وأوافق على جمع بياناتي وموقعي ومعالجتها."
-    : "قرأت الشروط والأحكام وسياسة الخصوصية ووافقت عليها، وأوافق على جمع رقمي وموقعي ومعالجتهما وتخزينهما على خوادم قد تكون خارج مصر، وأقرّ بأن السن اللي هسجّل بيه صحيح.";
   function show() {
     var ov = document.createElement("div");
     ov.style.cssText = "position:fixed;inset:0;z-index:6000;background:rgba(19,30,28,.6);display:flex;align-items:flex-end;justify-content:center";

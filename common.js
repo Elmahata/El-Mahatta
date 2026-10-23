@@ -96,6 +96,7 @@
       opts = opts || {};
       var headers = { "content-type": "application/json" };
       if (opts.pin) headers["x-pin"] = opts.pin;
+      if (opts.user) headers["x-user"] = encodeURIComponent(opts.user);
       if (opts.verify && T.verify) {
         var v = opts.verify; delete opts.verify;
         return T.verify(v.phone, v.role).then(function (tok) { opts.session = tok; return T.api(path, opts); });
@@ -295,13 +296,19 @@
     accepted: [[587, 0, .14], [740, .12, .14], [880, .24, .14], [1175, .36, .34]],
     offer:    [[740, 0, .12, "triangle"], [988, .13, .24, "triangle"]],
     picked:   [[523, 0, .16], [659, .16, .16], [784, .32, .16], [1047, .48, .55], [1319, .9, .7, "triangle"]],
-    arrived:  [[660, 0, .18], [880, .22, .18], [1100, .44, .3]],
-    done:     [[784, 0, .14], [988, .12, .14], [1319, .26, .42, "triangle"]],
+    /* السواق وصل: «تي-تي-تيي» + تيك-توك زي فلاشر العربية + بيب «أنا هنا» */
+    arrived:  [[660, 0, .18], [880, .22, .18], [1100, .44, .3], [2400, 0.9, .025, "square", .14], [1800, 0.912, .03, "triangle", .1], [1900, 1.3, .025, "square", .12], [1300, 1.312, .035, "triangle", .09], [2400, 1.7, .025, "square", .14], [1800, 1.712, .03, "triangle", .1], [1900, 2.1, .025, "square", .12], [1300, 2.112, .035, "triangle", .09], [1175, 2.45, .12, "sine", .14], [1175, 2.65, .18, "sine", .14]],
+    /* الوصول «ورد وجرس»: جرسين ناعمين + لمعة */
+    done:     [[1047, 0, .6, "sine", .16], [2093, 0, .25, "sine", .03], [1319, .2, .6, "sine", .15], [1568, .4, .9, "sine", .15], [3136, .55, .5, "triangle", .03]],
     msg:      [[988, 0, .08], [1319, .09, .12]],
     error:    [[330, 0, .16, "square", .12], [247, .16, .26, "square", .12]],
     cancel:   [[659, 0, .16, "sine", .16], [523, .15, .16, "sine", .16], [415, .3, .5, "sine", .18]],
     /* نغمة الدخول «نطّة الدبوس»: الضربة التقيلة على ٠٫٥ ثانية = لحظة نزول اللوجو على الأرض */
     intro:    [[900, .05, .42, "sine", .05, 300], [110, .5, .3, "sine", .35, 70], [220, .5, .22, "triangle", .14], [523, .62, .55, "sine", .12], [659, .69, .55, "sine", .12], [784, .76, .55, "sine", .12], [1047, .83, .55, "sine", .12]],
+    /* بداية البحث: «بينج» رادار مرتين + لمعة صغيرة = الطلب طلع ولسه بندوّر */
+    search:   [[1175, 0, .5, "sine", .16], [2349, 0, .18, "sine", .03], [1175, .42, .5, "sine", .11], [2349, .42, .18, "sine", .02], [1568, .84, .35, "triangle", .07]],
+    /* تنبيه المشوار اليومي (قبل الطلب بـ ١٠ دقايق): «دينج-دونج» مرتين */
+    dailySoon:[[784, 0, .22, "sine", .16], [1047, .2, .3, "sine", .16], [784, .62, .22, "sine", .14], [1047, .82, .45, "sine", .16], [2093, .82, .2, "sine", .03]],
     newReq:   [[880, 0, .16, "square"], [660, .2, .16, "square"], [880, .4, .26, "square"]],
   };
   var sctx = null;
@@ -354,6 +361,61 @@
     });
   };
   /* المسار المتحرك: حدّ أبيض + خط بيترسم + نقط ماشية فوقه في اتجاه المشوار */
+  /* التوكتوك بيمشي بين كل نقطتين على الشارع نفسه — مابيقطعش البيوت أبداً:
+     ١) لو النقطتين على مسار الرحلة ← بيمشي على المسار، والنقطة بتتلزق على الشارع (لو الـ GPS طالع جوه بيت)
+     ٢) غير كده ← بيجيب طريق الشارع بين النقطتين ويمشي عليه
+     ٣) لو مفيش طريق شارع (الخدمة وقعت) ← بيقف مكانه ويستنى التحديث الجاي بدل ما يقطع */
+  T.glidePath = function (mk, to, coords, dur, onHead) {
+    var from = mk.getLatLng(), A = [from.lat, from.lng], B = [+to[0], +to[1]];
+    if (mk._mhAnim) cancelAnimationFrame(mk._mhAnim);
+    var tk = (mk._mhTok = (mk._mhTok || 0) + 1);
+    var kx = Math.cos(A[0] * Math.PI / 180), d2 = function (p, q) { var x = (p[1] - q[1]) * kx, y = p[0] - q[0]; return Math.sqrt(x * x + y * y) * 111320; };
+    if (d2(A, B) > 2500) { mk.setLatLng(B); return; }
+    if (d2(A, B) < 1) return;
+    function proj(p, cs) {
+      var best = { m: Infinity, i: 0, t: 0, pt: p };
+      for (var i = 0; cs && i < cs.length - 1; i++) {
+        var a = cs[i], b = cs[i + 1], ax = a[1] * kx, ay = a[0], bx = b[1] * kx, by = b[0], px = p[1] * kx, py = p[0];
+        var dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy, t = L2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0;
+        var q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t], m = d2(p, q);
+        if (m < best.m) best = { m: m, i: i, t: t, pt: q };
+      }
+      return best;
+    }
+    function onPath(cs) {
+      if (!cs || cs.length < 2) return null;
+      var pa = proj(A, cs), pb = proj(B, cs);
+      if (pa.m > 60 || pb.m > 60 || pb.i < pa.i || (pb.i === pa.i && pb.t < pa.t)) return null;
+      var pts = [pa.pt]; for (var i = pa.i + 1; i <= pb.i; i++) pts.push(cs[i]); pts.push(pb.pt);
+      if (d2(A, pa.pt) > 1) pts.unshift(A);
+      return pts;
+    }
+    function run(pts) {
+      if (tk !== mk._mhTok) return;
+      var seg = [], tot = 0;
+      for (var j = 0; j < pts.length - 1; j++) { var l = d2(pts[j], pts[j + 1]); seg.push(l); tot += l; }
+      if (tot < 0.5) return;
+      var t0 = performance.now(), lastH = null;
+      (function step(now) {
+        if (tk !== mk._mhTok) return;
+        var k = Math.min(1, (now - t0) / dur), goal = tot * k, acc = 0, s = 0;
+        while (s < seg.length - 1 && acc + seg[s] < goal) { acc += seg[s]; s++; }
+        var f = seg[s] ? (goal - acc) / seg[s] : 1, p = pts[s], q = pts[s + 1];
+        mk.setLatLng([p[0] + (q[0] - p[0]) * f, p[1] + (q[1] - p[1]) * f]);
+        if (onHead && seg[s] > 3) { var h = Math.round((Math.atan2((q[1] - p[1]) * kx, q[0] - p[0]) * 180 / Math.PI + 360) % 360); if (h !== lastH) { lastH = h; onHead(h); } }
+        if (k < 1) mk._mhAnim = requestAnimationFrame(step);
+      })(t0);
+    }
+    var pts = onPath(coords);
+    if (pts) return run(pts);
+    if (!T.route) return;
+    T.route({ lat: A[0], lng: A[1] }, { lat: B[0], lng: B[1] }).then(function (rt) {
+      if (!rt || !rt.road || !rt.coords || rt.coords.length < 2) return; /* مفيش شارع معروف ← يفضل مكانه */
+      var cs = rt.coords.slice();
+      if (d2(A, cs[0]) > 1) cs.unshift(A);
+      run(cs);
+    }).catch(function () {});
+  };
   T.animRoute = function (map, coords, color) {
     var g = L.layerGroup().addTo(map);
     var casing = L.polyline(coords, { color: "#fff", weight: 9, opacity: .95, className: "mh-route-casing", interactive: false }).addTo(g);
@@ -419,7 +481,7 @@
   T.tukIcon = function (busy, h) {
     var rot = h != null && !isNaN(+h) ? +h : 0;
     return L.divIcon({ className: "mh-tuk", iconSize: [26, 34], iconAnchor: [13, 17],
-      html: '<div style="transform:rotate(' + rot + 'deg);filter:drop-shadow(0 3px 3px rgba(19,30,28,.35))' + (busy ? ';opacity:.95' : '') + '">' + T.tukSvg(busy ? "busy" : "normal", 22) + '</div>' });
+      html: '<div data-rot="' + rot + '" style="transition:transform .6s cubic-bezier(.22,1,.36,1);transform:rotate(' + rot + 'deg);filter:drop-shadow(0 3px 3px rgba(19,30,28,.35))' + (busy ? ';opacity:.95' : '') + '">' + T.tukSvg(busy ? "busy" : "normal", 22) + '</div>' });
   };
   /* خريطة صغيرة ثابتة (من غير تحميل خريطة كاملة): بلاطة OSM واحدة والدبوس في النص */
   T.miniMap = function (lat, lng, z) {
@@ -435,7 +497,7 @@
     var seen = {};
     list.forEach(function (p) {
       seen[p.k] = 1;
-      if (store[p.k]) store[p.k].setLatLng([p.lat, p.lng]);
+      if (store[p.k]) { store[p.k].setLatLng([p.lat, p.lng]); var el = store[p.k].getElement && store[p.k].getElement(); T.rotTo(el && el.querySelector("[data-rot]"), p.h); }
       else { store[p.k] = L.marker([p.lat, p.lng], { icon: iconFn(p), interactive: !!tipFn, keyboard: false, zIndexOffset: 500 }).addTo(map); if (tipFn) store[p.k].bindTooltip(tipFn(p)); }
     });
     Object.keys(store).forEach(function (k) { if (!seen[k]) { map.removeLayer(store[k]); delete store[k]; } });
@@ -465,7 +527,33 @@
     var k = TUK[tier], rot = h != null && !isNaN(+h) ? +h : 0;
     return L.divIcon({ className: "", iconSize: [56, 56], iconAnchor: [28, 28],
       html: '<div class="mh-drv mh-drv-' + tier + '" style="--pc:' + k.p + '"><span class="p"></span><span class="p p2"></span>'
-        + '<div class="tk" style="transform:rotate(' + rot + 'deg)">' + T.tukSvg(tier, 26) + '</div></div>' });
+        + '<div class="tk" data-rot="' + rot + '" style="transform:rotate(' + rot + 'deg)">' + T.tukSvg(tier, 26) + '</div></div>' });
+  };
+  /* اتجاه السير: من الـ GPS لو متاح، وإلا بنحسبه من آخر نقطتين (أغلب موبايلات أندرويد مابتبعتش heading)، ولو واقف بنثبّت آخر اتجاه */
+  T.bearing = function (a, b) {
+    var r = Math.PI / 180, y = Math.sin((b.lng - a.lng) * r) * Math.cos(b.lat * r),
+      x = Math.cos(a.lat * r) * Math.sin(b.lat * r) - Math.sin(a.lat * r) * Math.cos(b.lat * r) * Math.cos((b.lng - a.lng) * r);
+    return (Math.atan2(y, x) / r + 360) % 360;
+  };
+  T.headingTracker = function () {
+    var last = null, h = null;
+    return function (p) {
+      var c = p.coords, pt = { lat: c.latitude, lng: c.longitude }, g = c.heading;
+      if (g != null && !isNaN(g) && (c.speed == null || c.speed > 0.8)) { h = g; last = pt; return h; }
+      if (!last) { last = pt; return h; }
+      var m = T.dist(last, pt) * 1000;
+      if (m > Math.max(8, Math.min(25, (c.accuracy || 10) * 0.8))) { h = T.bearing(last, pt); last = pt; }
+      return h;
+    };
+  };
+  /* بيلف العنصر لأقصر لفة (مايلفّش ٣٥٠ درجة عشان يروح من ٣٥٥ لـ ٥) */
+  T.rotTo = function (el, h) {
+    if (!el || h == null || isNaN(+h)) return;
+    var cur = +el.getAttribute("data-rot"); if (isNaN(cur)) cur = 0;
+    var d = ((+h - cur) % 360 + 540) % 360 - 180, n = cur + d;
+    /* اللفة الكبيرة (أكتر من ٦٠°) بتتعمل أسرع علشان التوكتوك مايتأخرش عند الملفّات الحادة */
+    el.style.transition = "transform " + (Math.abs(d) > 60 ? ".22s ease-out" : ".6s cubic-bezier(.22,1,.36,1)");
+    el.setAttribute("data-rot", n); el.style.transform = "rotate(" + n + "deg)";
   };
   T.etaText = function (rt) { return rt.min + " دقيقة · " + rt.km.toFixed(1) + " كم"; };
 

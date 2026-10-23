@@ -82,7 +82,7 @@
       <div style="margin-top:14px">
         <div class="field"><label for="ph">رقم الموبايل</label><input id="ph" inputmode="tel" placeholder="01xxxxxxxxx"></div>
         <div class="field"><label for="cd">الكود</label><input id="cd" type="password" inputmode="numeric" maxlength="6" placeholder="••••" autocomplete="current-password"></div>
-        <label style="display:flex;gap:10px;align-items:center;min-height:44px;margin:-4px 0 8px;cursor:pointer"><input type="checkbox" id="remember" checked style="width:20px;height:20px;accent-color:var(--accent)"><span>احفظ الدخول على الموبايل ده</span></label>
+        <label hidden style="display:flex;gap:10px;align-items:center;min-height:44px;margin:-4px 0 8px;cursor:pointer"><input type="checkbox" id="remember" checked style="width:20px;height:20px;accent-color:var(--accent)"><span>احفظ الدخول على الموبايل ده</span></label>
         <button class="btn btn-primary btn-wide" id="go">دخول</button>
         <p class="hint" id="gateErr" style="margin-top:10px;color:var(--crit)" hidden></p>
       </div>
@@ -224,21 +224,21 @@
   var KEY = "tt-driver";
   var auth = null, timer = null, busy = false, lastIds = "";
 
-  try{ auth = JSON.parse(localStorage.getItem(KEY) || sessionStorage.getItem(KEY) || "null"); }catch(e){}
+  try{ auth = JSON.parse(localStorage.getItem(KEY) || sessionStorage.getItem(KEY) || "null"); if(auth && !localStorage.getItem(KEY)) localStorage.setItem(KEY, JSON.stringify(auth)); }catch(e){}
 
   /* السائق الفاضي الأونلاين بيظهر للركاب: بيبعت مكانه كل ٣٠ ثانية لو اتحرك ٥٠ متر (وكل ٩٠ ثانية على الأقل) */
-  var idleW = null, idleLast = null, idleAt = 0;
+  var idleW = null, idleLast = null, idleAt = 0, idleHd = TT.headingTracker();
   function idleTrack(on){
     if(!navigator.geolocation) return;
     if(!on){ if(idleW != null){ navigator.geolocation.clearWatch(idleW); idleW = null; } return; }
     if(idleW != null) return;
     idleW = navigator.geolocation.watchPosition(function(p){
-      var now = Date.now(), pt = { lat:p.coords.latitude, lng:p.coords.longitude };
+      var now = Date.now(), pt = { lat:p.coords.latitude, lng:p.coords.longitude }, hd = idleHd(p);
       var moved = !idleLast || TT.dist(idleLast, pt) > 0.05;
       var big = idleLast && TT.dist(idleLast, pt) > 0.3;
       if(big || (moved && now - idleAt > 20000) || now - idleAt > 45000){
         idleAt = now; idleLast = pt;
-        fetch("/api/driver/loc", { method:"POST", headers:hdr(), body:JSON.stringify({ lat:pt.lat, lng:pt.lng, h:p.coords.heading, idle:true }) }).catch(function(){});
+        fetch("/api/driver/loc", { method:"POST", headers:hdr(), body:JSON.stringify({ lat:pt.lat, lng:pt.lng, h:hd, idle:true }) }).catch(function(){});
       }
     }, function(){}, { enableHighAccuracy:true, maximumAge:15000, timeout:30000 });
     /* لو السائق واقف مكانه watchPosition مش بيشتغل — فبنبعت آخر مكان كل ٤٥ ثانية */
@@ -279,7 +279,7 @@
     var e = $("gateErr"); e.hidden = true;
     if(phone.length < 9 || !code){ e.textContent = "اكتب رقم الموبايل والكود"; e.hidden = false; return; }
     var b = this; b.disabled = true; b.textContent = "جارٍ الدخول…";
-    var rem = $("remember").checked;
+    var rem = true; /* الدخول بيتحفظ دايماً — مابيتمسحش غير بـ «خروج» */
     fetch("/api/driver/login", {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ phone: phone, code: code, device: TT.devId() })
@@ -376,11 +376,12 @@
       return '<div class="job' + (prevSeen[j.id] ? '' : ' is-new') + (idx === nearIdx ? ' is-near' : '') + '" style="--i:' + idx + '">'
         + (idx === nearIdx ? '<span class="job-near">الأقرب ليك</span>' : '')
         + '<div class="head"><span class="price">' + j.fare + '<small> ج</small></span>'
-        + '<span class="chip c-neutral">' + (j.sameZone ? "أقل من ٢ كم" : "أكتر من ٢ كم") + '</span>'
+        + (j.outside ? '<span class="chip c-warn">خارج كفر صقر · حوالي ' + j.distKm + ' كم × ' + (j.perKm || 7.5) + ' ج</span>' : '<span class="chip c-neutral">' + (j.sameZone ? "أقل من ٢ كم" : "أكتر من ٢ كم") + '</span>')
         + (j.distM != null ? '<span class="chip c-accent num">' + (j.distM < 1000 ? j.distM + ' م منك' : (j.distM/1000).toFixed(1) + ' كم منك') + '</span>' : '')
         + (when ? '<span class="chip c-warn">محجوز ' + when + '</span>' : '')
         + (j.urgent && !j.offered ? '<span class="chip c-warn num">مستني من ' + j.waitMin + ' دقايق</span>' : '')
         + (j.forOther ? '<span class="chip c-neutral">لحد تاني</span>' : '')
+        + (j.forYou ? '<span class="chip c-accent">⭐ راكبك الدائم · ليك لوحدك ٣ د</span>' : '')
         + '<span class="ago" data-ago="' + TT.esc(j.id) + '">' + TT.timeAgo(j.createdAt) + '</span></div>'
         + (j.from && j.from.lat != null ? TT.miniMap(+j.from.lat, +j.from.lng) : '')
         + '<div class="route">'
@@ -389,7 +390,8 @@
         + '</div>'
         + (j.offered
           ? '<button class="btn btn-ghost btn-take" disabled style="opacity:1;border:1.5px dashed var(--accent);color:var(--accent-ink)">✓ وافقت — مستني الراكب يختار' + (j.offers > 1 ? ' (' + j.offers + ' سواقين وافقوا)' : '') + '</button>'
-          : '<button class="btn btn-primary btn-take" data-take="' + TT.esc(j.id) + '">' + (j.source === "phone" ? "خد المشوار" : "وافق على المشوار") + '</button>')
+          : '<button class="btn btn-primary btn-take" data-take="' + TT.esc(j.id) + '">' + (j.source === "phone" ? "خد المشوار" : "وافق على المشوار") + '</button>'
+            + '<button class="btn btn-ghost btn-sm btn-wide" data-ign="' + TT.esc(j.id) + '" style="margin-top:6px">تجاهل الطلب ده</button>')
         + '</div>';
       })();
     }).join("");
@@ -441,14 +443,16 @@
     /* مسار واحد بس: قبل الركوب من مكانك للراكب، وبعد الركوب من مكانك للوجهة (updRoute بترسمه من الـ GPS) */
     if(!navigator.geolocation){ rideEta("الموبايل ده مش بيدعم تحديد المكان"); }
     else if(watchId == null){
+      var rideHd = idleHd, sentH = null;
       watchId = navigator.geolocation.watchPosition(function(p){
-        var ll = [p.coords.latitude, p.coords.longitude], me = { lat:ll[0], lng:ll[1] };
-        if(!meDot) meDot = L.marker(ll, { icon:TT.driverIcon(p.coords.heading, window.__mhTier), interactive:false, zIndexOffset:1000 }).addTo(rMap);
-        else { meDot.setLatLng(ll); var tk = meDot.getElement && meDot.getElement() && meDot.getElement().querySelector(".tk"); if(tk && p.coords.heading != null && !isNaN(p.coords.heading)) tk.style.transform = "rotate(" + p.coords.heading + "deg)"; }
+        var ll = [p.coords.latitude, p.coords.longitude], me = { lat:ll[0], lng:ll[1] }, hd = rideHd(p);
+        if(!meDot) meDot = L.marker(ll, { icon:TT.driverIcon(hd, window.__mhTier), interactive:false, zIndexOffset:1000 }).addTo(rMap);
+        else { meDot.setLatLng(ll); TT.rotTo(meDot.getElement && meDot.getElement() && meDot.getElement().querySelector(".tk"), hd); }
         /* بيبعت مكانك للراكب كل ٥ ثواني — وانت في مشوار بس */
-        if(Date.now() - lastSent > 5000){
-          lastSent = Date.now();
-          fetch("/api/driver/loc", { method:"POST", headers:hdr(), body:JSON.stringify({ lat:me.lat, lng:me.lng, h:p.coords.heading }) }).catch(function(){});
+        /* أول ما الاتجاه يبان بنبعته على طول — علشان الراكب مايشوفش التوكتوك باصص لفوق أول ٥ ثواني */
+        if(Date.now() - lastSent > 1900 || (hd != null && sentH == null)){
+          lastSent = Date.now(); sentH = hd;
+          fetch("/api/driver/loc", { method:"POST", headers:hdr(), body:JSON.stringify({ lat:me.lat, lng:me.lng, h:hd }) }).catch(function(){});
         }
         if(window.__mhRide && window.__mhRide.to) window.__mhToDist = TT.dist(me, window.__mhRide.to) * 1000;
         updRoute(me);
@@ -495,6 +499,8 @@
   document.addEventListener("click", function(e){
     if(!e.target.closest) return;
 
+    var ig = e.target.closest("[data-ign]");
+    if(ig){ ignoreJob(ig.getAttribute("data-ign")); return; }
     var t = e.target.closest("[data-take]");
     if(t){
       if(busy) return;
@@ -535,8 +541,9 @@
       q.then(function(ok){ if(!ok) return;
       d.disabled = true;
       window.__mhFinishing = true;
+      var finFare = window.__mhRide && window.__mhRide.fare;
       call("finish", { method: "POST", body: { requestId: rid, status: rel ? "released" : "done" } })
-        .then(function(){ TT.sound(rel ? "cancel" : "done"); TT.toast(rel ? "رجع للسواقين" : "تمّت الرحلة ✓"); })
+        .then(function(){ var fr = finFare; TT.sound(rel ? "cancel" : "done"); TT.toast(rel ? "رجع للسواقين" : "تمّت الرحلة ✓" + (fr ? " · استلم " + fr + " ج نقداً" : "")); })
         .catch(function(err){ TT.toast(err.message || "خطأ"); })
         .then(function(){ lastIds = ""; return tick(); })
         .then(function(){ d.disabled = false; }, function(){ d.disabled = false; });
@@ -574,7 +581,8 @@
     baJob = job.id; baLeft = BA_SECS;
     $("baFare").textContent = job.fare;
     $("baFrom").textContent = job.from.label; $("baTo").textContent = job.to.label;
-    $("baChip").textContent = (job.distM != null ? (job.distM < 1000 ? job.distM + " م منك · " : (job.distM/1000).toFixed(1) + " كم منك · ") : "") + (job.sameZone ? "أقل من ٢ كم" : "أكتر من ٢ كم") + (job.scheduledAt ? " · محجوز" : "");
+    $("baChip").textContent = (job.distM != null ? (job.distM < 1000 ? job.distM + " م منك · " : (job.distM/1000).toFixed(1) + " كم منك · ") : "") + (job.outside ? "خارج كفر صقر · حوالي " + job.distKm + " كم × " + (job.perKm || 7.5) + " ج · أجرة تقريبية" : job.sameZone ? "أقل من ٢ كم" : "أكتر من ٢ كم") + (job.scheduledAt ? " · محجوز" : "");
+        $("baChip").className = "chip " + (job.outside ? "c-warn" : "c-neutral");
     $("baTake").setAttribute("data-take", job.id); $("baTake").disabled = false; $("baTake").textContent = job.source === "phone" ? "خد المشوار" : "وافق على المشوار";
     $("bigAlert").hidden = false; paintBig();
     /* بيقرا الطلب بصوت عالي بعد النغمة — للسواقين اللي مش بيقروا بسهولة */
@@ -582,7 +590,10 @@
     if(baT) clearInterval(baT);
     baT = setInterval(function(){ baLeft--; paintBig(); }, 1000);
   }
-  $("baSkip").addEventListener("click", hideBig);
+  /* «تجاهل»: الطلب بيختفي من عند السائق ده بس (لمدة ٣٠ دقيقة) — وبيفضل ظاهر لباقي السواقين */
+  var IGN = (function(){ try{ var o = JSON.parse(sessionStorage.getItem("mh-ign") || "{}"), n = Date.now(); Object.keys(o).forEach(function(k){ if(n - o[k] > 30 * 6e4) delete o[k]; }); return o; }catch(e){ return {}; } })();
+  function ignoreJob(id){ if(!id) return; IGN[id] = Date.now(); try{ sessionStorage.setItem("mh-ign", JSON.stringify(IGN)); }catch(e){} TT.sound && TT.sound("tap"); tick(); }
+  $("baSkip").addEventListener("click", function(){ var id = baJob; hideBig(); ignoreJob(id); });
   $("baTake").addEventListener("click", function(){ setTimeout(hideBig, 50); });
 
   function alertNew(job){
@@ -666,7 +677,7 @@
       var hd = j.me.heading;
       $("headBan").hidden = !hd;
       if(hd) $("headBan").innerHTML = '<span>➤</span><span><b>رايح ناحية ' + TT.esc(TT.zoneName(zonesCache, hd.zoneId) || "") + '</b> — بتشوف الطلبات اللي على طريقك بس' + (j.hidden ? ' (' + j.hidden + ' متخبّيين)' : '') + '. دوس للإلغاء.</span>';
-      if(!j.mine){ checkNew(j.available); renderJobs(j.available); }
+      if(!j.mine){ var av = (j.available || []).filter(function(x){ return !IGN[x.id]; }); checkNew(av); renderJobs(av); }
       /* وافقت على طلب واختفى ومابقاش بتاعك = الراكب اختار حد تاني */
       var ofd = window.__mhOffered || {};
       Object.keys(ofd).forEach(function(id){

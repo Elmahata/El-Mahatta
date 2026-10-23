@@ -131,11 +131,13 @@
     $("ratingL").textContent = stats.ratingCount ? "تقييمك (" + stats.ratingCount + " تقييم)" : "لسه مفيش تقييمات";
     var nextT = stats.tier === "gold" ? "إنت في أعلى مستوى 👏" : stats.tier === "silver" ? "للذهبي: ٤٫٨ ★ و١٠٠ تقييم، وتلغي أقل من ٥٪" : "للفضي: ٤٫٥ ★ و٣٠ تقييم";
     $("tierBox").innerHTML = '<div class="card" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><span style="flex:1;font-weight:700">ترتيبك</span>' + TT.tierBadge({ tier:stats.tier, rating:stats.rating, ratingCount:stats.ratingCount }) + '<div class="hint" style="width:100%">' + nextT + '</div></div>';
-    $("revBox").innerHTML = (stats.reviews || []).length ? '<div class="hint" style="margin:10px 0 6px">آخر آراء الركاب</div>' + stats.reviews.map(function(r){
-      return '<div class="card" style="padding:10px 13px;margin-bottom:6px"><div style="display:flex;gap:8px;align-items:center"><b style="color:#F5B301" class="num">' + ("★".repeat(Math.max(0, Math.min(5, +r.s || 0))) + "☆".repeat(5 - Math.max(0, Math.min(5, +r.s || 0)))) + '<span style="color:var(--line)">' + "★★★★★".slice(r.s) + '</span></b><span class="hint" style="margin-inline-start:auto">' + new Date(r.at).toLocaleDateString("ar-EG",{ day:"numeric", month:"short" }) + '</span></div>'
-        + ((r.t || []).length ? '<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:6px">' + r.t.map(function(t){ return '<span class="chip c-neutral">' + TT.esc(t) + '</span>'; }).join("") + '</div>' : '')
-        + (r.n ? '<div style="margin-top:6px">' + TT.esc(r.n) + '</div>' : '') + '</div>';
-    }).join("") : "";
+    /* آراء الركاب مجمّعة من غير أسماء ولا كلام مكتوب — علشان محدش يتعرف */
+    var ts = stats.tagSummary;
+    $("revBox").innerHTML = ts
+      ? '<div class="hint" style="margin:10px 0 6px">الركاب قالوا عنك (من غير أسماء)</div><div style="display:flex;gap:6px;flex-wrap:wrap">'
+        + (ts.length ? ts.map(function(x){ return '<span class="chip ' + (x.good ? "c-accent" : "c-warn") + ' num">' + TT.esc(x.t) + ' × ' + x.n + '</span>'; }).join("") : '<span class="hint">لسه مفيش تعليقات</span>') + '</div>'
+      : (stats.ratingCount ? '<p class="hint" style="margin-top:10px">آراء الركاب هتظهرلك مجمّعة بعد ' + (stats.tagNeed || 5) + ' تقييمات كمان — من غير أسماء.</p>' : "");
+
     $("bars").innerHTML = d.map(function(x, i){
       var dt = new Date(x.day + "T12:00:00");
       return '<button data-day="'+i+'" aria-pressed="'+(i===day)+'"><span>'+(x.earned||"—")+'</span><i style="height:'+Math.round(x.earned/max*100)+'%"></i><span>'+(i===6?"النهارده":WD[dt.getDay()])+'</span></button>';
