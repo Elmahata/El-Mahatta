@@ -335,7 +335,9 @@
       return head + '<div class="card" style="padding:11px 13px;margin-bottom:7px"><div style="display:flex;align-items:center;gap:8px"><span class="hint">'+t+'</span>'+st
         + (x.forOther ? '<span class="chip c-neutral">لـ '+TT.esc(x.forOther)+'</span>' : '')
         + '<b style="margin-inline-start:auto;color:var(--fare)">'+(x.fare||"—")+' ج</b></div>'
-        + '<div style="margin-top:6px;font-size:14px">'+TT.esc(x.from)+' <span style="color:var(--muted)">←</span> '+TT.esc(x.to)+'</div></div>';
+        + '<div style="margin-top:6px;font-size:14px">'+TT.esc(x.from)+' <span style="color:var(--muted)">←</span> '+TT.esc(x.to)+'</div>'
+        + (x.status === "done" && x.dPhone ? '<a class="btn btn-ghost btn-sm" href="tel:'+TT.esc(x.dPhone)+'" style="margin-top:8px">نسيت حاجة؟ اتصل بـ'+TT.esc((x.dName||"السائق").trim().split(/\s+/)[0])+' · <span class="num">'+TT.esc(x.dPhone)+'</span></a>' : '')
+        + '</div>';
     }).join("");
   }
 

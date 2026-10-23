@@ -268,6 +268,7 @@ html,body{height:100%;overflow:hidden}
         <div class="nm" id="dName">—</div>
         <div class="pl" id="dPlate">—</div>
         <div id="dTier" style="margin-top:4px"></div>
+        <a id="dTel" class="num" href="#" hidden style="display:inline-block;margin-top:4px;font-size:13px;font-weight:700"></a>
       </div>
       <span class="chip c-accent num" id="dFare">—</span>
     </div>
@@ -295,6 +296,7 @@ html,body{height:100%;overflow:hidden}
     <p class="hint" style="margin-top:12px;text-align:center"><span id="mHint">استنّى في مكانك،</span> وادفع <b id="dFare2"></b> جنيه نقداً عند الوصول.</p>
     <button class="btn btn-wide" id="riderCancel" type="button" style="margin-top:10px;background:var(--surface);color:#A9382B;border:1.5px solid #F0C6BF;font-weight:700">الغي الطلب</button>
     <button class="btn btn-ghost btn-wide" id="newRide" style="margin-top:10px" hidden>اطلب رحلة تانية</button>
+    <button class="linkbtn" id="impostorBtn" type="button" style="color:#A9382B;font-weight:700">السائق مش هو اللي في الصورة؟ بلّغ</button>
     <button class="linkbtn" data-report>السائق طلب أكتر من السعر؟ بلّغ</button>
   </section>
 
@@ -302,6 +304,7 @@ html,body{height:100%;overflow:hidden}
   <section id="stEnded" hidden>
     <h2 id="endTitle">حمدالله على السلامة ✓</h2>
     <p class="hint" id="endMsg"></p>
+    <a class="btn btn-ghost btn-wide" id="endCall" href="#" hidden style="margin-top:12px;display:flex;flex-direction:column;gap:2px;line-height:1.35"><b>نسيت حاجة في التوكتوك؟ اتصل بالسائق</b><span class="num" id="endCallNum" style="font-size:13px;opacity:.8"></span></a>
     <button class="btn btn-primary btn-wide" id="newRide2" style="margin-top:12px">اطلب رحلة تانية</button>
     <button class="linkbtn" data-report id="endReport">حصلت مشكلة؟ بلّغ الإدارة</button>
   </section>
@@ -316,6 +319,7 @@ html,body{height:100%;overflow:hidden}
         <option value="late">اتأخر أو ماجاش</option>
         <option value="behaviour">أسلوب السائق</option>
         <option value="lost">نسيت حاجة في التوكتوك</option>
+        <option value="impostor">السائق مش هو اللي في الصورة</option>
         <option value="other">حاجة تانية</option>
       </select></div>
     <div class="field" id="repAskedF"><label for="repAsked">طلب منك كام؟ (جنيه)</label><input id="repAsked" inputmode="numeric" placeholder="مثلاً 30"></div>
@@ -666,14 +670,16 @@ html,body{height:100%;overflow:hidden}
   function fmtM(m){ return m == null ? "" : m < 1000 ? m + " م" : (m/1000).toFixed(1) + " كم"; }
   function paintAuto(){
     var s = Math.max(0, Math.round((offEnd - Date.now()) / 1000));
-    $("offersSub").textContent = s > 0 ? "مترتبين من الأقرب — لو مااخترتش خلال " + s + " ثانية هنختارلك الأقرب" : "بنختارلك الأقرب…";
+    $("offersSub").textContent = s > 0 ? "مترتبين من الأقرب — اختار خلال " + s + " ثانية، بعدها الموافقة بتتلغي" : "بندوّر على سواقين تانيين…";
   }
   function renderOffers(j){
     var list = j.offers || [];
     $("offersWrap").hidden = !list.length;
     $("searchHead").hidden = Boolean(list.length);
+    /* كل سائق جديد يوافق = نغمة + اهتزاز (حتى لو الموافقات اللي قبله اتلغت) */
+    var seenO = window.__offSeenIds = window.__offSeenIds || {}, fresh = list.filter(function(o){ var k = (j.id || "") + ":" + o.id + ":" + (o.expiresAt || ""); if(seenO[k]) return false; seenO[k] = 1; return true; });
+    if(fresh.length){ TT.sound("offer"); if(navigator.vibrate) navigator.vibrate([90, 60, 140]); }
     if(!list.length){ offSeen = 0; if(offTimer){ clearInterval(offTimer); offTimer = null; } return; }
-    if(list.length > offSeen){ TT.sound("tap"); if(navigator.vibrate) navigator.vibrate(120); }
     offSeen = list.length;
     offEnd = j.autoPickAt ? Date.now() + (j.autoPickAt - (j.now || Date.now())) : 0;
     if(!offTimer){ offTimer = setInterval(function(){ if($("offersWrap").hidden){ clearInterval(offTimer); offTimer = null; return; } paintAuto(); }, 1000); }
@@ -683,7 +689,7 @@ html,body{height:100%;overflow:hidden}
     $("offers").setAttribute("data-sig", sig);
     $("offers").innerHTML = list.map(function(o, i){
       var t = (o.tier === "gold" || o.tier === "silver") ? o.tier : "normal";
-      var rt = o.rating ? "★ " + o.rating + " / ٥" : "★ جديد";
+      var rt = o.rating ? "★ " + o.rating + " / 5" : "★ جديد";
       return '<button type="button" class="offer offer-' + t + '" data-pick="' + TT.esc(o.id) + '" style="animation-delay:' + (i * 60) + 'ms">'
         + (i === 0 ? '<span class="onear">الأقرب</span>' : '')
         + '<span class="oav"' + (o.photo ? ' style="background-image:url(' + TT.esc(o.photo) + ')">' : '>' + TT.esc(o.name.charAt(0))) + '</span>'
@@ -715,8 +721,10 @@ html,body{height:100%;overflow:hidden}
           if(step !== "matched"){
           var av = $("dAv"); av.textContent = j.driver.photo ? "" : (j.driver.name || "س").trim().charAt(0);
           av.style.backgroundImage = j.driver.photo ? "url(" + j.driver.photo + ")" : ""; av.style.backgroundSize = "cover"; av.style.backgroundPosition = "center";
+          $("impostorBtn").textContent = j.driver.photo ? "السائق مش هو اللي في الصورة؟ بلّغ" : "السائق مش " + ((j.driver.name || "").trim().split(/\s+/)[0] || "اللي اسمه ظاهر") + "؟ بلّغ";
           $("dName").textContent = j.driver.name + (j.driver.village ? " · من " + j.driver.village : "");
           $("dPlate").textContent = j.driver.plate ? ("لوحة " + j.driver.plate) : "توكتوك مرخّص";
+          $("dTel").hidden = !j.driver.phone; if(j.driver.phone){ $("dTel").href = "tel:" + j.driver.phone; $("dTel").textContent = "رقمه: " + j.driver.phone; }
           $("dTier").innerHTML = TT.tierBadge(j.driver);
           $("dFare").textContent = j.fare + " ج نقداً";
           $("dFare2").textContent = j.fare;
@@ -744,12 +752,15 @@ html,body{height:100%;overflow:hidden}
         } else if(j.status === "done"){
           stopPoll(); saveLive(null); clearLive();
           if(window.__chat){ window.__chat.stop(); window.__chat = null; window.__chatId = null; }
-          histUpdate(j.id, { status:"done", fare:j.fare });
+          histUpdate(j.id, { status:"done", fare:j.fare, dName:(j.driver && j.driver.name) || "", dPhone:(j.driver && j.driver.phone) || "" });
+          var dph = j.driver && j.driver.phone;
+          $("endCall").hidden = !dph; $("endCall").style.display = dph ? "flex" : "none";
+          if(dph){ $("endCall").href = "tel:" + dph; $("endCallNum").textContent = j.driver.name + " · " + dph; }
           TT.sound("done"); setTimeout(checkWallet, 1500);
           $("endTitle").textContent = "حمدالله على السلامة ✓";
           $("endMsg").textContent = "وصلت بالسلامة. شكراً إنك اخترت المحطة.";
           rateFor = reportFor; stars = 0; paintStars();
-          if(rateFor){
+          if(rateFor && j.canRate){
             var dn = (live && live.driver && live.driver.name) || $("dName").textContent || "السائق";
             $("rateWho").textContent = dn === "—" ? "السائق" : dn;
             var av = $("rateAv"), ph = $("dAv").style.backgroundImage;
@@ -759,6 +770,7 @@ html,body{height:100%;overflow:hidden}
           }
           setStep("ended");
         } else if(j.status === "cancelled"){
+          $("endCall").hidden = true; $("endCall").style.display = "none";
           stopPoll(); saveLive(null); clearLive();
           if(window.__chat){ window.__chat.stop(); window.__chat = null; window.__chatId = null; }
           histUpdate(j.id, { status:"cancelled" });
@@ -1052,6 +1064,14 @@ html,body{height:100%;overflow:hidden}
       if(!reportFor){ TT.toast("البلاغ بيبقى متاح بعد ما سائق يقبل"); return; }
       beforeReport = step; setStep("report");
     }
+  });
+  $("impostorBtn").addEventListener("click", function(){
+    if(!reportFor){ TT.toast("البلاغ بيبقى متاح بعد ما سائق يقبل"); return; }
+    if(!confirm("اللي جالك مش هو اللي في الصورة؟\nحساب السائق هيتوقف لحد ما الإدارة تراجع.")) return;
+    var b = this; b.disabled = true;
+    TT.api("report", { method:"POST", body:{ id:reportFor.id, token:reportFor.token, kind:"impostor", note:"" } })
+      .then(function(){ b.textContent = "البلاغ وصل ✓"; alert("البلاغ وصل للإدارة والسائق اتوقف.\nماتركبش — الغي الطلب واطلب من تاني."); })
+      .catch(function(err){ TT.toast(err.message || "تعذّر الإرسال"); b.disabled = false; });
   });
   var rateFor = null, stars = 0;
   function closeRate(){ var b = $("rateBox"); if(b.hidden) return; b.classList.add("out"); setTimeout(function(){ b.hidden = true; b.classList.remove("out"); }, 260); }

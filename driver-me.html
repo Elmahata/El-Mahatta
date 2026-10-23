@@ -111,7 +111,7 @@
     opts = opts || {};
     return fetch("/api/driver/" + path, {
       method: opts.method || "GET",
-      headers: { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "content-type": "application/json" },
+      headers: { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId(), "content-type": "application/json" },
       body: opts.body ? JSON.stringify(opts.body) : undefined
     }).then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if(!r.ok) throw Object.assign(new Error(j.error || "خطأ"), { status:r.status }); return j; }); });
   }

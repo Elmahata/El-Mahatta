@@ -140,7 +140,9 @@
           week: cfgDoc && cfgDoc.week != null ? cfgDoc.week : 30,
           month: cfgDoc && cfgDoc.month != null ? cfgDoc.month : 100,
           grace: cfgDoc && cfgDoc.grace != null ? cfgDoc.grace : 3,
-          creditPaused: Boolean(cfgDoc && cfgDoc.creditPaused),
+          creditPaused: !(cfgDoc && cfgDoc.creditOn === true),
+          creditOn: Boolean(cfgDoc && cfgDoc.creditOn === true),
+          creditOnAt: cfgDoc && +cfgDoc.creditOnAt || 0,
           tripFee: cfgDoc && +cfgDoc.tripFee > 0 ? +cfgDoc.tripFee : 1,
           adminPhone: (cfgDoc && cfgDoc.adminPhone) || "",
         },
@@ -291,6 +293,8 @@
     tap:      [[880, 0, .06, "sine", .12]],
     confirm:  [[523, 0, .12], [659, .1, .12], [784, .2, .22]],
     accepted: [[587, 0, .14], [740, .12, .14], [880, .24, .14], [1175, .36, .34]],
+    offer:    [[740, 0, .12, "triangle"], [988, .13, .24, "triangle"]],
+    picked:   [[523, 0, .16], [659, .16, .16], [784, .32, .16], [1047, .48, .55], [1319, .9, .7, "triangle"]],
     arrived:  [[660, 0, .18], [880, .22, .18], [1100, .44, .3]],
     done:     [[784, 0, .14], [988, .12, .14], [1319, .26, .42, "triangle"]],
     msg:      [[988, 0, .08], [1319, .09, .12]],
@@ -464,6 +468,13 @@
         + '<div class="tk" style="transform:rotate(' + rot + 'deg)">' + T.tukSvg(tier, 26) + '</div></div>' });
   };
   T.etaText = function (rt) { return rt.min + " دقيقة · " + rt.km.toFixed(1) + " كم"; };
+
+  /* رقم ثابت للموبايل ده (نفس اللي بيستخدمه سجل الموافقة) — حساب السائق بيتربط بيه */
+  T.devId = function () {
+    var d = ""; try { d = localStorage.getItem("mh-dev") || ""; } catch (e) {}
+    if (!d) { d = Date.now().toString(36) + Math.random().toString(36).slice(2, 10); try { localStorage.setItem("mh-dev", d); } catch (e) {} }
+    return d;
+  };
 
   global.TT = T;
 

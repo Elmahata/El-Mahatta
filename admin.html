@@ -226,11 +226,11 @@
       </div>
       <div style="margin:6px 0 14px;padding:14px;border:1px solid var(--line);border-radius:12px">
         <b>نظام الرصيد</b>
-        <p class="hint" style="margin:4px 0 10px">أوتوماتيك: كل راكب وسائق بياخد <b>٣ شهور مجاني من يوم تسجيله</b>، ومش بيشوف أي حاجة عن الشحن طول المدة دي. بعدها الرسم بيتخصم من رصيده بعد كل مشوار (مش بيتضاف على الأجرة). أول ما رصيده يوصل ٥ ج بيظهرله بانر صغير، ولو خلص طلباته بتوقف لحد ما يشحن.</p>
+        <p class="hint" style="margin:4px 0 10px"><b>مقفول دلوقتي — التطبيق مجاني للكل، ومحدش بيشوف أي حاجة عن الرصيد أو الفترة المجانية.</b> لما تشغّله، كل واحد بياخد <b>٩٠ يوم مجاني من يوم التشغيل</b> (بلّغ الناس قبلها). بعدها الرسم بيتخصم من رصيده بعد كل مشوار (مش بيتضاف على الأجرة). أول ما رصيده يوصل ٥ ج بيظهرله بانر صغير، ولو خلص طلباته بتوقف لحد ما يشحن.</p>
         <div class="row">
           <div class="field"><label for="cTripFee">رسم المشوار على كل واحد (ج)</label><input id="cTripFee" type="number" min="0.5" step="0.5" value="1"></div>
         </div>
-        <label style="display:flex;gap:10px;align-items:center;min-height:44px;cursor:pointer"><input type="checkbox" id="cCreditPaused" style="width:20px;height:20px;accent-color:var(--crit)"><span>وقّف الخصم لكل الناس مؤقتاً</span></label>
+        <label style="display:flex;gap:10px;align-items:center;min-height:44px;cursor:pointer"><input type="checkbox" id="cCreditPaused" style="width:20px;height:20px;accent-color:var(--accent)"><span>شغّل نظام الرصيد</span></label>
         <p class="hint" id="creditHint"></p>
         <div style="margin-top:10px;padding-top:10px;border-top:1px dashed var(--line)">
           <b style="font-size:14px">شحن رصيد راكب</b>
@@ -419,8 +419,8 @@
       .map(function(d){
         var lic = TT.daysTo(d.licExpiry);
         var cr = +(d.credit || 0), fee = S.cfg.tripFee || 1;
-        var dFree = freeOf(d), dLeft = Math.ceil(((+(d.joinedAt || d.createdAt || 0) || Date.now()) + 90 * 864e5 - Date.now()) / 864e5);
-        var sChip = dFree ? '<span class="chip c-ok num" title="مجاني">مجاني' + (S.cfg.creditPaused ? '' : ' · باقي ' + dLeft + ' يوم') + '</span>'
+        var dFree = freeOf(d), dLeft = Math.ceil((freeStart(d) + 90 * 864e5 - Date.now()) / 864e5);
+        var sChip = dFree ? '<span class="chip c-ok num" title="مجاني">مجاني' + (!S.cfg.creditOn ? '' : ' · باقي ' + dLeft + ' يوم') + '</span>'
           : '<span class="chip ' + (cr < fee ? 'c-crit' : cr <= 5 ? 'c-warn' : 'c-ok') + ' num" title="الرصيد">رصيد ' + cr + ' ج</span>';
         var lChip = d.licExpiry==null ? '<span class="chip c-warn">رخصة غير مسجّلة</span>'
           : lic<0 ? '<span class="chip c-crit">رخصة منتهية</span>'
@@ -432,6 +432,9 @@
           + (d.lateCount ? '<span class="chip c-warn num" title="مرات الراكب قال إنه اتأخر أو مجاش">اتأخر '+d.lateCount+'</span>' : '')
           + (d.ratingCount ? (function(){ var n = d.ratingCount, a = d.ratingSum / n, t = n >= 100 && a >= 4.8 ? "gold" : n >= 30 && a >= 4.5 ? "silver" : ""; var last = (d.reviews || []).slice(-3).reverse().map(function(r){ return r.s + "★ " + ((r.t || []).join("، ") + " " + (r.n || "")).trim(); }).join(" | "); return '<span title="' + TT.esc(last || "مفيش تعليقات") + '">' + TT.tierBadge({ tier:t, rating:+a.toFixed(1), ratingCount:n }) + '</span>'; })() : '')
           + '<span class="meta">'+(d.active===false?"موقوف":(d.isOnline?"أونلاين":"مش متصل"))+'</span></div>'
+          + (d.hold ? '<div class="banner b-crit" style="margin-top:8px"><span>⚠</span><span><b>موقوف مؤقتاً</b> — راكب بلّغ إن اللي ساق مش هو اللي في الصورة (' + TT.timeAgo(d.hold.at) + '). بلاغات من <span class="num">' + (d.impostorBy || []).length + '</span> راكب' + ((d.impostorBy || []).length >= 3 ? ' — اتوقف نهائياً' : '') + '.</span></div>' : '')
+          + (d.pendingDevice ? '<div class="banner b-warn" style="margin-top:8px;flex-wrap:wrap;gap:8px"><span>📱</span><span style="flex:1"><b>موبايل جديد بيحاول يدخل</b> (' + TT.timeAgo(d.pendingDevice.at) + ') — كلّم السائق اتأكد إنه هو قبل ما توافق.</span>'
+            + '<button class="btn btn-primary btn-sm" data-devok="'+TT.esc(d.id)+'">وافق</button><button class="btn btn-ghost btn-sm" data-devno="'+TT.esc(d.id)+'">ارفض</button></div>' : '')
           + '<div class="leg"><span class="num">'+TT.esc(d.phone||"—")+'</span><span class="arrow">·</span>'
           + 'لوحة <span class="num">'+TT.esc(d.plate||"—")+'</span><span class="arrow">·</span>'
           + 'كود <button type="button" class="code" style="border:0;background:var(--inset);border-radius:6px;padding:1px 8px;cursor:pointer;font:inherit" onclick="this.textContent=this.textContent===\'••••\'?this.dataset.c:\'••••\'" data-c="'+TT.esc(d.code||"—")+'">••••</button></div>'
@@ -445,6 +448,8 @@
           + '<button class="btn btn-ghost btn-sm" data-code="'+TT.esc(d.id)+'">كود جديد</button>'
           + '<a class="btn btn-ghost btn-sm" target="_blank" rel="noopener" href="https://wa.me/'+TT.waNum(d.phone)+'?text='
             + encodeURIComponent("كود دخولك على تطبيق المحطة للسائق: "+(d.code||"")+"\nالرابط: "+location.origin+"/driver.html\nافتحه ودوس «فعّل صوت الطلبات».")+'">ابعتله الكود</a>'
+          + (d.hold ? '<button class="btn btn-primary btn-sm" data-unhold="'+TT.esc(d.id)+'">راجعت — رجّعه للشغل</button>' : '')
+          + (d.deviceId ? '<button class="btn btn-ghost btn-sm" data-devreset="'+TT.esc(d.id)+'" title="الموبايل الجاي اللي يدخل بيتربط بالحساب">📱 مربوط بموبايل · فكّ الربط</button>' : '<span class="chip c-neutral">مش مربوط بموبايل لسه</span>')
           + '<button class="btn btn-ghost btn-sm" data-toggle="'+TT.esc(d.id)+'">'+(d.active===false?"تفعيل":"إيقاف")+'</button>'
           + '<button class="btn btn-ghost btn-sm" data-deld="'+TT.esc(d.id)+'">حذف</button>'
           + '</div></div>';
@@ -553,7 +558,7 @@
       : '<div class="empty">مفيش رحلات منتهية بعد.</div>';
   }
 
-  var RK = { overcharge:"طلب أكتر من السعر", late:"اتأخر أو ماجاش", behaviour:"أسلوب السائق", lost:"حاجة منسية", suggest:"اقتراح", other:"حاجة تانية" };
+  var RK = { impostor:"السائق مش هو اللي في الصورة", overcharge:"طلب أكتر من السعر", late:"اتأخر أو ماجاش", behaviour:"أسلوب السائق", lost:"حاجة منسية", suggest:"اقتراح", other:"حاجة تانية" };
 
   /* ---------- طلب مستنّي +٣ دقايق ---------- */
   var STALE_MS = 3 * 60 * 1000;
@@ -675,10 +680,10 @@
     if(document.activeElement !== $("cMonth")) $("cMonth").value = S.cfg.month;
     if(document.activeElement !== $("cGrace")) $("cGrace").value = S.cfg.grace;
     if(document.activeElement !== $("cAdminPhone")) $("cAdminPhone").value = S.cfg.adminPhone || "";
-    $("cCreditPaused").checked = !!S.cfg.creditPaused;
+    $("cCreditPaused").checked = !!S.cfg.creditOn;
     if(document.activeElement !== $("cTripFee")) $("cTripFee").value = S.cfg.tripFee || 1;
     var paidD = S.drivers.filter(function(d){ return !freeOf(d); }).length, paidR = (S.riders || []).filter(function(r){ return !freeOf(r); }).length;
-    $("creditHint").textContent = S.cfg.creditPaused ? "الخصم واقف — كله مجاني لحد ما تشيل العلامة." : (paidD || paidR) ? "خلصوا الـ ٣ شهور: " + paidD + " سائق و" + paidR + " راكب." : "لسه محدش خلّص الـ ٣ شهور المجانية.";
+    $("creditHint").textContent = !S.cfg.creditOn ? "مقفول — التطبيق مجاني للكل." : (paidD || paidR) ? "خلصوا الـ ٣ شهور: " + paidD + " سائق و" + paidR + " راكب." : "لسه محدش خلّص الـ ٣ شهور المجانية.";
     var fd = TT.daysTo(S.cfg.paidFrom);
     $("paidHint").textContent = !S.cfg.paidFrom ? "مش محدّد — التطبيق مجاني لحد ما تحدد يوم." : fd > 0 ? "مجاني — الاشتراكات هتبدأ بعد " + fd + " يوم. تقدر تسجّل اشتراكات مقدّماً." : "الاشتراكات شغالة.";
     renderRides(); renderDrivers(); renderReports(); renderPhoneForm(); renderZones(); renderPlaces(); renderAdmin(); drawPlaces();
@@ -750,7 +755,8 @@
   });
 
   /* مجاني ٣ شهور من يوم تسجيل كل مستخدم */
-  function freeOf(u){ if(S.cfg.creditPaused) return true; var j = +(u.joinedAt || u.createdAt || 0) || Date.now(); return Date.now() < j + 90 * 864e5; }
+  function freeOf(u){ if(!S.cfg.creditOn) return true; return Date.now() < freeStart(u) + 90 * 864e5; }
+  function freeStart(u){ return Math.max(+(u.joinedAt || u.createdAt || 0) || Date.now(), +S.cfg.creditOnAt || 0); }
   $("backupBtn").addEventListener("click", function(){
     var data = { app:"el-mahatta", at:new Date().toISOString(), zones:S.zones, places:S.places, drivers:S.drivers, requests:S.requests, reports:S.reports || [], config:S.cfg };
     var a = document.createElement("a");
@@ -837,16 +843,40 @@
     var w = parseInt($("cWeek").value,10), m = parseInt($("cMonth").value,10), g = parseInt($("cGrace").value,10);
     var body = { id:"pricing", same: isNaN(a)?15:a, cross: isNaN(b2)?20:b2, paidFrom: $("cPaidFrom").value || "", week: isNaN(w)?30:w, month: isNaN(m)?100:m, grace: isNaN(g)?3:g, adminPhone: $("cAdminPhone").value.replace(/\D/g,"") };
     var tf = parseFloat($("cTripFee").value);
-    body.creditPaused = $("cCreditPaused").checked; body.tripFee = tf > 0 ? tf : 1;
+    var on = $("cCreditPaused").checked;
+    if(on && !S.cfg.creditOn && !confirm("هتشغّل نظام الرصيد؟\nكل راكب وسائق هياخد ٩٠ يوم مجاني من النهارده، وبعدها لازم يشحن. بلّغ الناس قبلها.")){ $("cCreditPaused").checked = false; return; }
+    body.creditOn = on; body.creditOnAt = on ? (S.cfg.creditOn ? (S.cfg.creditOnAt || Date.now()) : Date.now()) : 0; body.creditPaused = !on; body.tripFee = tf > 0 ? tf : 1;
     var btn = this;
     save("config","pricing", body).then(function(){ btn.textContent = "تم ✓"; setTimeout(function(){ btn.textContent = "حفظ"; }, 1600); });
   });
 
   document.addEventListener("click", function(e){
     if(!e.target.closest) return;
-    var el = e.target.closest("[data-cancel],[data-renew],[data-topup],[data-code],[data-toggle],[data-deld],[data-renz],[data-delz],[data-sel],[data-renp],[data-delp],[data-closerep],[data-confirmrep],[data-tiercap]");
+    var el = e.target.closest("[data-cancel],[data-renew],[data-topup],[data-code],[data-toggle],[data-deld],[data-renz],[data-delz],[data-sel],[data-renp],[data-delp],[data-closerep],[data-confirmrep],[data-tiercap],[data-devok],[data-devno],[data-devreset],[data-unhold]");
     if(!el) return;
     var id, c;
+    if((id = el.getAttribute("data-devok"))){
+      c = clone(TT.byId(S.drivers,id)); if(!c.pendingDevice) return;
+      if(!confirm("اتأكدت إن " + c.name + " غيّر موبايله؟ الموبايل القديم هيطلع من الحساب.")) return;
+      c.deviceId = c.pendingDevice.id; c.deviceAt = Date.now(); c.pendingDevice = null;
+      save("drivers", id, c).then(function(){ TT.toast("الموبايل الجديد اتربط — قوله يدخل تاني ✓"); });
+      return;
+    } else if((id = el.getAttribute("data-devno"))){
+      c = clone(TT.byId(S.drivers,id)); c.pendingDevice = null; save("drivers", id, c).then(function(){ TT.toast("اترفض"); });
+      return;
+    } else if((id = el.getAttribute("data-devreset"))){
+      c = clone(TT.byId(S.drivers,id));
+      if(!confirm("فكّ ربط موبايل " + c.name + "؟ أول موبايل يدخل بعد كده هيتربط بالحساب.")) return;
+      c.deviceId = null; c.deviceAt = null; c.pendingDevice = null;
+      save("drivers", id, c).then(function(){ TT.toast("الربط اتفك"); });
+      return;
+    } else if((id = el.getAttribute("data-unhold"))){
+      c = clone(TT.byId(S.drivers,id));
+      if(!confirm("راجعت البلاغ واتأكدت إن " + c.name + " هو اللي بيسوق؟")) return;
+      c.hold = null;
+      save("drivers", id, c).then(function(){ TT.toast(c.name + " رجع للشغل ✓"); });
+      return;
+    }
     if((id = el.getAttribute("data-topup"))){
       c = clone(TT.byId(S.drivers,id));
       var amt = parseFloat(el.getAttribute("data-amt") || prompt("المبلغ اللي استلمته من " + c.name + " (ج):", "") || "");

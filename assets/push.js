@@ -41,7 +41,7 @@
   if (ready() && Notification.permission === "granted") {
     setTimeout(function () {
       var drv = /driver/.test(location.pathname);
-      if (drv) { try { var a = JSON.parse(localStorage.getItem("tt-driver") || "null"); if (a && a.phone) TT.push.init("driver", function () { return { "x-driver-phone": a.phone, "x-driver-code": a.code }; }); } catch (e) {} }
+      if (drv) { try { var a = JSON.parse(localStorage.getItem("tt-driver") || "null"); if (a && a.phone) TT.push.init("driver", function () { return { "x-driver-phone": a.phone, "x-driver-code": a.code, "x-driver-device": TT.devId() }; }); } catch (e) {} }
       else if (TT.sessionToken || localStorage.getItem("tt-me")) TT.push.init("rider", function () { return TT.sessionToken ? { "x-session": TT.sessionToken("rider") } : {}; });
     }, 2500);
   }

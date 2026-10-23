@@ -78,7 +78,7 @@
     <span class="mh-logo" style="width:104px;height:104px;border-radius:50%;background:#fff;display:grid;place-items:center;align-self:center;box-shadow:0 18px 36px -14px rgba(0,0,0,.6), 0 0 0 6px rgba(255,255,255,.08)"><img src="/assets/logo.png" alt="المحطة" style="height:75px;width:auto;display:block"></span>
     <div class="card" style="width:100%">
       <h2>دخول السائق</h2>
-      <p class="hint">اكتب رقم موبايلك والكود اللي أخدته من الإدارة.</p>
+      <p class="hint">اكتب رقم موبايلك والكود اللي أخدته من الإدارة. حسابك هيتربط بالموبايل ده — لو غيّرته، الإدارة لازم توافق.</p>
       <div style="margin-top:14px">
         <div class="field"><label for="ph">رقم الموبايل</label><input id="ph" inputmode="tel" placeholder="01xxxxxxxxx"></div>
         <div class="field"><label for="cd">الكود</label><input id="cd" type="password" inputmode="numeric" maxlength="6" placeholder="••••" autocomplete="current-password"></div>
@@ -250,7 +250,7 @@
     }, 15000);
   }
   function hdr(){
-    return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "content-type": "application/json" };
+    return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId(), "content-type": "application/json" };
   }
 
   function call(path, opts){
@@ -282,7 +282,7 @@
     var rem = $("remember").checked;
     fetch("/api/driver/login", {
       method: "POST", headers: { "content-type": "application/json" },
-      body: JSON.stringify({ phone: phone, code: code })
+      body: JSON.stringify({ phone: phone, code: code, device: TT.devId() })
     }).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "خطأ"); return j; }); })
       .then(function(j){
         auth = { phone: phone, code: code, name: j.driver.name };
@@ -341,7 +341,7 @@
   /* ---------- العرض ---------- */
   function renderJobs(list){
     var host = $("jobs");
-    var ids = list.map(function(j){ return j.id + (j.offered ? "+" + j.offers : ""); }).join(",");
+    var ids = list.map(function(j){ return j.id + (j.offered ? "+" + j.offers : "") + (j.urgent ? "!" + j.waitMin : ""); }).join(",");
     $("cnt").hidden = !list.length;
     $("cnt").textContent = list.length;
 
@@ -361,14 +361,25 @@
 
     var prevSeen = window.__seenJobs || {}; window.__seenJobs = {};
     list.forEach(function(j){ window.__seenJobs[j.id] = 1; });
+    /* الطلبات اللي وافقت عليها فوق تحت بعض، وبعدها الطلبات الجديدة */
+    var mineOff = list.filter(function(j){ return j.offered; }), rest = list.filter(function(j){ return !j.offered; });
+    list = mineOff.concat(rest);
+    /* «الأقرب ليك» على الأقرب فعلاً — مش أول واحد (أول واحد ممكن يكون راكب مستني من بدري) */
+    var nearIdx = -1;
+    rest.forEach(function(j, k){ if(j.distM != null && (nearIdx < 0 || j.distM < rest[nearIdx].distM)) nearIdx = k; });
+    if(nearIdx >= 0) nearIdx += mineOff.length;
+    var secHead = function(t, n){ return '<div style="display:flex;align-items:center;gap:8px;margin:4px 2px 8px;font:800 14px var(--display);color:var(--accent-ink)">' + t + '<span class="chip c-accent num">' + n + '</span></div>'; };
     host.innerHTML = list.map(function(j, idx){
+      var pre = (mineOff.length && idx === 0) ? secHead("✓ وافقت عليهم — مستني الراكب", mineOff.length) : (mineOff.length && rest.length && idx === mineOff.length) ? secHead("طلبات جديدة", rest.length) : "";
+      return pre + (function(){
       var when = j.scheduledAt ? new Date(j.scheduledAt).toLocaleTimeString("ar-EG", { hour:"numeric", minute:"2-digit" }) : "";
-      return '<div class="job' + (prevSeen[j.id] ? '' : ' is-new') + (idx === 0 && j.distM != null ? ' is-near' : '') + '" style="--i:' + idx + '">'
-        + (idx === 0 && j.distM != null ? '<span class="job-near">الأقرب ليك</span>' : '')
+      return '<div class="job' + (prevSeen[j.id] ? '' : ' is-new') + (idx === nearIdx ? ' is-near' : '') + '" style="--i:' + idx + '">'
+        + (idx === nearIdx ? '<span class="job-near">الأقرب ليك</span>' : '')
         + '<div class="head"><span class="price">' + j.fare + '<small> ج</small></span>'
-        + '<span class="chip c-neutral">' + (j.sameZone ? "مشوار قصير" : "مشوار طويل") + '</span>'
+        + '<span class="chip c-neutral">' + (j.sameZone ? "أقل من ٢ كم" : "أكتر من ٢ كم") + '</span>'
         + (j.distM != null ? '<span class="chip c-accent num">' + (j.distM < 1000 ? j.distM + ' م منك' : (j.distM/1000).toFixed(1) + ' كم منك') + '</span>' : '')
         + (when ? '<span class="chip c-warn">محجوز ' + when + '</span>' : '')
+        + (j.urgent && !j.offered ? '<span class="chip c-warn num">مستني من ' + j.waitMin + ' دقايق</span>' : '')
         + (j.forOther ? '<span class="chip c-neutral">لحد تاني</span>' : '')
         + '<span class="ago" data-ago="' + TT.esc(j.id) + '">' + TT.timeAgo(j.createdAt) + '</span></div>'
         + (j.from && j.from.lat != null ? TT.miniMap(+j.from.lat, +j.from.lng) : '')
@@ -380,6 +391,7 @@
           ? '<button class="btn btn-ghost btn-take" disabled style="opacity:1;border:1.5px dashed var(--accent);color:var(--accent-ink)">✓ وافقت — مستني الراكب يختار' + (j.offers > 1 ? ' (' + j.offers + ' سواقين وافقوا)' : '') + '</button>'
           : '<button class="btn btn-primary btn-take" data-take="' + TT.esc(j.id) + '">' + (j.source === "phone" ? "خد المشوار" : "وافق على المشوار") + '</button>')
         + '</div>';
+      })();
     }).join("");
   }
 
@@ -455,7 +467,7 @@
     $("rTo").textContent = r.to.label;
     $("rFare").textContent = r.fare + " ج نقداً" + (r.discount ? " (بعد خصم دعوة " + r.discount + " ج — الإدارة هتدفعهولك)" : "");
     $("rRider").textContent = r.riderName;
-    if(!chat || chatId !== r.id){ chatId = r.id; chat = TT.chat.mount({ rid: r.id, headers: function(){ return { "x-driver-phone": auth.phone, "x-driver-code": auth.code }; }, msgBtn: $("rMsg"), callBtn: $("rNet") }); }
+    if(!chat || chatId !== r.id){ chatId = r.id; chat = TT.chat.mount({ rid: r.id, headers: function(){ return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId() }; }, msgBtn: $("rMsg"), callBtn: $("rNet") }); }
     $("rNavA").href = navUrl(r.from);
     $("rNavB").href = navUrl(r.to);
     $("rDone").setAttribute("data-rid", r.id); window.__mhRide = r;
@@ -562,7 +574,7 @@
     baJob = job.id; baLeft = BA_SECS;
     $("baFare").textContent = job.fare;
     $("baFrom").textContent = job.from.label; $("baTo").textContent = job.to.label;
-    $("baChip").textContent = (job.distM != null ? (job.distM < 1000 ? job.distM + " م منك · " : (job.distM/1000).toFixed(1) + " كم منك · ") : "") + (job.sameZone ? "مشوار قصير" : "مشوار طويل") + (job.scheduledAt ? " · محجوز" : "");
+    $("baChip").textContent = (job.distM != null ? (job.distM < 1000 ? job.distM + " م منك · " : (job.distM/1000).toFixed(1) + " كم منك · ") : "") + (job.sameZone ? "أقل من ٢ كم" : "أكتر من ٢ كم") + (job.scheduledAt ? " · محجوز" : "");
     $("baTake").setAttribute("data-take", job.id); $("baTake").disabled = false; $("baTake").textContent = job.source === "phone" ? "خد المشوار" : "وافق على المشوار";
     $("bigAlert").hidden = false; paintBig();
     /* بيقرا الطلب بصوت عالي بعد النغمة — للسواقين اللي مش بيقروا بسهولة */
@@ -658,11 +670,13 @@
       /* وافقت على طلب واختفى ومابقاش بتاعك = الراكب اختار حد تاني */
       var ofd = window.__mhOffered || {};
       Object.keys(ofd).forEach(function(id){
-        if(j.mine && j.mine.id === id){ delete ofd[id]; TT.celebrate({ dark:true, title:"الراكب اختارك ✓", sub:"روح للراكب — دوس «ودّيني للراكب»", ms:1900 }); TT.say("الراكب اختارك. روح للراكب"); }
-        else if(!j.available.some(function(x){ return x.id === id; })){ delete ofd[id]; if(!j.mine) TT.toast("الراكب اختار سائق أقرب — استنى الطلب الجاي"); }
+        if(j.mine && j.mine.id === id){ delete ofd[id]; TT.celebrate({ dark:true, title:"الراكب وافق ✓ المشوار بتاعك", sub:"روح للراكب — دوس «ودّيني للراكب»", ms:3000, sound:"picked" }); try{ navigator.vibrate && navigator.vibrate([200, 100, 200, 100, 400]); }catch(e){} TT.say("الراكب اختارك. روح للراكب"); }
+        else if((j.cancelled || []).indexOf(id) >= 0){ delete ofd[id]; if(!j.mine){ TT.toast("الراكب لغى الطلب — استنى الطلب الجاي"); TT.say && TT.say("الراكب لغى الطلب"); } }
+        else if((j.noReply || []).indexOf(id) >= 0){ delete ofd[id]; if(!j.mine){ TT.toast("الراكب ماردّش — استنى الطلب الجاي"); TT.say && TT.say("الراكب ماردّش"); } }
+        else if(!j.available.some(function(x){ return x.id === id; })){ delete ofd[id]; if(!j.mine) TT.toast("الراكب اختار سائق تاني — استنى الطلب الجاي"); }
       });
       $("feedHint").textContent = j.me.online
-        ? "وافق على المشوار — الراكب بيشوف اللي وافقوا ويختار (الأقرب فرصته أكبر)"
+        ? "وافق على المشوار — الراكب قدامه ٣٠ ثانية يختار من اللي وافقوا"
         : "افتح استقبال المشاوير علشان تشوف الطلبات";
     }).catch(function(err){
       if(err.status === 401 || err.status === 403){
