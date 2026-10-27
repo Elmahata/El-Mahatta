@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>المحطة — السائق</title>
 <meta name="robots" content="noindex">
-<meta name="theme-color" content="#0E7566">
+<meta name="theme-color" content="#0E1614"><meta name="color-scheme" content="dark">
 <link rel="manifest" href="/manifest-driver.webmanifest">
 <link rel="icon" href="/assets/icon-driver-192.png">
 <link rel="apple-touch-icon" href="/assets/icon-driver-192.png">
@@ -85,6 +85,23 @@
         <label hidden style="display:flex;gap:10px;align-items:center;min-height:44px;margin:-4px 0 8px;cursor:pointer"><input type="checkbox" id="remember" checked style="width:20px;height:20px;accent-color:var(--accent)"><span>احفظ الدخول على الموبايل ده</span></label>
         <button class="btn btn-primary btn-wide" id="go">دخول</button>
         <p class="hint" id="gateErr" style="margin-top:10px;color:var(--crit)" hidden></p>
+      </div>
+    </div>
+    <div class="card" id="joinBox" style="width:100%">
+      <button class="btn btn-ghost btn-wide" id="joinOpen" type="button">سائق جديد؟ اطلب انضمام</button>
+      <div id="joinForm" hidden>
+        <h2>طلب انضمام</h2>
+        <p class="hint">اكتب اسمك ورقمك، والإدارة هتكلمك علشان تكمّل تسجيلك وتاخد الكود.</p>
+        <div style="margin-top:12px">
+          <div class="field"><label for="jName">الاسم</label><input id="jName" autocomplete="name" placeholder="الاسم كامل"></div>
+          <div class="field"><label for="jPhone">رقم الموبايل</label><input id="jPhone" inputmode="tel" maxlength="11" placeholder="01xxxxxxxxx"></div>
+          <button class="btn btn-primary btn-wide" id="joinSend" type="button">ابعت الطلب</button>
+          <p class="hint" id="joinErr" style="margin-top:10px;color:var(--crit)" hidden></p>
+        </div>
+      </div>
+      <div id="joinDone" hidden style="text-align:center">
+        <b style="font:800 18px var(--display)">طلبك وصل ✓</b>
+        <p class="hint" style="margin:6px 0 0">الإدارة هتكلمك على رقمك قريب.</p>
       </div>
     </div>
     <button class="btn btn-ghost btn-wide" id="toRider" type="button" style="margin-top:4px;color:#D6EBE6">أنا راكب مش سائق</button>
@@ -295,6 +312,21 @@
       .finally(function(){ b.disabled = false; b.textContent = "دخول"; });
   });
   $("cd").addEventListener("keydown", function(e){ if(e.key === "Enter") $("go").click(); });
+
+  /* ---------- طلب انضمام سائق جديد ---------- */
+  $("joinOpen").addEventListener("click", function(){ this.hidden = true; $("joinForm").hidden = false; $("jName").focus(); });
+  $("joinSend").addEventListener("click", function(){
+    var b = this, e = $("joinErr"), name = $("jName").value.trim(), phone = $("jPhone").value.replace(/\D/g,"");
+    e.hidden = true;
+    if(name.length < 3){ e.textContent = "اكتب اسمك كامل"; e.hidden = false; return; }
+    if(!/^01[0125]\d{8}$/.test(phone)){ e.textContent = "رقم الموبايل لازم يكون ١١ رقم ويبدأ بـ 01"; e.hidden = false; return; }
+    b.disabled = true; b.textContent = "جارٍ الإرسال…";
+    fetch("/api/join", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ name:name, phone:phone }) })
+      .then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "حصلت مشكلة"); return j; }); })
+      .then(function(){ $("joinForm").hidden = true; $("joinDone").hidden = false; TT.sound && TT.sound("done"); })
+      .catch(function(err){ e.textContent = err.message; e.hidden = false; })
+      .finally(function(){ b.disabled = false; b.textContent = "ابعت الطلب"; });
+  });
 
   $("out").addEventListener("click", function(){
     if(timer) clearInterval(timer);

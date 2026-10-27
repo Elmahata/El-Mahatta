@@ -1,16 +1,5 @@
+/* الوضع الغامق هو الأساسي دايماً (الخريطة بتفضل فاتحة) */
 :root{
-  --ground:#EDF0EF; --surface:#FFFFFF; --surface-2:#F5F8F7; --inset:#E7ECEA;
-  --ink:#131E1C; --ink-2:#47544F; --muted:#798782; --line:#D9E1DE;
-  --accent:#0E7566; --accent-ink:#0A5A4E; --accent-soft:#D6EBE6;
-  --fare:#BC4E1E; --fare-soft:#F9E6DA;
-  --ok:#1C7449; --ok-soft:#DAEDE2; --warn:#916805; --warn-soft:#F6EBCE; --crit:#A9382B; --crit-soft:#F6DDD9;
-  --r:12px; --r-sm:8px;
-  --shadow:0 1px 2px rgba(19,30,28,.05), 0 10px 26px -14px rgba(19,30,28,.22);
-  --display:'Readex Pro','IBM Plex Sans Arabic',system-ui,sans-serif;
-  --body:'IBM Plex Sans Arabic','Readex Pro',system-ui,sans-serif;
-  color-scheme:light;
-}
-@media (prefers-color-scheme:dark){:root{
   --ground:#0E1614; --surface:#171F1D; --surface-2:#1D2624; --inset:#222C29;
   --ink:#E6ECEA; --ink-2:#AEBCB7; --muted:#7E8D88; --line:#2B3633;
   --accent:#3FBCA6; --accent-ink:#6FD4C1; --accent-soft:#12332E;
@@ -18,7 +7,10 @@
   --ok:#4FBE84; --ok-soft:#12301F; --warn:#D8A93A; --warn-soft:#332A10; --crit:#E0705F; --crit-soft:#361B17;
   --shadow:0 1px 2px rgba(0,0,0,.4), 0 10px 26px -14px rgba(0,0,0,.7);
   color-scheme:dark;
-}}
+  --r:12px; --r-sm:8px;
+  --display:'Readex Pro','IBM Plex Sans Arabic',system-ui,sans-serif;
+  --body:'IBM Plex Sans Arabic','Readex Pro',system-ui,sans-serif;
+}
 
 *{box-sizing:border-box}
 html,body{margin:0}

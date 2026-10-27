@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>المحطة — حسابي</title>
-<meta name="theme-color" content="#0E7566">
+<meta name="theme-color" content="#0E1614"><meta name="color-scheme" content="dark">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/assets/icon-192.png">
 <link rel="stylesheet" href="/assets/style.css">
@@ -37,7 +37,7 @@
     <button role="tab" data-tab="family" aria-selected="false">أهلي</button>
     <button role="tab" data-tab="places" aria-selected="false">أماكني</button>
     <button role="tab" data-tab="history" aria-selected="false">رحلاتي</button>
-    <button role="tab" data-tab="invite" aria-selected="false">ادعي صاحبك</button>
+    <button role="tab" data-tab="invite" aria-selected="false">شارك التطبيق</button>
     <button role="tab" data-tab="support" aria-selected="false">الدعم</button>
   </div>
 
@@ -115,25 +115,16 @@
     <div id="hList"></div>
   </section>
 
-  <!-- ادعي صاحبك -->
+  <!-- شارك التطبيق -->
   <section id="t-invite" class="stack" hidden>
-    <div class="card" style="background:var(--accent);color:#fff;border:0;text-align:center">
-      <h2 style="margin:0 0 6px;color:#fff">هات صاحبك، وخدوا ٥ ج</h2>
-      <p style="margin:0;font-size:13.5px;opacity:.9">أول رحلة لصاحبك بـ ٥ ج أقل، وإنت كمان تاخد ٥ ج على رحلتك الجاية.</p>
+    <div class="card" style="text-align:center">
+      <h2 style="margin:0 0 6px">شارك «المحطة» مع صحابك وأهلك</h2>
+      <p class="hint" style="margin:0">ابعتلهم لينك التطبيق على واتساب أو أي تطبيق تاني.</p>
     </div>
-    <div id="invNeed" class="banner b-warn" hidden><span>⚠</span><span>اطلب أول رحلة أو اكتب رقمك في «البروفايل» علشان يطلعلك كود.</span></div>
-    <div id="invBox" class="card" hidden>
-      <div class="hint">كودك</div>
-      <div style="display:flex;align-items:center;gap:10px;border:2px dashed var(--accent);border-radius:12px;padding:10px 14px;margin:6px 0 12px">
-        <span class="big" id="invCode">—</span>
-        <button class="btn btn-ghost btn-sm" id="invCopy" style="margin-inline-start:auto">نسخ اللينك</button>
-      </div>
+    <div class="card" style="display:flex;flex-direction:column;gap:10px">
       <a class="btn btn-primary btn-wide" id="invWa" target="_blank" rel="noopener" href="#">ابعته على واتساب</a>
-      <div class="grid2" style="margin-top:12px">
-        <div class="stat"><span class="k" id="invJoined">0</span><div class="l">صحاب طلبوا</div></div>
-        <div class="stat" hidden><span class="k" id="invCredit">0</span><div class="l">جنيه رصيدك</div></div>
-      </div>
-
+      <button class="btn btn-ghost btn-wide" id="invShare" type="button">شارك بطريقة تانية</button>
+      <button class="btn btn-ghost btn-wide" id="invCopy" type="button">نسخ اللينك</button>
     </div>
   </section>
 
@@ -341,19 +332,15 @@
     }).join("");
   }
 
-  /* ---------- ادعي صاحبك ---------- */
+  /* ---------- شارك التطبيق (من غير كود ولا خصم) ---------- */
   function renderInvite(){
-    var ph = (getJSON(ME, {}).phone || "").replace(/\D/g,"");
-    $("invNeed").hidden = ph.length >= 9; $("invBox").hidden = ph.length < 9;
-    if(ph.length < 9) return;
-    TT.api("referral?phone=" + encodeURIComponent(ph)).then(function(r){
-      var link = location.origin + "/?ref=" + r.code;
-      $("invCode").textContent = r.code;
-      $("invJoined").textContent = r.joined; $("invCredit").textContent = r.credit;
-      $("invWa").href = "https://wa.me/?text=" + encodeURIComponent("جرّب «المحطة» — مشوارك بقى أسهل. توكتوك بسعر ثابت لحد عندك: " + link);
-      $("invCopy").onclick = function(){ (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function(){ TT.toast("اتنسخ ✓"); }).catch(function(){ prompt("انسخ اللينك:", link); }); };
-    }).catch(function(e){ TT.toast(e.message || "تعذّر التحميل"); });
+    var link = location.origin + "/download.html", txt = "جرّب «المحطة» — مشوارك بقى أسهل. توكتوك بسعر ثابت لحد عندك: " + link;
+    $("invWa").href = "https://wa.me/?text=" + encodeURIComponent(txt);
+    $("invShare").hidden = !navigator.share;
+    $("invShare").onclick = function(){ navigator.share({ title: "المحطة", text: txt }).catch(function(){}); };
+    $("invCopy").onclick = function(){ (navigator.clipboard ? navigator.clipboard.writeText(link) : Promise.reject()).then(function(){ TT.toast("اتنسخ ✓"); }).catch(function(){ prompt("انسخ اللينك:", link); }); };
   }
+
 
   /* ---------- الدعم ---------- */
   var KINDS = [["overcharge","السائق طلب أكتر من السعر"],["late","السائق اتأخر أو ماجاش"],["lost","نسيت حاجة في التوكتوك"],["behaviour","أسلوب السائق"],["suggest","اقتراح"],["other","حاجة تانية"]];

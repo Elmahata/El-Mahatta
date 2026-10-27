@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>المحطة — حساب السائق</title>
-<meta name="theme-color" content="#0E7566">
+<meta name="theme-color" content="#0E1614"><meta name="color-scheme" content="dark">
 <link rel="manifest" href="/manifest-driver.webmanifest">
 <link rel="icon" href="/assets/icon-driver-192.png">
 <link rel="stylesheet" href="/assets/style.css">
@@ -40,6 +40,14 @@
   <div id="needLogin" class="banner b-warn" hidden><span>⚠</span><span>ادخل من <a href="/driver.html">صفحة السائق</a> الأول.</span></div>
 
   <div id="app" hidden>
+    <div class="card" style="display:flex;align-items:center;gap:14px;margin-bottom:12px">
+      <span id="meAv" style="width:72px;height:72px;flex:none;border-radius:50%;background:var(--accent) center/cover no-repeat;color:#fff;display:grid;place-items:center;font:800 28px var(--display);box-shadow:0 0 0 3px var(--surface),0 0 0 5px var(--accent)"></span>
+      <div style="min-width:0">
+        <b id="meName" style="display:block;font:800 19px var(--display)"></b>
+        <div class="hint" id="meSub"></div>
+        <div class="hint" style="font-size:12px;margin-top:2px">الصورة دي اللي الراكب بيشوفها. تغييرها من الإدارة بس.</div>
+      </div>
+    </div>
     <div class="tabs" role="tablist">
       <button data-tab="earn" aria-selected="true">أرباحي</button>
       <button data-tab="sub" aria-selected="false" hidden>رصيدي</button>
@@ -237,6 +245,10 @@
 
   Promise.all([TT.api("public"), call("stats")]).then(function(res){
     zones = res[0].zones || []; stats = res[1]; pick = (stats.zones || []).slice();
+    var nm = stats.name || auth.name || "", av = $("meAv");
+    $("meName").textContent = nm;
+    $("meSub").textContent = [stats.plate ? "لوحة " + stats.plate : "", stats.village ? "من " + stats.village : ""].filter(Boolean).join(" · ");
+    if(stats.photo){ av.style.backgroundImage = "url(" + stats.photo + ")"; av.textContent = ""; } else av.textContent = nm.trim().charAt(0) || "س";
     renderAll();
     var h = (location.hash || "").slice(1);
     show({ earn:1, sub:1, zones:1, heading:1 }[h] ? h : "earn");

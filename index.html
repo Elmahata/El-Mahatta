@@ -6,7 +6,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
 <title>المحطة — مشوارك بقى أسهل</title>
 <meta name="description" content="مشوارك بقى أسهل — اطلب توكتوك بسعر ثابت معروف قبل ما السائق يتحرك.">
-<meta name="theme-color" content="#0E7566">
+<meta name="theme-color" content="#0E1614">
+<meta name="color-scheme" content="dark">
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="icon" href="/assets/icon-192.png">
 <link rel="apple-touch-icon" href="/assets/icon-192.png">
@@ -38,6 +39,8 @@ html,body{height:100%;overflow:hidden}
   background:var(--surface);border:1px solid var(--line);box-shadow:var(--shadow);display:grid;place-items:center;cursor:pointer}
 .fab svg{width:21px;height:21px;stroke:var(--ink-2);fill:none;stroke-width:1.9}
 
+/* بعد ما السائق يقبل: الخريطة تفضل ظاهرة ربع الشاشة على الأقل */
+body.mh-matched .sheet{max-height:min(70vh, 560px)}
 .sheet.mini{max-height:calc(96px + env(safe-area-inset-bottom,0px)) !important;overflow:hidden}
 .sheet.mini > section > *:not(h2){opacity:.0;pointer-events:none}
 .sheet .grab{cursor:pointer;padding:6px 0;margin:-6px auto 2px;background-clip:content-box}
@@ -274,8 +277,7 @@ html,body{height:100%;overflow:hidden}
         <div class="nm" id="dName">—</div>
         <div class="pl" id="dPlate">—</div>
         <div id="dTier" style="margin-top:4px"></div>
-        <a id="dTel" class="num" href="#" hidden style="display:inline-block;margin-top:4px;font-size:13px;font-weight:700"></a>
-      </div>
+              </div>
       <span class="chip c-accent num" id="dFare">—</span>
     </div>
     <div id="lateBox" class="banner b-warn" hidden style="margin-top:10px;flex-direction:column;align-items:stretch;gap:10px">
@@ -295,14 +297,15 @@ html,body{height:100%;overflow:hidden}
     </div>
     <div class="grid2">
       <button class="btn btn-primary" id="dNet" type="button">اتصل بالسائق</button>
+      <button id="dNetRaw" type="button" hidden></button>
       <button class="btn btn-ghost" id="dMsg" type="button">رسالة</button>
     </div>
     <a class="btn btn-ghost btn-wide" id="shareTrip" target="_blank" rel="noopener" href="#" style="margin-top:8px">شارك رحلتك مع أهلك</a>
-    <button class="btn btn-wide" id="sosBtn" type="button" style="margin-top:8px;background:#FBE9E6;color:#A9382B;border:1px solid #F0C6BF;font-weight:700">⚠ طوارئ</button>
+    <button class="btn btn-wide" id="sosBtn" type="button" style="margin-top:8px;background:var(--crit-soft);color:var(--crit);border:1px solid var(--crit);font-weight:700">⚠ طوارئ</button>
     <p class="hint" style="margin-top:12px;text-align:center"><span id="mHint">استنّى في مكانك،</span> وادفع <b id="dFare2"></b> جنيه نقداً عند الوصول.</p>
-    <button class="btn btn-wide" id="riderCancel" type="button" style="margin-top:10px;background:var(--surface);color:#A9382B;border:1.5px solid #F0C6BF;font-weight:700">الغي الطلب</button>
+    <button class="btn btn-wide" id="riderCancel" type="button" style="margin-top:10px;background:var(--surface);color:var(--crit);border:1.5px solid var(--crit);font-weight:700">الغي الطلب</button>
     <button class="btn btn-ghost btn-wide" id="newRide" style="margin-top:10px" hidden>اطلب رحلة تانية</button>
-    <button class="linkbtn" id="impostorBtn" type="button" style="color:#A9382B;font-weight:700">السائق مش هو اللي في الصورة؟ بلّغ</button>
+    <button class="linkbtn" id="impostorBtn" type="button" style="color:var(--crit);font-weight:700">السائق مش هو اللي في الصورة؟ بلّغ</button>
     <button class="linkbtn" data-report>السائق طلب أكتر من السعر؟ بلّغ</button>
   </section>
 
@@ -376,7 +379,8 @@ html,body{height:100%;overflow:hidden}
   var live = null, poll = null, reportFor = null, beforeReport = "ended";
   var ROUTES = "tt-routes", ME = "tt-me", SAVED = "tt-saved", HIST = "tt-history", REF = "tt-ref";
   var forOther = false;
-  (function(){ var m = /[?&]ref=([A-Za-z0-9]+)/.exec(location.search); if(m) try{ localStorage.setItem(REF, m[1].toUpperCase()); }catch(e){} })();
+  /* كود «ادعي صاحبك» اتلغى */
+  try{ localStorage.removeItem(REF); }catch(e){}
   function histUpdate(id, patch){
     var h = getJSON(HIST, []), it = h.filter(function(x){ return x.id === id; })[0];
     if(it){ for(var k in patch) it[k] = patch[k]; setJSON(HIST, h); }
@@ -499,6 +503,7 @@ html,body{height:100%;overflow:hidden}
   document.addEventListener("click", function(e){ if(e.target.closest && e.target.closest("[data-who]")) setTimeout(updMore, 0); });
   function setStep(s){
     step = s;
+    document.body.classList.toggle("mh-matched", s === "matched");
     var picking = (s === "from" || s === "to");
     ["stPick","stConfirm","stSearch","stMatched","stEnded","stReport"].forEach(function(id){ $(id).hidden = true; });
     $(picking ? "stPick" : ({ confirm:"stConfirm", search:"stSearch", matched:"stMatched", ended:"stEnded", report:"stReport" })[s]).hidden = false;
@@ -746,22 +751,22 @@ html,body{height:100%;overflow:hidden}
           var av = $("dAv"); av.textContent = j.driver.photo ? "" : (j.driver.name || "س").trim().charAt(0);
           av.style.backgroundImage = j.driver.photo ? "url(" + j.driver.photo + ")" : ""; av.style.backgroundSize = "cover"; av.style.backgroundPosition = "center";
           $("impostorBtn").textContent = j.driver.photo ? "السائق مش هو اللي في الصورة؟ بلّغ" : "السائق مش " + ((j.driver.name || "").trim().split(/\s+/)[0] || "اللي اسمه ظاهر") + "؟ بلّغ";
-          $("dName").textContent = j.driver.name + (j.driver.village ? " · من " + j.driver.village : "");
+          $("dName").textContent = name2(j.driver.name);
           $("dPlate").textContent = j.driver.plate ? ("لوحة " + j.driver.plate) : "توكتوك مرخّص";
-          $("dTel").hidden = !j.driver.phone; if(j.driver.phone){ $("dTel").href = "tel:" + j.driver.phone; $("dTel").textContent = "رقمه: " + j.driver.phone; }
+          window.__dPhone = j.driver.phone || "";
           $("dTier").innerHTML = TT.tierBadge(j.driver);
           $("dFare").textContent = j.fare + " ج نقداً";
           $("dFare2").textContent = j.fare;
-          if(!window.__chat || window.__chatId !== j.id){ window.__chatId = j.id; window.__chat = TT.chat.mount({ rid: j.id, token: live.token, msgBtn: $("dMsg"), callBtn: $("dNet") }); }
+          if(!window.__chat || window.__chatId !== j.id){ window.__chatId = j.id; window.__chat = TT.chat.mount({ rid: j.id, token: live.token, msgBtn: $("dMsg"), callBtn: $("dNetRaw") }); }
           $("codeBox").hidden = !j.code || Boolean(j.startedAt);
           $("dCode").textContent = j.code || "—";
           reportFor = { id: live.id, token: live.token };
           var shareUrl = location.origin + "/track.html?id=" + encodeURIComponent(live.id) + "&s=" + encodeURIComponent(j.shareToken || "");
           $("shareTrip").href = "https://wa.me/?text=" + encodeURIComponent("تابع رحلتي مع المحطة لحد ما أوصل: " + shareUrl);
           $("shareTrip").hidden = !j.shareToken;
-          window.__sos = { id: live.id, token: live.token, url: j.shareToken ? shareUrl : "", driver: j.driver.name + (j.driver.plate ? " · لوحة " + j.driver.plate : "") };
+          window.__sos = { id: live.id, token: live.token, url: j.shareToken ? shareUrl : "", driver: name2(j.driver.name) + (j.driver.plate ? " · لوحة " + j.driver.plate : "") };
           setStep("matched");
-          TT.celebrate({ title: j.driver.name + (j.driver.village ? " من " + j.driver.village : "") + " جاي ليك", sub: "السعر " + j.fare + " ج — قول له كود الركوب قبل ما تركب", photo: j.driver.photo || "" });
+          TT.celebrate({ title: name2(j.driver.name) + " جاي ليك", sub: "السعر " + j.fare + " ج — قول له كود الركوب قبل ما تركب", photo: j.driver.photo || "" });
           }
           drawLive(j);
           $("lateBox").hidden = !(j.assignedAt && !j.startedAt && !j.arrivedAt && Date.now() - j.assignedAt > 15 * 6e4);
@@ -780,7 +785,7 @@ html,body{height:100%;overflow:hidden}
           histUpdate(j.id, { status:"done", fare:j.fare, dName:(j.driver && j.driver.name) || "", dPhone:(j.driver && j.driver.phone) || "" });
           var dph = j.driver && j.driver.phone;
           $("endCall").hidden = !dph; $("endCall").style.display = dph ? "flex" : "none";
-          if(dph){ $("endCall").href = "tel:" + dph; $("endCallNum").textContent = j.driver.name + " · " + dph; }
+          if(dph){ $("endCall").href = "tel:" + dph; $("endCallNum").textContent = name2(j.driver.name) + " · " + dph; }
           TT.sound("done"); setTimeout(checkWallet, 1500);
           $("endTitle").textContent = "حمدالله على السلامة 🌹";
           var rz = $("endRose"); rz.hidden = false; rz.style.animation = "none"; void rz.offsetWidth; rz.style.animation = "";
@@ -865,7 +870,7 @@ html,body{height:100%;overflow:hidden}
   function soonBanner(s, phone){
     var old = document.getElementById("soonBan"); if(old) old.remove();
     var el = document.createElement("div"); el.id = "soonBan"; el.setAttribute("role", "alert");
-    el.style.cssText = "position:fixed;top:12px;left:12px;right:12px;z-index:70;background:#fff;border:1.5px solid var(--accent);border-radius:16px;padding:14px;box-shadow:0 10px 30px rgba(19,30,28,.22);display:flex;flex-direction:column;gap:10px;max-width:480px;margin:0 auto";
+    el.style.cssText = "position:fixed;top:12px;left:12px;right:12px;z-index:70;background:var(--surface);color:var(--ink);border:1.5px solid var(--accent);border-radius:16px;padding:14px;box-shadow:0 10px 30px rgba(19,30,28,.22);display:flex;flex-direction:column;gap:10px;max-width:480px;margin:0 auto";
     el.innerHTML = '<div style="display:flex;gap:10px;align-items:flex-start"><span style="font-size:26px;line-height:1">⏰</span><div style="line-height:1.5"><b>مشوارك اليومي ' + TT.esc(s.time) + '</b><br><span class="hint">هنطلبه بعد ١٠ دقايق علشان السواق يوصل في المعاد' + (s.to ? ' · ' + TT.esc(s.to) : '') + '</span></div></div>'
       + '<div style="display:flex;gap:8px"><button type="button" class="btn btn-primary btn-sm" data-ok style="flex:1">تمام</button><button type="button" class="btn btn-ghost btn-sm" data-skip style="flex:1">مش محتاجه النهارده</button></div>';
     document.body.appendChild(el);
@@ -946,6 +951,28 @@ html,body{height:100%;overflow:hidden}
     if(!tk || (tier && !el.querySelector(".mh-drv-" + ((tier === "gold" || tier === "silver") ? tier : "normal")))){ m.setIcon(TT.driverIcon(h, tier)); return; }
     TT.rotTo(tk, h);
   }
+  /* اسم السائق للراكب: الاسم الأول والتاني بس */
+  function name2(n){ return String(n || "").trim().split(/\s+/).slice(0, 2).join(" ") || "السائق"; }
+  /* «اتصل بالسائق»: اختيار بين مكالمة بالنت (رقم الراكب مش بيظهر) أو اتصال مباشر من خطّه على رقم السائق */
+  $("dNet").addEventListener("click", function(){
+    var netOk = !$("dNetRaw").hidden, ph = window.__dPhone || "";
+    var ov = document.createElement("div");
+    ov.style.cssText = "position:fixed;inset:0;z-index:5000;background:rgba(5,10,9,.6);display:flex;align-items:flex-end;justify-content:center";
+    var opt = "display:flex;align-items:center;gap:14px;width:100%;min-height:64px;padding:12px 14px;border-radius:14px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font-family:var(--body);text-align:start;cursor:pointer";
+    var ic = "width:44px;height:44px;border-radius:50%;display:grid;place-items:center;flex:none;font-size:20px;background:var(--accent-soft);color:var(--accent-ink)";
+    ov.innerHTML = '<div role="dialog" aria-modal="true" style="background:var(--surface);width:100%;max-width:480px;border-radius:22px 22px 0 0;padding:20px 16px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:10px">'
+      + '<h2 style="margin:0 0 4px;font:800 18px var(--display)">اتصل بالسائق</h2>'
+      + '<button type="button" data-c="net" style="' + opt + (netOk ? '' : ';opacity:.45') + '"' + (netOk ? '' : ' disabled') + '><span style="' + ic + '">🌐</span><span style="display:flex;flex-direction:column"><b style="font-size:16px">اتصال بالنت</b><span style="font-size:13px;color:var(--muted)">مش هيظهر رقمك</span></span></button>'
+      + (ph ? '<a data-c="tel" href="tel:' + TT.esc(ph) + '" style="' + opt + ';text-decoration:none"><span style="' + ic + '">📞</span><span style="display:flex;flex-direction:column"><b style="font-size:16px">اتصال مباشر</b><span style="font-size:13px;color:var(--muted)">من خطّك على تليفون السائق</span></span></a>' : '')
+      + '<button type="button" data-c="x" class="btn btn-ghost btn-wide" style="margin-top:4px">إلغاء</button></div>';
+    document.body.appendChild(ov);
+    ov.addEventListener("click", function(e){
+      var c = e.target.closest("[data-c]");
+      if(e.target === ov || (c && c.getAttribute("data-c") === "x")){ ov.remove(); return; }
+      if(c && c.getAttribute("data-c") === "net"){ ov.remove(); $("dNetRaw").click(); return; }
+      if(c && c.getAttribute("data-c") === "tel"){ setTimeout(function(){ ov.remove(); }, 300); }
+    });
+  });
   function drawLive(j){
     if(!map) return;
     var phase = j.startedAt ? 1 : 0, target = phase ? j.to : j.from;
@@ -1304,7 +1331,7 @@ html,body{height:100%;overflow:hidden}
     ch.innerHTML = '<div class="mh-login" style="width:100%;max-width:380px;display:flex;flex-direction:column;gap:14px;align-items:stretch">'
       + '<span class="mh-logo" style="width:112px;height:112px;border-radius:50%;background:#fff;display:grid;place-items:center;align-self:center;box-shadow:0 18px 36px -14px rgba(0,0,0,.45), 0 0 0 6px rgba(255,255,255,.14)"><img src="/assets/logo.png" alt="المحطة" style="height:81px;width:auto;display:block"></span>'
       + '<h1 style="margin:0;text-align:center;font:800 28px/1.3 var(--display)">أهلاً بيك في المحطة</h1>'
-      + '<p style="margin:0 0 10px;text-align:center;color:#D6EBE6">مشوارك بقى أسهل. إنت هنا كـ…</p>'
+      + '<p style="margin:0 0 10px;text-align:center;color:#D6EBE6">مشوارك بقى أسهل</p>'
       + '<button data-role="rider" style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;background:#fff;color:#131E1C;border:0;border-radius:16px;padding:18px 20px;cursor:pointer;text-align:start;min-height:72px"><b style="font:800 20px var(--display);color:#0A5A4E">راكب</b><span style="font-size:14px;color:#47544F">عايز أطلب توكتوك</span></button>'
       + '<button data-role="driver" style="display:flex;flex-direction:column;gap:2px;align-items:flex-start;background:#131E1C;color:#fff;border:0;border-radius:16px;padding:18px 20px;cursor:pointer;text-align:start;min-height:72px"><b style="font:800 20px var(--display)">سائق</b><span style="font-size:14px;color:#AEBCB7">عندي توكتوك ومسجّل مع الإدارة</span></button>'
       + '<p style="margin:6px 0 0;text-align:center;font-size:13px;color:#D6EBE6">تقدر تغيّر بعدين من «حسابي».</p></div>';

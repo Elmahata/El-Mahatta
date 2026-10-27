@@ -30,7 +30,9 @@
  *   GET    /api/consents             إدارة — سجل الموافقات
  */
 
-const KINDS = ["zones", "places", "drivers", "requests", "config", "reports", "riders"];
+const KINDS = ["zones", "places", "drivers", "requests", "config", "reports", "riders", "joins"];
+/* اسم السائق اللي بيظهر للراكب والأهل: الاسم الأول والتاني بس */
+const name2 = (n) => String(n || "").trim().split(/\s+/).slice(0, 2).join(" ");
 const LOW_BAL = 5; /* أول ما الرصيد يوصل ٥ ج أو أقل، بيظهر بانر «اشحن» */
 const PUBLIC_KINDS = ["zones", "places", "config"];
 const MAX_BODY = 16 * 1024;
@@ -489,7 +491,8 @@ async function createRequest(env, b, source) {
 
   /* ادعي صاحبك: خصم ٥ ج لأول رحلة للمدعو، و٥ ج للي دعاه في رحلته الجاية. الإدارة بتعوّض السائق. */
   let refBy = "", refDiscount = 0;
-  if (source === "app") {
+  /* «ادعي صاحبك» (خصم ٥ ج) اتلغى — المشاركة بقت لينك التطبيق بس */
+  if (false && source === "app") {
     const { requests } = await readDocs(env, ["requests"]);
     const mine = requests.filter((r) => r.riderPhone === phone);
     const ref = str(b.ref, 12).toUpperCase();
@@ -544,6 +547,22 @@ export async function onRequest({ request, env, params }) {
         pub.places = pub.places.filter((p) => !p.auto || p.lat == null || meters(C, { lat: +p.lat, lng: +p.lng }) <= 4000);
       }
       return json(pub);
+    }
+
+    /* طلب انضمام سائق جديد — بيوصل للإدارة (اسم + رقم بس) */
+    if (route === "join" && method === "POST") {
+      const b = await parseBody(request);
+      const name = str(b.name, 60).trim(), phone = digits(b.phone);
+      if (name.length < 3) return json({ error: "اكتب اسمك كامل" }, 400);
+      if (!/^01[0125]\d{8}$/.test(phone)) return json({ error: "رقم الموبايل لازم يكون ١١ رقم ويبدأ بـ 01" }, 400);
+      const ip = str(request.headers.get("CF-Connecting-IP"), 64);
+      const { drivers, joins } = await readDocs(env, ["drivers", "joins"]);
+      if (drivers.some((d) => l10(d.phone) === l10(phone))) return json({ error: "الرقم ده متسجّل كسائق — ادخل بالكود بتاعك" }, 409);
+      if (joins.some((j) => l10(j.phone) === l10(phone) && j.status !== "rejected")) return json({ error: "طلبك وصل قبل كده — الإدارة هتكلمك" }, 409);
+      if (ip && joins.filter((j) => j.ip === ip && Date.now() - (j.createdAt || 0) < 3600e3).length >= 3) return json({ error: "طلبات كتير — جرّب بعد ساعة" }, 429);
+      const id = uid();
+      await putDoc(env, "joins", id, { id, name, phone, ip, status: "new", createdAt: Date.now() });
+      return json({ ok: true });
     }
 
     /* سجل الموافقة على الشروط — دليل إن المستخدم وافق (إمتى، وعلى أنهي إصدار، ومن أنهي جهاز) */
@@ -664,7 +683,7 @@ export async function onRequest({ request, env, params }) {
         const d = await getDoc(env, "drivers", r.driverId);
         if (d) {
           /* رقم السائق بيظهر للراكب حتى بعد الرحلة — لو نسي حاجة في التوكتوك (رقم الراكب مابيظهرش للسائق) */
-          driver = { name: d.name, plate: d.plate, photo: d.photo || "", village: d.village || "", phone: d.phone || "", ...tierOf(d) };
+          driver = { name: name2(d.name), plate: d.plate, photo: d.photo || "", phone: d.phone || "", ...tierOf(d) };
           if (r.status === "assigned" && d.loc && Date.now() - d.loc.at < 2 * 60 * 1000) driverLoc = d.loc;
         }
       }
@@ -705,7 +724,7 @@ export async function onRequest({ request, env, params }) {
       if (r.driverId) {
         const d = await getDoc(env, "drivers", r.driverId);
         if (d) {
-          driver = { name: d.name, plate: d.plate, photo: d.photo || "", village: d.village || "", tier: tierOf(d).tier };
+          driver = { name: name2(d.name), plate: d.plate, photo: d.photo || "", tier: tierOf(d).tier };
           /* مكان التوكتوك لايف للأهل — وقت الرحلة بس */
           if (r.status === "assigned" && d.loc && Date.now() - d.loc.at < 2 * 60 * 1000) driverLoc = { lat: d.loc.lat, lng: d.loc.lng, h: d.loc.h };
         }
@@ -1199,6 +1218,7 @@ export async function onRequest({ request, env, params }) {
           });
         }
         return json({
+          name: me.name || "", photo: me.photo || "", plate: me.plate || "", village: me.village || "",
           days, rating: me.ratingCount ? +(me.ratingSum / me.ratingCount).toFixed(1) : null, ratingCount: me.ratingCount || 0, tier: tierOf(me).tier,
           /* آراء الركاب مجمّعة من غير أسماء — بتظهر بعد ٥ تقييمات فيها تعليقات (علشان مايعرفش مين قال إيه) */
           tagSummary: (me.tagRated || 0) >= 5 ? Object.entries(me.tagCount || {}).map(([t, n]) => ({ t, n, good: GOOD_TAGS.includes(t) })).sort((a, b) => (b.good - a.good) || (b.n - a.n)) : null,
@@ -1424,6 +1444,15 @@ export async function onRequest({ request, env, params }) {
         if (!b || typeof b !== "object" || Array.isArray(b)) return json({ error: "بيانات غير صحيحة" }, 400);
         b.id = id;
         if (kind === "drivers") {
+          /* رقم موبايل واحد ورقم قومي واحد لكل سائق */
+          const { drivers: others } = await readDocs(env, ["drivers"]);
+          const ph = l10(b.phone), nid = digits(b.nid);
+          if (b.nid && nid.length !== 14) return json({ error: "الرقم القومي لازم يكون ١٤ رقم" }, 400);
+          if (b.nid) b.nid = nid;
+          const dupP = ph.length >= 10 && others.find((d) => d.id !== id && l10(d.phone) === ph);
+          if (dupP) return json({ error: "رقم الموبايل ده متسجّل لسائق تاني: " + (dupP.name || "") }, 409);
+          const dupN = nid && others.find((d) => d.id !== id && digits(d.nid) === nid);
+          if (dupN) return json({ error: "الرقم القومي ده متسجّل لسائق تاني: " + (dupN.name || "") }, 409);
           const old = (await getDoc(env, "drivers", id)) || {};
           for (const k of DRIVER_SERVER_KEYS) {
             if (b[k] === null) delete b[k];
