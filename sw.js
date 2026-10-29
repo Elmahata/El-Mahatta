@@ -1,5 +1,5 @@
 /* service worker: بيحفظ الواجهة علشان التطبيق يفتح بسرعة، ولو مفيش نت بيظهر صفحة «مفيش إنترنت». الطلبات نفسها (/api) مش بتتحفظ أبداً. */
-const V = "mahatta-v80";
+const V = "mahatta-v81";
 const SHELL = ["/", "/index.html", "/driver.html", "/me.html", "/driver-me.html", "/offline.html", "/assets/style.css", "/assets/common.js", "/assets/push.js", "/assets/fcm-config.js", "/assets/family.js", "/assets/verify.js", "/assets/terms.js", "/terms.html", "/assets/chat.js", "/assets/logo.png", "/assets/icon-192.png", "/assets/icon-driver-192.png"];
 self.addEventListener("install", (e) => { self.skipWaiting(); e.waitUntil(caches.open(V).then((c) => c.addAll(SHELL)).catch(() => {})); });
 self.addEventListener("activate", (e) => e.waitUntil(

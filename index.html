@@ -291,10 +291,21 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       <span style="flex:1"><b style="font-size:16px">السائق وصل ✓</b><br><span id="arrTxt" style="opacity:.92">مستنّيك — عندك ٣ دقايق</span><br><b id="arrFare" style="font-size:14px"></b></span>
       <b id="arrClock" class="num" style="font:800 28px var(--display)">3:00</b>
     </div>
+    <div id="arrId" hidden style="margin-top:10px;background:var(--surface);border:1.5px solid var(--accent);border-radius:var(--r-md, 16px);padding:16px;display:flex;flex-direction:column;align-items:center;gap:10px;text-align:center">
+      <span id="aAv" style="width:132px;height:132px;border-radius:50%;background:var(--accent-soft, #DDEFEA) center/cover no-repeat;border:4px solid var(--accent);display:grid;place-items:center;font:800 44px var(--display);color:var(--accent-ink)">—</span>
+      <div id="aName" style="font:800 22px/1.2 var(--display)">—</div>
+      <div id="aTier"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;width:100%">
+        <div style="background:var(--bg, rgba(0,0,0,.04));border-radius:12px;padding:10px"><div class="hint">رقم التوكتوك</div><b id="aPlate" class="num" style="font:800 20px var(--display);direction:ltr;display:block">—</b></div>
+        <a id="aPhone" href="#" style="background:var(--bg, rgba(0,0,0,.04));border-radius:12px;padding:10px;color:inherit;text-decoration:none"><div class="hint">تليفون السائق</div><b id="aPhoneN" class="num" style="font:800 18px var(--display);direction:ltr;display:block">—</b></a>
+      </div>
+      <div id="aFare" style="font-weight:700"></div>
+    </div>
     <div class="ridecode" id="codeBox" hidden>
       <div style="flex:1"><div style="font-weight:700">كود الركوب</div><div class="hint">قوله للسائق قبل ما تركب — متركبش مع حد ماسألكش عليه</div></div>
       <b id="dCode">—</b>
     </div>
+    <button class="btn btn-ghost btn-wide" id="codeOnBtn" type="button" hidden style="margin-top:10px;font-weight:700">🔒 فعّل كود الركوب <span class="hint" style="font-weight:400">(اختياري — لأمان أكتر)</span></button>
     <div class="grid2">
       <button class="btn btn-primary" id="dNet" type="button">اتصل بالسائق</button>
       <button id="dNetRaw" type="button" hidden></button>
@@ -766,13 +777,25 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
           $("shareTrip").hidden = !j.shareToken;
           window.__sos = { id: live.id, token: live.token, url: j.shareToken ? shareUrl : "", driver: name2(j.driver.name) + (j.driver.plate ? " · لوحة " + j.driver.plate : "") };
           setStep("matched");
-          TT.celebrate({ title: name2(j.driver.name) + " جاي ليك", sub: "السعر " + j.fare + " ج — قول له كود الركوب قبل ما تركب", photo: j.driver.photo || "" });
+          TT.celebrate({ title: name2(j.driver.name) + " جاي ليك", sub: "السعر " + j.fare + " ج" + (j.codeOn ? " — قول له كود الركوب قبل ما تركب" : ""), photo: j.driver.photo || "" });
           }
           drawLive(j);
           $("lateBox").hidden = !(j.assignedAt && !j.startedAt && !j.arrivedAt && Date.now() - j.assignedAt > 15 * 6e4);
           arrAt = j.startedAt ? 0 : (j.arrivedAt || 0);
           $("riderCancel").hidden = Boolean(j.startedAt);
           $("codeBox").hidden = !j.code || Boolean(j.startedAt);
+          $("codeOnBtn").hidden = Boolean(j.codeOn || j.startedAt);
+          (function(){
+            var show = Boolean(j.arrivedAt && !j.startedAt && j.driver), d = j.driver || {};
+            $("arrId").hidden = !show; $("arrId").style.display = show ? "flex" : "none";
+            if(!show) return;
+            var a = $("aAv"); a.style.backgroundImage = d.photo ? "url(" + d.photo + ")" : ""; a.textContent = d.photo ? "" : ((d.name || "س").trim().charAt(0));
+            $("aName").textContent = name2(d.name);
+            $("aTier").innerHTML = TT.tierBadge(d);
+            $("aPlate").textContent = d.plate || "—";
+            $("aPhoneN").textContent = d.phone || "—"; $("aPhone").href = d.phone ? "tel:" + d.phone : "#";
+            $("aFare").textContent = "الأجرة " + j.fare + " ج — نقداً عند الوصول";
+          })();
           if(j.arrivedAt && !j.startedAt && $("dEta")) $("dEta").textContent = "";
           $("mTitle").textContent = j.startedAt ? "في الطريق للوجهة 🛺" : j.arrivedAt ? "السائق وصل ✓ انزل له" : "سائق جاي ليك ✓";
           $("mHint").textContent = j.startedAt ? "استمتع بالمشوار،" : j.arrivedAt ? "السائق مستنّيك تحت،" : "استنّى في مكانك،";
@@ -1286,6 +1309,13 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
   })();
 
   map.on("movestart", function(){ if(!$("pin").hidden) $("pin").classList.add("lift"); });
+  $("codeOnBtn").addEventListener("click", function(){
+    if(!reportFor) return; var b = this; b.disabled = true;
+    TT.api("code-on", { method:"POST", body:{ id: reportFor.id, token: reportFor.token } })
+      .then(function(j){ $("dCode").textContent = j.code; $("codeBox").hidden = false; b.hidden = true; TT.toast("اتفعّل ✓ السائق مش هيقدر يبدأ الرحلة غير بالكود ده"); })
+      .catch(function(e){ TT.toast(e.message || "حصلت مشكلة"); })
+      .then(function(){ b.disabled = false; });
+  });
   map.on("move",      function(){ if(!$("pin").hidden) updatePick(); });
   map.on("moveend",   function(){ $("pin").classList.remove("lift"); if(!$("pin").hidden) updatePick(); });
 

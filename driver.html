@@ -191,7 +191,8 @@
           <button class="btn btn-ghost btn-wide" id="rNoShow" hidden>الراكب ماجاش — إلغاء المشوار</button>
         </div>
         <div id="codeGate" style="margin-top:12px;background:var(--surface);border-radius:var(--r-sm);padding:12px">
-          <label for="rCode" style="margin-bottom:6px">اسأل الراكب عن كود الركوب (٤ أرقام)</label>
+          <label for="rCode" id="rCodeLbl" style="margin-bottom:6px">🔒 الراكب فعّل كود الركوب — اسأله عليه (٤ أرقام)</label>
+          <div id="rNoCodeLbl" style="margin-bottom:8px;font-weight:700">الراكب ركب؟ دوس «ابدأ الرحلة»</div>
           <div style="display:flex;gap:8px">
             <input id="rCode" inputmode="numeric" maxlength="4" placeholder="••••" style="font-size:22px;letter-spacing:8px;text-align:center;direction:ltr;flex:1">
             <button class="btn btn-primary" id="rStart">ابدأ الرحلة</button>
@@ -510,6 +511,10 @@
     $("rRelease").setAttribute("data-rid", r.id);
     $("rStart").setAttribute("data-rid", r.id);
     $("codeGate").hidden = Boolean(r.startedAt);
+    var needCode = Boolean(r.codeOn);
+    if(needCode && !window.__codeSeen){ window.__codeSeen = r.id; try{ TT.sound("confirm"); }catch(e){} TT.toast("الراكب فعّل كود الركوب 🔒 — اسأله عليه"); }
+    $("rCode").hidden = !needCode; $("rCodeLbl").hidden = !needCode; $("rNoCodeLbl").hidden = needCode;
+    $("rStart").style.flex = needCode ? "" : "1"; $("rStart").setAttribute("data-need", needCode ? "1" : "");
     $("rDone").hidden = !r.startedAt;
     $("rRelease").hidden = Boolean(r.startedAt);
     $("rArrived").hidden = Boolean(r.arrivedAt || r.startedAt);
@@ -670,7 +675,7 @@
   document.addEventListener("click", function(e){
     var s = e.target.closest && e.target.closest("#rStart"); if(!s) return;
     var rid = s.getAttribute("data-rid"), code = $("rCode").value.replace(/\D/g,"");
-    if(code.length !== 4){ TT.toast("الكود ٤ أرقام"); $("rCode").focus(); return; }
+    if(s.getAttribute("data-need") === "1" && code.length !== 4){ TT.toast("الكود ٤ أرقام"); $("rCode").focus(); return; }
     s.disabled = true;
     call("start", { method:"POST", body:{ requestId: rid, code: code } })
       .then(function(){ TT.sound("confirm"); TT.toast("الرحلة بدأت ✓"); $("rCode").value = ""; })
