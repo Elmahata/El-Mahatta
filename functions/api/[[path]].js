@@ -259,6 +259,62 @@ const tokOk = (given, real) => Boolean(real) && safeEqual(given, real);
 const OTP_TTL = 10 * 60 * 1000, OTP_WAIT = 60 * 1000, OTP_DAY_MAX = 5, OTP_TRIES = 5;
 const SESSION_TTL = 180 * 864e5;
 const otpOn = (env) => Boolean(env.WA_TOKEN && env.WA_PHONE_ID);
+
+/* ===== تأكيد عكسي على واتساب (Reverse OTP) — مش محتاج قالب ولا توثيق بيزنس =====
+   الراكب بيبعت رسالة فيها كود من ٦ أرقام لرقم المحطة على واتساب، والـ Webhook بيتأكد إن الرقم اللي بعت هو نفس الرقم اللي اتكتب.
+   المتغيرات: WA_VERIFY (كلمة سر تأكيد الـ Webhook، إنت بتختارها) + WA_APP_SECRET (App secret من Meta).
+   اختياري: WA_NUMBER (افتراضي 201131207998)، و WA_TOKEN + WA_PHONE_ID علشان يرد على الراكب «تم التأكيد».
+   لو الاتنين الأولانيين موجودين، ده بيشتغل بدل كود القالب. */
+const ROTP_TTL = 15 * 60 * 1000;
+const rotpOn = (env) => Boolean(env.WA_VERIFY && env.WA_APP_SECRET);
+const verifyOn = (env) => rotpOn(env) || otpOn(env);
+const waNumber = (env) => digits(env.WA_NUMBER || "201131207998");
+const latinDigits = (t) => String(t || "").replace(/[\u0660-\u0669]/g, (d) => d.charCodeAt(0) - 0x660).replace(/[\u06F0-\u06F9]/g, (d) => d.charCodeAt(0) - 0x6F0);
+async function hmacHex(secret, raw) {
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(raw));
+  return Array.from(new Uint8Array(sig), (b) => b.toString(16).padStart(2, "0")).join("");
+}
+/** رد نصي جوه نافذة الـ ٢٤ ساعة (العميل هو اللي بدأ، فمش محتاج قالب). بيشتغل بس لو WA_TOKEN و WA_PHONE_ID موجودين */
+async function waReply(env, to, text) {
+  if (!(env.WA_TOKEN && env.WA_PHONE_ID)) return;
+  try {
+    await fetch("https://graph.facebook.com/v21.0/" + env.WA_PHONE_ID + "/messages", {
+      method: "POST",
+      headers: { authorization: "Bearer " + env.WA_TOKEN, "content-type": "application/json" },
+      body: JSON.stringify({ messaging_product: "whatsapp", to: digits(to), type: "text", text: { body: text } }),
+    });
+  } catch (e) {}
+}
+async function waWebhook(request, env) {
+  const raw = await request.text();
+  if (raw.length > 200000) return new Response("too large", { status: 413 });
+  const sig = str(request.headers.get("x-hub-signature-256"), 100);
+  if (!env.WA_APP_SECRET || !safeEqual(sig, "sha256=" + (await hmacHex(env.WA_APP_SECRET, raw)))) return new Response("bad signature", { status: 401 });
+  let body = {};
+  try { body = JSON.parse(raw); } catch (e) { return json({ ok: true }); }
+  const now = Date.now();
+  for (const en of body.entry || []) for (const ch of en.changes || []) {
+    for (const m of (ch.value && ch.value.messages) || []) {
+      const from = digits(m.from);
+      const txt = latinDigits(m.type === "text" ? m.text && m.text.body : m.button ? m.button.text : "");
+      const hit = txt.replace(/[\s-]/g, "").match(/\d{6}/);
+      if (!hit) continue;
+      const o = await getDoc(env, "rotp", hit[0]);
+      if (!o || o.done || now - o.at > ROTP_TTL) { await waReply(env, from, "الكود ده خلص أو مش صحيح. ارجع للتطبيق ودوس «كود جديد»."); continue; }
+      if (l10(from) === o.phone) {
+        o.done = true; o.doneAt = now; o.wrong = false;
+        await putDoc(env, "rotp", hit[0], o);
+        await waReply(env, from, "✓ تم تأكيد رقمك في المحطة. ارجع للتطبيق وكمّل 🛺");
+      } else {
+        o.wrong = true;
+        await putDoc(env, "rotp", hit[0], o);
+        await waReply(env, from, "الرسالة دي اتبعتت من رقم غير الرقم اللي اتكتب في التطبيق. ابعتها من نفس الرقم.");
+      }
+    }
+  }
+  return json({ ok: true });
+}
 const l10 = (p) => digits(p).slice(-10);
 const intl = (p) => { const d = digits(p); return d.startsWith("20") ? d : d.startsWith("0") ? "20" + d.slice(1) : "20" + d; };
 const rnd = (n) => Array.from(crypto.getRandomValues(new Uint8Array(n)), (b) => (b % 10)).join("");
@@ -414,7 +470,7 @@ async function newSession(env, phone, role) {
 }
 /** لو التأكيد شغال: لازم جلسة صحيحة لنفس الرقم. بيرجّع null لو تمام، أو رد خطأ */
 async function needSession(request, env, phone, role) {
-  if (!otpOn(env)) return null;
+  if (!verifyOn(env)) return null;
   const t = str(request.headers.get("x-session"), 80);
   const s = t ? await getDoc(env, "sessions", t) : null;
   if (!s || s.role !== role || s.phone !== l10(phone) || Date.now() - s.at > SESSION_TTL)
@@ -588,13 +644,27 @@ export async function onRequest({ request, env, params }) {
       const b = await parseBody(request);
       const phone = digits(b.phone), role = "rider";
       if (phone.length < 10) return json({ error: "رقم الموبايل مش صحيح" }, 400);
-      if (!otpOn(env)) return json({ skip: true, token: await newSession(env, phone, role) });
+      if (!verifyOn(env)) return json({ skip: true, token: await newSession(env, phone, role) });
       const now = Date.now(), key = l10(phone);
       const log = (await getDoc(env, "otplog", key)) || { sends: [] };
       log.sends = log.sends.filter((t) => now - t < 864e5);
       const lastAt = log.sends[log.sends.length - 1] || 0;
       if (now - lastAt < OTP_WAIT) return json({ error: "استنى دقيقة وجرّب تاني" }, 429);
       if (log.sends.length >= OTP_DAY_MAX) return json({ error: "وصلت لآخر عدد أكواد النهارده — جرّب بكرة أو كلّم الإدارة" }, 429);
+      if (rotpOn(env)) {
+        let code = "";
+        for (let i = 0; i < 6 && !code; i++) {
+          const c = rnd(6), old = await getDoc(env, "rotp", c);
+          if (!old || old.done || now - old.at > ROTP_TTL) code = c;
+        }
+        if (!code) return json({ error: "حصلت مشكلة — جرّب تاني" }, 503);
+        const id = tok().slice(0, 20);
+        await putDoc(env, "rotp", code, { code, id, phone: key, role, at: now, done: false });
+        log.sends.push(now);
+        await putDoc(env, "otplog", key, log);
+        const text = "كود تأكيد المحطة: " + code;
+        return json({ mode: "wa", id, code, to: waNumber(env), wa: "https://wa.me/" + waNumber(env) + "?text=" + encodeURIComponent(text), ttl: ROTP_TTL / 1000, wait: OTP_WAIT / 1000 });
+      }
       const code = rnd(6), id = tok().slice(0, 20);
       try { await sendOtp(env, phone, code); }
       catch (e) { return json({ error: "ماقدرناش نبعت الكود — اتأكد إن الرقم عليه واتساب", detail: String(e.message).slice(0, 200) }, 502); }
@@ -602,6 +672,27 @@ export async function onRequest({ request, env, params }) {
       await putDoc(env, "otplog", key, log);
       await putDoc(env, "otp", id, { phone: key, role, code, at: now, tries: 0 });
       return json({ id, wait: OTP_WAIT / 1000 });
+    }
+
+    if (route === "otp" && sub === "check" && method === "POST") {
+      const b = await parseBody(request);
+      const code = digits(b.code).slice(0, 6), o = code.length === 6 ? await getDoc(env, "rotp", code) : null;
+      if (!o || !safeEqual(str(b.id, 40), o.id)) return json({ error: "الكود ده مش موجود — دوس «كود جديد»" }, 400);
+      if (!o.done) {
+        if (Date.now() - o.at > ROTP_TTL) return json({ error: "الكود خلص — دوس «كود جديد»" }, 400);
+        return json({ pending: true, wrong: Boolean(o.wrong) });
+      }
+      if (!o.token) { o.token = await newSession(env, o.phone, o.role); await putDoc(env, "rotp", code, o); }
+      return json({ token: o.token });
+    }
+
+    /* Webhook واتساب (Meta): GET للتأكيد وقت الإعداد، و POST للرسايل الجاية */
+    if (route === "wa" && sub === "webhook") {
+      if (method === "GET") {
+        const ok = url.searchParams.get("hub.mode") === "subscribe" && env.WA_VERIFY && safeEqual(url.searchParams.get("hub.verify_token"), env.WA_VERIFY);
+        return ok ? new Response(url.searchParams.get("hub.challenge") || "", { status: 200, headers: { "content-type": "text/plain" } }) : new Response("forbidden", { status: 403 });
+      }
+      if (method === "POST") return await waWebhook(request, env);
     }
 
     if (route === "otp" && sub === "verify" && method === "POST") {
