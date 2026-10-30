@@ -1,8 +1,8 @@
 [{
-      "relation": ["delegate_permission/common.handle_all_urls"],
-      "target": {
-        "namespace": "android_app",
-        "package_name": "dev.pages.el_mahatta.twa",
-        "sha256_cert_fingerprints": ["FD:C6:4A:8E:68:8B:EE:94:8F:9C:0A:EE:39:9D:00:18:FE:D0:82:86:6A:7F:0B:5C:08:05:F6:93:85:7F:27:0A"]
-      }
-    }]
+  "relation": ["delegate_permission/common.handle_all_urls"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "dev.pages.el_mahatta.twa",
+    "sha256_cert_fingerprints": ["84:BA:E5:45:20:41:30:B9:B1:85:D0:0B:E0:3A:67:AB:BA:29:AA:7B:A6:D4:81:17:0D:E1:02:33:AE:68:EC:0E"]
+  }
+}]
