@@ -461,7 +461,6 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       zoneId: best.zoneId
     };
   }
-  /* نفس حساب السيرفر: بالمسافة (خط مستقيم × ١٫٣) لحد cutKm = قصير، أكتر = طويل. ولو مفيش إحداثيات نرجع للمناطق */
   /* التسعير الموحّد (نفس السيرفر): الكيلو بـ ٨ ج جوه وبرّه كفر صقر، أقل مشوار ١٠ ج، ومقرّب لأعلى ٥ ج */
   function PRc(){ var c = state.cfg || {}, n = function(v, d){ return (v === undefined || v === null || v === "" || !isFinite(+v) || +v < 0) ? d : +v; };
     return { perKm: n(c.perKm, 8) || 8, minFare: n(c.minFare, 10), freeMin: n(c.freeMin, 3), waitPerMin: n(c.waitPerMin, 1), maxWaitMin: n(c.maxWaitMin, 15) || 15 }; }
@@ -475,16 +474,14 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       var km = b.roadKm != null && b.roadFrom === (a.lat + "," + a.lng) ? b.roadKm : Math.round(TT.dist({ lat:+a.lat, lng:+a.lng }, { lat:+b.lat, lng:+b.lng }) * 1.3 * 10) / 10;
       return { amount: Math.max(pr.minFare, up5(km * pr.perKm)), same: km <= 2, known:true, km:km, perKm:pr.perKm, pr:pr };
     }
-    var same = Boolean(a.zoneId && b.zoneId && a.zoneId === b.zoneId);
-    return { amount: Math.max(pr.minFare, zoneFare(a.zoneId, b.zoneId)), same:same, known: Boolean(a.zoneId && b.zoneId) };
+    return { amount: pr.minFare, same:true, known:false };
   }
-  /* نفس حساب السيرفر: سعر المنطقة لو متحدد، وإلا السعر العام */
-  function zoneFare(a, b){
-    var c = state.cfg, same = Boolean(a && b && a === b);
-    var za = TT.byId(state.zones, a), zb = TT.byId(state.zones, b);
-    if(same) return za && +za.same > 0 ? +za.same : c.same;
-    var x = Math.max(+(za && za.cross) || 0, +(zb && zb.cross) || 0);
-    return x > 0 ? x : c.cross;
+  /* أجرة تقديرية لمشوار محفوظ (نفس التسعير الموحّد) */
+  function quickFare(a, b){
+    var pr = PRc(), ok = function(p){ return p && p.lat != null && p.lng != null && isFinite(+p.lat) && isFinite(+p.lng); };
+    if(!ok(a) || !ok(b)) return pr.minFare;
+    var km = Math.round(TT.dist({ lat:+a.lat, lng:+a.lng }, { lat:+b.lat, lng:+b.lng }) * 1.3 * 10) / 10;
+    return Math.max(pr.minFare, up5(km * pr.perKm));
   }
 
   /* ---------- الخريطة ---------- */
@@ -721,7 +718,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     }).join("") + '</div>' : "";
     q.innerHTML = chips + (list.length ? '<div class="lbl" style="font-size:11.5px;font-weight:600;color:var(--muted)">مشاويرك — دوسة واحدة</div>' : "") + list.map(function(r, i){
       var same = r.from.zoneId && r.from.zoneId === r.to.zoneId;
-      return '<button data-quick="'+i+'"><span>'+TT.esc(r.from.label)+' ← '+TT.esc(r.to.label)+'</span><b>'+zoneFare(r.from.zoneId, r.to.zoneId)+' ج</b></button>';
+      return '<button data-quick="'+i+'"><span>'+TT.esc(r.from.label)+' ← '+TT.esc(r.to.label)+'</span><b>'+quickFare(r.from, r.to)+' ج</b></button>';
     }).join("");
   }
 
@@ -1459,8 +1456,6 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     state.zones = s.zones; state.places = s.places; state.cfg = s.cfg;
     renderSug();
     if(s.cfg.adminPhone){ $("qPhone").hidden = false; $("qPhone").href = "tel:" + s.cfg.adminPhone; }
-    var fs = [s.cfg.same, s.cfg.cross]; s.zones.forEach(function(z){ if(+z.same > 0) fs.push(+z.same); if(+z.cross > 0) fs.push(+z.cross); });
-    var lo = Math.min.apply(null, fs), hi = Math.max.apply(null, fs);
     $("fixedFare").textContent = (+s.cfg.perKm > 0 ? +s.cfg.perKm : 8) + " ج للكيلو · أقل مشوار " + (+s.cfg.minFare > 0 ? +s.cfg.minFare : 10) + " ج";
     var placed = state.places.filter(function(p){ return p.lat != null; });
     if(placed.length) map.fitBounds(L.latLngBounds(placed.map(function(p){ return [p.lat,p.lng]; })), { padding:[50,50], maxZoom:16 });
