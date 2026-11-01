@@ -137,6 +137,12 @@
           cutKm: cfgDoc && +cfgDoc.cutKm > 0 ? +cfgDoc.cutKm : 2,
           outKm: cfgDoc && +cfgDoc.outKm > 0 ? +cfgDoc.outKm : 1.5,
           outPerKm: cfgDoc && +cfgDoc.outPerKm > 0 ? +cfgDoc.outPerKm : 7.5,
+          /* التسعير الموحّد + انتظار المشوار المتعدد */
+          perKm: cfgDoc && cfgDoc.perKm != null && cfgDoc.perKm !== "" ? +cfgDoc.perKm : 8,
+          minFare: cfgDoc && cfgDoc.minFare != null && cfgDoc.minFare !== "" ? +cfgDoc.minFare : 10,
+          freeMin: cfgDoc && cfgDoc.freeMin != null && cfgDoc.freeMin !== "" ? +cfgDoc.freeMin : 3,
+          waitPerMin: cfgDoc && cfgDoc.waitPerMin != null && cfgDoc.waitPerMin !== "" ? +cfgDoc.waitPerMin : 1,
+          maxWaitMin: cfgDoc && cfgDoc.maxWaitMin != null && cfgDoc.maxWaitMin !== "" ? +cfgDoc.maxWaitMin : 15,
           sub: cfgDoc && cfgDoc.sub != null ? cfgDoc.sub : 200,
           freeUntil: (cfgDoc && cfgDoc.freeUntil) || "",
           paidFrom: (cfgDoc && cfgDoc.paidFrom) || "",
@@ -303,6 +309,8 @@
     /* الوصول «ورد وجرس»: جرسين ناعمين + لمعة */
     done:     [[1047, 0, .6, "sine", .16], [2093, 0, .25, "sine", .03], [1319, .2, .6, "sine", .15], [1568, .4, .9, "sine", .15], [3136, .55, .5, "triangle", .03]],
     msg:      [[988, 0, .08], [1319, .09, .12]],
+    /* جرس الانتظار: آخر دقيقة مجانية / قرب أقصى وقفة */
+    waitBell: [[1568, 0, .55, "sine", .2], [3136, 0, .3, "sine", .04], [1568, .65, .55, "sine", .2], [3136, .65, .3, "sine", .04]],
     error:    [[330, 0, .16, "square", .12], [247, .16, .26, "square", .12]],
     cancel:   [[659, 0, .16, "sine", .16], [523, .15, .16, "sine", .16], [415, .3, .5, "sine", .18]],
     /* نغمة الدخول «نطّة الدبوس»: الضربة التقيلة على ٠٫٥ ثانية = لحظة نزول اللوجو على الأرض */
