@@ -124,6 +124,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
 .quick button{display:flex;align-items:center;gap:10px;text-align:start;background:var(--surface-2);border:1px solid var(--line);border-radius:var(--r-sm);padding:9px 12px;font-family:var(--body);font-size:14px;color:var(--ink);cursor:pointer}
 .quick button b{margin-inline-start:auto;color:var(--fare);white-space:nowrap}
 .linkbtn{background:none;border:0;color:var(--crit);font-family:var(--body);font-size:13px;font-weight:600;cursor:pointer;padding:6px;display:block;margin:8px auto 0}
+@keyframes mhWaitPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.03)}}
 </style>
 </head>
 <body>
@@ -163,6 +164,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="2.4" fill="currentColor" stroke="none"/></svg>
       <span id="gpsTxt">اركب من موقعي دلوقتي (GPS)</span>
     </button>
+    <button type="button" id="multiPick" class="btn btn-wide" hidden style="display:flex;align-items:center;justify-content:center;gap:8px;min-height:52px;margin:6px 0 4px;background:var(--fare-soft);color:var(--fare);border:1.5px solid var(--fare);font-weight:700">🛺 مشوار متعدد — هقول للسواق على الأماكن</button>
     <div class="quick" id="quick" hidden></div>
     <div id="listMode">
       <div class="field" style="margin:8px 0 6px;position:relative">
@@ -181,7 +183,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
         <div class="zn" id="pickZn"></div>
       </div>
     </div>
-    <div id="pickFare" style="display:none;align-items:center;gap:10px;margin:4px 0 2px;padding:10px 12px;border-radius:var(--r);background:var(--fare-soft);color:var(--fare)"><b id="pickFareAmt" style="font:800 26px var(--display,inherit);white-space:nowrap"></b><span style="font-size:12.5px;line-height:1.45"><b>جنيهاً تقريباً</b> — خارج كفر صقر<br><span id="pickFareKm"></span></span></div>
+    <div id="pickFare" style="display:none;align-items:center;gap:10px;margin:4px 0 2px;padding:10px 12px;border-radius:var(--r);background:var(--fare-soft);color:var(--fare)"><b id="pickFareAmt" style="font:800 26px var(--display,inherit);white-space:nowrap"></b><span style="font-size:12.5px;line-height:1.45"><b>جنيهاً تقريباً</b><br><span id="pickFareKm"></span></span></div>
     <button class="btn btn-primary btn-wide mh-shine" id="confirmPick" style="margin-top:6px">تأكيد مكان الركوب</button>
     <button type="button" id="toListMode" class="btn btn-ghost btn-wide" style="margin-top:8px">ارجع للقايمة</button>
     </div>
@@ -286,6 +288,20 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
         <button class="btn btn-sm btn-primary" id="lateRebook" type="button" style="flex:1">سواق تاني</button>
         <button class="btn btn-sm btn-ghost" id="lateCancel" type="button" style="flex:1;background:var(--surface)">الغي الطلب</button>
       </div>
+    </div>
+    <div id="meterBox" hidden style="margin-top:10px;flex-direction:column;gap:10px">
+      <div id="mWeak" hidden style="background:var(--warn-soft);border:1px solid var(--warn);border-radius:var(--r);padding:10px 12px;font-size:13px">📡 الإشارة ضعيفة — المسافة بتتحسب تقديري على أقرب طريق</div>
+      <div style="background:var(--ground);border:1px solid var(--line);border-radius:14px;padding:12px 14px;display:flex;flex-direction:column;gap:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:8px"><b style="font-size:13px;color:var(--ink-2)">التكلفة لحد دلوقتي</b><b id="mTotal" class="num" style="font:800 26px var(--display);color:var(--fare);white-space:nowrap">0 ج</b></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;gap:8px"><span class="hint" id="mKm">المشاوير · 0 كم</span><b id="mDist">0 ج</b></div>
+        <div style="display:flex;justify-content:space-between;font-size:13px;gap:8px"><span class="hint" id="mPaidL">الانتظار المدفوع</span><b id="mPaid">0 ج</b></div>
+      </div>
+      <div id="mWait" hidden style="border-radius:16px;padding:14px;flex-direction:column;align-items:center;gap:4px;text-align:center;border:2px solid var(--accent-ink);background:var(--accent-soft)">
+        <b id="mWaitT" style="font-size:13px">معاك ٣ دقايق انتظار مجانية</b>
+        <b id="mWaitC" class="num" style="font:800 54px/1 var(--display);direction:ltr">3:00</b>
+        <span id="mWaitS" class="hint" style="font-size:12.5px"></span>
+      </div>
+      <div class="hint" id="mRule" style="font-size:11.5px;text-align:center"></div>
     </div>
     <div id="arrBox" class="banner b-note" hidden style="margin-top:10px;align-items:center;gap:10px;background:var(--accent);color:#fff;border:0">
       <span style="flex:1"><b style="font-size:16px">السائق وصل ✓</b><br><span id="arrTxt" style="opacity:.92">مستنّيك — عندك ٣ دقايق</span><br><b id="arrFare" style="font-size:14px"></b></span>
@@ -446,22 +462,21 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     };
   }
   /* نفس حساب السيرفر: بالمسافة (خط مستقيم × ١٫٣) لحد cutKm = قصير، أكتر = طويل. ولو مفيش إحداثيات نرجع للمناطق */
+  /* التسعير الموحّد (نفس السيرفر): الكيلو بـ ٨ ج جوه وبرّه كفر صقر، أقل مشوار ١٠ ج، ومقرّب لأعلى ٥ ج */
+  function PRc(){ var c = state.cfg || {}, n = function(v, d){ return (v === undefined || v === null || v === "" || !isFinite(+v) || +v < 0) ? d : +v; };
+    return { perKm: n(c.perKm, 8) || 8, minFare: n(c.minFare, 10), freeMin: n(c.freeMin, 3), waitPerMin: n(c.waitPerMin, 1), maxWaitMin: n(c.maxWaitMin, 15) || 15 }; }
+  function up5(x){ return Math.ceil((x - 1e-9) / 5) * 5; }
   function fareOf(){
-    var c = state.cfg, a = trip.from, b = trip.to;
-    if(!a || !b) return { amount:c.same, same:true, known:false };
+    var c = state.cfg, a = trip.from, b = trip.to, pr = PRc();
+    if(b && b.multi) return { amount: pr.perKm, multi:true, known:true, pr:pr };
+    if(!a || !b) return { amount:pr.minFare, same:true, known:false };
     var xy = function(p){ return p.lat != null && p.lng != null && isFinite(+p.lat) && isFinite(+p.lng); };
     if(xy(a) && xy(b)){
-      var km = Math.round(TT.dist({ lat:+a.lat, lng:+a.lng }, { lat:+b.lat, lng:+b.lng }) * 1.3 * 10) / 10;
-      var short = km <= (+c.cutKm > 0 ? +c.cutKm : 2);
-      /* نفس السيرفر: لو طرف أبعد من ١٫٥ كم عن أقرب مكان معروف ← خارج كفر صقر، ٧٫٥ ج/كم ومقرّبة لفوق لأقرب ٥ */
-      var outM = (+c.outKm > 0 ? +c.outKm : 1.5), perKm = (+c.outPerKm > 0 ? +c.outPerKm : 7.5);
-      var known = (state.places || []).filter(function(p){ return p.lat != null && p.lng != null; });
-      var far = function(p){ var m = Infinity; known.forEach(function(q){ m = Math.min(m, TT.dist({ lat:+p.lat, lng:+p.lng }, { lat:+q.lat, lng:+q.lng })); }); return m > outM; };
-      if(known.length && (far(a) || far(b))) return { amount: Math.max(+c.cross || 0, Math.ceil((km * perKm - 1e-9) / 5) * 5), same:false, known:true, km:km, outside:true, perKm:perKm };
-      return { amount: short ? c.same : c.cross, same:short, known:true, km:km };
+      var km = b.roadKm != null && b.roadFrom === (a.lat + "," + a.lng) ? b.roadKm : Math.round(TT.dist({ lat:+a.lat, lng:+a.lng }, { lat:+b.lat, lng:+b.lng }) * 1.3 * 10) / 10;
+      return { amount: Math.max(pr.minFare, up5(km * pr.perKm)), same: km <= 2, known:true, km:km, perKm:pr.perKm, pr:pr };
     }
     var same = Boolean(a.zoneId && b.zoneId && a.zoneId === b.zoneId);
-    return { amount: zoneFare(a.zoneId, b.zoneId), same:same, known: Boolean(a.zoneId && b.zoneId) };
+    return { amount: Math.max(pr.minFare, zoneFare(a.zoneId, b.zoneId)), same:same, known: Boolean(a.zoneId && b.zoneId) };
   }
   /* نفس حساب السيرفر: سعر المنطقة لو متحدد، وإلا السعر العام */
   function zoneFare(a, b){
@@ -512,6 +527,52 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
   }
   ["rName","rPhone","when"].forEach(function(id){ var e = document.getElementById(id); if(e){ e.addEventListener("input", updMore); e.addEventListener("change", updMore); } });
   document.addEventListener("click", function(e){ if(e.target.closest && e.target.closest("[data-who]")) setTimeout(updMore, 0); });
+  /* عدّاد المشوار المتعدد عند الراكب: التكلفة لايف + عدّاد الانتظار (٣ دقايق مجانية تنازلي، يحمر آخر دقيقة مع جرس وتنبيه) */
+  var MT = { j:null, off:0, rang:{}, warned:{}, iv:null };
+  function mmss(x){ x = Math.max(0, Math.floor(x)); return Math.floor(x / 60) + ":" + String(x % 60).padStart(2, "0"); }
+  function meterSet(j){
+    var on = Boolean(j && j.multi && j.meter);
+    $("meterBox").hidden = !on; $("meterBox").style.display = on ? "flex" : "none";
+    if(!on){ MT.j = null; if(MT.iv){ clearInterval(MT.iv); MT.iv = null; } return; }
+    MT.j = j.meter; MT.off = j.meter.now - Date.now();
+    if(!MT.iv) MT.iv = setInterval(meterPaint, 1000);
+    meterPaint();
+  }
+  function meterPaint(){
+    var m = MT.j; if(!m) return;
+    var now = Date.now() + MT.off, free = m.freeMin * 60, max = m.maxWaitMin * 60;
+    var paidAt = function(el){ return Math.floor(Math.max(0, Math.min(el, max) - free) / 60); };
+    var paid = m.paidMin;
+    if(m.waitOn){ paid = m.paidMin - paidAt((m.now - m.waitOn.s) / 1000) + paidAt((now - m.waitOn.s) / 1000); }
+    var total = Math.round((m.distCost + paid * m.waitPerMin) * 10) / 10;
+    $("mTotal").textContent = total + " ج"; $("mKm").textContent = "المشاوير · " + m.km + " كم × " + m.perKm + " ج"; $("mDist").textContent = m.distCost + " ج";
+    $("mPaidL").textContent = "الانتظار المدفوع · " + paid + " دقيقة"; $("mPaid").textContent = (paid * m.waitPerMin) + " ج";
+    $("mWeak").hidden = !m.weak;
+    $("mRule").textContent = "أقل مشوار " + m.minFare + " ج · الإجمالي النهائي بيتقرّب لأعلى ٥ ج";
+    var w = $("mWait");
+    if(!m.waitOn){ w.hidden = true; w.style.display = "none"; return; }
+    w.hidden = false; w.style.display = "flex";
+    var el = (now - m.waitOn.s) / 1000, key = String(m.waitOn.s), rem = free - el;
+    var red = rem <= 60, c = red ? "var(--crit)" : "var(--accent-ink)";
+    w.style.borderColor = c; w.style.background = red ? "var(--crit-soft)" : "var(--accent-soft)";
+    $("mWaitT").style.color = c; $("mWaitC").style.color = c;
+    if(rem > 0){
+      $("mWaitT").textContent = "معاك " + m.freeMin + " دقايق انتظار مجانية";
+      $("mWaitC").textContent = mmss(rem);
+      $("mWaitS").textContent = red ? "آخر دقيقة مجانية — بعدها " + m.waitPerMin + " ج لكل دقيقة كاملة" : "السواق مستنيك";
+      w.style.animation = red ? "mhWaitPulse 1s ease-in-out infinite" : "none";
+      if(red && !MT.rang[key] && free >= 60){ MT.rang[key] = 1; TT.sound("waitBell"); if(navigator.vibrate) navigator.vibrate([200,100,200]);
+        TT.toast("🔔 فاضل دقيقة انتظار مجانية — بعدها كل دقيقة انتظار كاملة بـ " + m.waitPerMin + " ج"); }
+    } else {
+      var ex = Math.min(el, max) - free;
+      $("mWaitT").textContent = el >= max ? "خلص أقصى وقت انتظار (" + m.maxWaitMin + " دقيقة)" : "انتظار إضافي";
+      $("mWaitC").textContent = "+" + mmss(ex);
+      $("mWaitS").textContent = Math.floor(ex / 60) + " دقيقة كاملة = " + (Math.floor(ex / 60) * m.waitPerMin) + " ج · أقصى وقفة " + m.maxWaitMin + " دقيقة";
+      w.style.animation = "none";
+      if(el >= max - 180 && max > 240 && !MT.warned[key]){ MT.warned[key] = 1; TT.sound("waitBell"); if(navigator.vibrate) navigator.vibrate([200,100,200]);
+        TT.toast("⏳ فاضل ٣ دقايق على أقصى وقت انتظار — بعدها السواق يقدر ينهي الرحلة"); }
+    }
+  }
   function setStep(s){
     step = s;
     document.body.classList.toggle("mh-matched", s === "matched");
@@ -528,6 +589,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       $("confirmPick").textContent = (s === "from") ? "تأكيد مكان الركوب" : "تأكيد الوجهة";
       $("backPick").hidden = (s === "from");
       $("gpsPick").hidden = (s !== "from");
+      $("multiPick").hidden = (s !== "to"); $("multiPick").style.display = (s === "to") ? "flex" : "none";
       $("pinBody").setAttribute("fill", (s === "from") ? "#0E7566" : "#BC4E1E");
       /* مكان الركوب: من موقعي (GPS) بس دلوقتي. القايمة والخريطة للوجهة بس */
       var gpsOnly = (s === "from");
@@ -552,8 +614,8 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     /* سعر تقريبي لايف وهو بيحرّك الخريطة على الوجهة — لو برّه كفر صقر */
     var pf = null;
     if(step === "to" && trip.from){ var keep = trip.to; trip.to = { lat:c.lat, lng:c.lng }; pf = fareOf(); trip.to = keep; }
-    $("pickFare").style.display = (pf && pf.outside) ? "flex" : "none";
-    if(pf && pf.outside){ $("pickFareAmt").textContent = pf.amount; $("pickFareKm").textContent = "حوالي " + pf.km + " كم × " + pf.perKm + " ج · مقرّبة لفوق لأقرب ٥ ج"; }
+    $("pickFare").style.display = (pf && pf.km != null) ? "flex" : "none";
+    if(pf && pf.km != null){ $("pickFareAmt").textContent = pf.amount; $("pickFareKm").textContent = "حوالي " + pf.km + " كم × " + pf.perKm + " ج · مقرّبة لأعلى ٥ ج"; }
     clearTimeout(revT);
     if(exact) return;
     revT = setTimeout(function(){
@@ -673,15 +735,21 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     $("cTo").textContent = trip.to.label;     $("cToZ").textContent = trip.to.zone;
     $("fareAmt").textContent = f.amount;
     $("fareBox").classList.toggle("nofare", !f.known);
-    $("fareCap").innerHTML = !f.known
+    var pr = PRc();
+    $("fareCap").innerHTML = f.multi
+      ? '<b>جنيه للكيلو</b> — مشوار متعدد بالعدّاد. قول للسواق على الأماكن.<br>أقل مشوار ' + pr.minFare + ' ج · الانتظار: ' + pr.freeMin + ' دقايق ببلاش في كل وقفة، وبعدها ' + pr.waitPerMin + ' ج لكل دقيقة كاملة · أقصى وقفة ' + pr.maxWaitMin + ' دقيقة.<br>الإجمالي بيتقرّب لأعلى ٥ ج، ويُدفع نقداً في الآخر.'
+      : !f.known
       ? '<b>جنيهاً</b> — تقديري، هيتأكد لما السائق يقبل.'
-      : f.outside
-        ? '<b>جنيهاً تقريباً</b> — مشوار خارج كفر صقر: حوالي ' + f.km + ' كم × ' + f.perKm + ' ج، مقرّبة لفوق لأقرب ٥ ج.<br>يُدفع نقداً عند الوصول.'
       : f.km != null
-        ? '<b>جنيهاً</b> — ' + (f.same ? 'مشوار قصير' : 'مشوار طويل') + ' (حوالي ' + f.km + ' كم)، سعر ثابت بلا مفاصلة.<br>يُدفع نقداً عند الوصول.'
-        : f.same
-        ? '<b>جنيهاً</b> — داخل ' + TT.esc(trip.from.zone) + '، سعر ثابت بلا مفاصلة.<br>يُدفع نقداً عند الوصول.'
-        : '<b>جنيهاً</b> — من ' + TT.esc(trip.from.zone) + ' إلى ' + TT.esc(trip.to.zone) + '.<br>سعر ثابت، يُدفع نقداً عند الوصول.';
+        ? '<b>جنيهاً</b> — حوالي ' + f.km + ' كم × ' + f.perKm + ' ج، مقرّبة لأعلى ٥ ج (أقل مشوار ' + pr.minFare + ' ج). سعر ثابت بلا مفاصلة.<br>يُدفع نقداً عند الوصول.'
+        : '<b>جنيهاً</b> — سعر ثابت بلا مفاصلة.<br>يُدفع نقداً عند الوصول.';
+    /* المسافة على أقرب طريق على الخريطة (نفس حساب السيرفر) */
+    var A = trip.from, B = trip.to, key = A && A.lat + "," + A.lng;
+    if(!f.multi && f.km != null && B && B.roadFrom !== key){
+      fetch("https://router.project-osrm.org/route/v1/driving/" + A.lng + "," + A.lat + ";" + B.lng + "," + B.lat + "?overview=false")
+        .then(function(r){ return r.json(); }).then(function(j){ var m = j && j.routes && j.routes[0] && j.routes[0].distance;
+          if(m > 0 && trip.to === B){ B.roadKm = Math.round(m / 100) / 10; B.roadFrom = key; if(step === "confirm") renderConfirm(); } }).catch(function(){});
+    }
   }
 
   /* ---------- متابعة الطلب ---------- */
@@ -799,7 +867,10 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
           if(j.arrivedAt && !j.startedAt && $("dEta")) $("dEta").textContent = "";
           $("mTitle").textContent = j.startedAt ? "في الطريق للوجهة 🛺" : j.arrivedAt ? "السائق وصل ✓ انزل له" : "سائق جاي ليك ✓";
           $("mHint").textContent = j.startedAt ? "استمتع بالمشوار،" : j.arrivedAt ? "السائق مستنّيك تحت،" : "استنّى في مكانك،";
-          if($("arrFare")) $("arrFare").textContent = "ادفع للسائق " + j.fare + " ج نقداً" + (j.outside ? " (خارج كفر صقر)" : "");
+          if($("arrFare")) $("arrFare").textContent = j.multi ? "مشوار متعدد بالعدّاد — الحساب في آخر الرحلة" : "ادفع للسائق " + j.fare + " ج نقداً";
+          if(j.multi){ $("dFare").textContent = "بالعدّاد"; $("dFare2").textContent = "عدّاد"; if($("aFare")) $("aFare").textContent = "مشوار متعدد بالعدّاد — الحساب في آخر الرحلة"; }
+          if(j.multi && j.startedAt) $("mTitle").textContent = "مشوار متعدد · العدّاد شغّال 🛺";
+          meterSet(j);
           if(arrAt && arrSeen !== j.id){ arrSeen = j.id; arrivedAlert(j); }
           arrPaint();
         } else if(j.status === "done"){
@@ -814,6 +885,9 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
           var rz = $("endRose"); rz.hidden = false; rz.style.animation = "none"; void rz.offsetWidth; rz.style.animation = "";
           $("endMsg").textContent = "وصلت بالسلامة. شكراً إنك اخترت المحطة.";
           $("endPay").hidden = !j.fare; $("endAmt").textContent = j.fare; $("endPayNote").textContent = j.outside ? "مشوار خارج كفر صقر · حوالي " + j.distKm + " كم × " + (j.perKm || 7.5) + " ج" : "السعر الثابت للمشوار";
+          if(j.bill){ var bl = j.bill, mm = function(x){ x = Math.round(x); return Math.floor(x / 60) + ":" + String(x % 60).padStart(2, "0"); };
+            $("endPayNote").innerHTML = "المشاوير " + bl.km + " كم × " + bl.perKm + " ج = " + bl.distCost + " ج<br>الانتظار " + mm(bl.waitSec) + " في " + bl.stops + " وقفة — منها <b style=\"color:var(--accent-ink)\">" + mm(bl.freeSec) + " مجانية</b><br>انتظار مدفوع " + bl.paidMin + " دقيقة = " + bl.waitCost + " ج<br>المجموع " + bl.sum + " ج ← مقرّب لأعلى ٥ ج = " + bl.final + " ج"; }
+          meterSet(null);
           rateFor = reportFor; stars = 0; paintStars();
           if(rateFor && j.canRate){
             var dn = (live && live.driver && live.driver.name) || $("dName").textContent || "السائق";
@@ -1096,6 +1170,10 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     setStep(w);
   });
 
+  $("multiPick").addEventListener("click", function(){
+    trip.to = { label:"مشوار متعدد — هتقول للسواق", zone:"بالعدّاد", lat:null, lng:null, zoneId:"", multi:true };
+    setStep("confirm");
+  });
   $("when").addEventListener("change", function(){ $("whenHint").hidden = !this.value; $("sendReq").textContent = this.value ? "احجز التوكتوك" : "اطلب التوكتوك"; });
 
   $("sendReq").addEventListener("click", function(){
@@ -1113,7 +1191,8 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       forOther: forOther, bookerPhone: forOther ? (me.phone || "") : "",
       scheduledAt: whenV, ref: forOther ? "" : ref,
       from:{ lat:trip.from.lat, lng:trip.from.lng, label:trip.from.label },
-      to:{ lat:trip.to.lat, lng:trip.to.lng, label:trip.to.label }
+      multi: Boolean(trip.to.multi),
+      to: trip.to.multi ? null : { lat:trip.to.lat, lng:trip.to.lng, label:trip.to.label }
     }}).then(function(r){
       if(!forOther){ setJSON(ME, { name:name, phone:phone }); try{ localStorage.removeItem(REF); }catch(e){} }
       rememberRoute();
@@ -1382,7 +1461,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     if(s.cfg.adminPhone){ $("qPhone").hidden = false; $("qPhone").href = "tel:" + s.cfg.adminPhone; }
     var fs = [s.cfg.same, s.cfg.cross]; s.zones.forEach(function(z){ if(+z.same > 0) fs.push(+z.same); if(+z.cross > 0) fs.push(+z.cross); });
     var lo = Math.min.apply(null, fs), hi = Math.max.apply(null, fs);
-    $("fixedFare").textContent = (lo === hi ? lo : lo + "–" + hi) + " ج ثابت";
+    $("fixedFare").textContent = (+s.cfg.perKm > 0 ? +s.cfg.perKm : 8) + " ج للكيلو · أقل مشوار " + (+s.cfg.minFare > 0 ? +s.cfg.minFare : 10) + " ج";
     var placed = state.places.filter(function(p){ return p.lat != null; });
     if(placed.length) map.fitBounds(L.latLngBounds(placed.map(function(p){ return [p.lat,p.lng]; })), { padding:[50,50], maxZoom:16 });
     if(live && live.id) startTracking(); else { setStep("from"); autoLocate(); }

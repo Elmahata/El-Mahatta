@@ -198,6 +198,20 @@
             <button class="btn btn-primary" id="rStart">ابدأ الرحلة</button>
           </div>
         </div>
+        <div id="dMeter" hidden style="margin-top:10px;flex-direction:column;gap:10px">
+          <div style="background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:8px">
+            <div class="hint" style="font-weight:700">العدّاد · مشوار متعدد</div>
+            <div style="display:flex;align-items:baseline;justify-content:space-between;gap:8px"><b id="dmTotal" class="num" style="font:800 38px/1 var(--display);color:var(--fare);white-space:nowrap">0 ج</b><b id="dmKm" class="num" style="font:700 18px var(--display);white-space:nowrap">0 كم</b></div>
+            <div style="display:flex;justify-content:space-between;font-size:13px"><span class="hint" id="dmPaidL">انتظار مدفوع</span><b id="dmPaid">0 ج</b></div>
+          </div>
+          <div id="dmWeak" hidden style="background:var(--warn-soft);border:1px solid var(--warn);border-radius:12px;padding:8px 12px;font-size:12.5px;text-align:center">📡 الإشارة ضعيفة — الحساب تقديري على أقرب طريق</div>
+          <div id="dmWait" hidden style="border-radius:14px;padding:10px 14px;align-items:center;justify-content:space-between;gap:8px;border:1.5px solid var(--accent-ink);background:var(--accent-soft)">
+            <b id="dmWaitT" style="font-size:13px">انتظار مجاني</b><b id="dmWaitC" class="num" style="font:800 26px var(--display);direction:ltr">3:00</b>
+          </div>
+          <div id="dmStay" hidden style="background:var(--warn-soft);border:1.5px solid var(--warn);border-radius:12px;padding:10px 12px;font-size:13.5px;font-weight:700;text-align:center;line-height:1.5">⚠ متتحركش أكتر من ٥٠ م من مكان الوقفة — لو اتحركت الانتظار هيفصل لوحده</div>
+          <div class="hint" id="dmHint" style="font-size:12.5px;text-align:center">دوس «انتظار» بس وإنت واقف</div>
+          <button class="btn btn-wide" id="dmWaitBtn" type="button" style="font-size:17px;padding:14px;background:var(--warn-soft);color:var(--warn);border:2px solid var(--warn);font-weight:800">⏸ انتظار</button>
+        </div>
         <button class="btn btn-primary btn-wide" id="rDone" style="margin-top:10px;font-size:16px;padding:13px" hidden>وصلنا — تمّت الرحلة</button>
         <button class="btn btn-ghost btn-wide" id="rRelease" style="margin-top:8px">سيب المشوار لسائق تاني</button>
       </div>
@@ -408,8 +422,8 @@
       var when = j.scheduledAt ? new Date(j.scheduledAt).toLocaleTimeString("ar-EG", { hour:"numeric", minute:"2-digit" }) : "";
       return '<div class="job' + (prevSeen[j.id] ? '' : ' is-new') + (idx === nearIdx ? ' is-near' : '') + '" style="--i:' + idx + '">'
         + (idx === nearIdx ? '<span class="job-near">الأقرب ليك</span>' : '')
-        + '<div class="head"><span class="price">' + j.fare + '<small> ج</small></span>'
-        + (j.outside ? '<span class="chip c-warn">خارج كفر صقر · حوالي ' + j.distKm + ' كم × ' + (j.perKm || 7.5) + ' ج</span>' : '<span class="chip c-neutral">' + (j.sameZone ? "أقل من ٢ كم" : "أكتر من ٢ كم") + '</span>')
+        + '<div class="head"><span class="price">' + (j.multi ? 'عدّاد' : j.fare + '<small> ج</small>') + '</span>'
+        + (j.multi ? '<span class="chip c-warn">مشوار متعدد · بالعدّاد ' + (j.perKm || 8) + ' ج/كم</span>' : '<span class="chip c-neutral">' + (j.distKm != null ? 'حوالي ' + j.distKm + ' كم × ' + (j.perKm || 8) + ' ج' : (j.sameZone ? "مشوار قصير" : "مشوار طويل")) + '</span>')
         + (j.distM != null ? '<span class="chip c-accent num">' + (j.distM < 1000 ? j.distM + ' م منك' : (j.distM/1000).toFixed(1) + ' كم منك') + '</span>' : '')
         + (when ? '<span class="chip c-warn">محجوز ' + when + '</span>' : '')
         + (j.urgent && !j.offered ? '<span class="chip c-warn num">مستني من ' + j.waitMin + ' دقايق</span>' : '')
@@ -479,6 +493,7 @@
       var rideHd = idleHd, sentH = null;
       watchId = navigator.geolocation.watchPosition(function(p){
         var ll = [p.coords.latitude, p.coords.longitude], me = { lat:ll[0], lng:ll[1] }, hd = rideHd(p);
+        window.__mhLastLoc = me; if(DM.m && DM.m.waitOn) dmPaint();
         if(!meDot) meDot = L.marker(ll, { icon:TT.driverIcon(hd, window.__mhTier), interactive:false, zIndexOffset:1000 }).addTo(rMap);
         else { meDot.setLatLng(ll); TT.rotTo(meDot.getElement && meDot.getElement() && meDot.getElement().querySelector(".tk"), hd); }
         /* بيبعت مكانك للراكب كل ٥ ثواني — وانت في مشوار بس */
@@ -493,6 +508,81 @@
     }
   }
 
+  /* عدّاد المشوار المتعدد عند السائق */
+  var DM = { m:null, off:0, rid:null, iv:null };
+  function dmSet(r){
+    var on = Boolean(r && r.multi && r.startedAt && r.meterV);
+    $("dMeter").hidden = !on; $("dMeter").style.display = on ? "flex" : "none";
+    if(!on){ DM.m = null; if(DM.iv){ clearInterval(DM.iv); DM.iv = null; } return; }
+    DM.m = r.meterV; DM.off = r.meterV.now - Date.now(); DM.rid = r.id;
+    if(!DM.iv) DM.iv = setInterval(dmPaint, 1000);
+    dmPaint();
+  }
+  function dmPaint(){
+    var m = DM.m; if(!m) return;
+    var now = Date.now() + DM.off, free = m.freeMin * 60, max = m.maxWaitMin * 60, f2 = function(x){ x = Math.max(0, Math.floor(x)); return Math.floor(x / 60) + ":" + String(x % 60).padStart(2, "0"); };
+    var paidAt = function(el){ return Math.floor(Math.max(0, Math.min(el, max) - free) / 60); };
+    var paid = m.waitOn ? m.paidMin - paidAt((m.now - m.waitOn.s) / 1000) + paidAt((now - m.waitOn.s) / 1000) : m.paidMin;
+    $("dmTotal").textContent = (Math.round((m.distCost + paid * m.waitPerMin) * 10) / 10) + " ج"; $("dmKm").textContent = m.km + " كم";
+    $("dmPaidL").textContent = "انتظار مدفوع · " + paid + " دقيقة"; $("dmPaid").textContent = (paid * m.waitPerMin) + " ج";
+    $("dmWeak").hidden = !m.weak;
+    var w = $("dmWait"), b = $("dmWaitBtn");
+    /* الانتظار فصل من غير ما السواق يدوس «كمّل» = التوكتوك اتحرك أكتر من ٥٠ م */
+    var was = DM.on; DM.on = Boolean(m.waitOn);
+    if(was && !DM.on && !DM.manual){ TT.sound("error"); try{ navigator.vibrate && navigator.vibrate([300,100,300]); }catch(e){} TT.toast("الانتظار فصل — التوكتوك اتحرك أكتر من ٥٠ م من مكان الوقفة"); }
+    if(!DM.on) DM.manual = false;
+    if(m.waitOn){
+      var el = (now - m.waitOn.s) / 1000, rem = free - el, red = rem <= 60, c = red ? "var(--crit)" : "var(--accent-ink)";
+      w.hidden = false; w.style.display = "flex"; w.style.borderColor = c; w.style.background = red ? "var(--crit-soft)" : "var(--accent-soft)";
+      $("dmWaitT").style.color = c; $("dmWaitC").style.color = c;
+      $("dmWaitT").textContent = rem > 0 ? "انتظار مجاني" : (el >= max ? "خلص أقصى انتظار — تقدر تنهي الرحلة" : "انتظار إضافي");
+      $("dmWaitC").textContent = rem > 0 ? f2(rem) : "+" + f2(Math.min(el, max) - free);
+      $("dmHint").textContent = "";
+      var st = $("dmStay"); st.hidden = false;
+      /* بعدك عن مكان الوقفة لايف: من ٣٥ م التنبيه بيحمر ويرن مرة */
+      var me = window.__mhLastLoc, d = (me && m.waitOn.lat != null) ? Math.round(TT.dist({ lat:m.waitOn.lat, lng:m.waitOn.lng }, me) * 1000) : null;
+      if(d != null && d >= 35){
+        st.style.background = "var(--crit-soft)"; st.style.borderColor = "var(--crit)";
+        st.textContent = "⚠ إنت بعدت " + d + " م عن مكان الوقفة — ارجع، عند ٥٠ م الانتظار هيفصل";
+        if(DM.warnS !== m.waitOn.s){ DM.warnS = m.waitOn.s; TT.sound("error"); try{ navigator.vibrate && navigator.vibrate([300,100,300]); }catch(e){} }
+      } else {
+        st.style.background = "var(--warn-soft)"; st.style.borderColor = "var(--warn)";
+        st.textContent = "⚠ متتحركش أكتر من ٥٠ م من مكان الوقفة — لو اتحركت الانتظار هيفصل لوحده" + (d != null ? " · إنت على بعد " + d + " م" : "");
+        if(d != null && d < 20) DM.warnS = null;
+      }
+      b.textContent = "▶ كمّل المشوار"; b.style.background = "var(--accent)"; b.style.color = "var(--ground)"; b.style.borderColor = "var(--accent)"; b.setAttribute("data-on", "");
+    } else {
+      w.hidden = true; w.style.display = "none"; $("dmStay").hidden = true;
+      $("dmHint").textContent = "دوس «انتظار» بس وإنت واقف · " + m.freeMin + " دقايق ببلاش وبعدها " + m.waitPerMin + " ج للدقيقة الكاملة";
+      b.textContent = "⏸ انتظار"; b.style.background = "var(--warn-soft)"; b.style.color = "var(--warn)"; b.style.borderColor = "var(--warn)"; b.setAttribute("data-on", "1");
+    }
+  }
+  $("dmWaitBtn").addEventListener("click", function(){
+    var b = this; if(!DM.rid) return; var on = b.getAttribute("data-on") === "1"; b.disabled = true; DM.manual = !on;
+    call("wait", { method:"POST", body:{ requestId: DM.rid, on: on } })
+      .then(function(j){ if(j && j.meter){ DM.m = j.meter; DM.off = j.meter.now - Date.now(); dmPaint(); } TT.sound(on ? "tap" : "confirm"); })
+      .catch(function(e){ TT.toast(e.message || "خطأ"); })
+      .then(function(){ b.disabled = false; });
+  });
+  /* آخر الرحلة: الحساب بالتفصيل + كسبك النهارده */
+  function doneSheet(res){
+    var bl = res && res.bill, td = res && res.today; if(!bl && !td) return;
+    var f2 = function(x){ x = Math.round(x || 0); return Math.floor(x / 60) + ":" + String(x % 60).padStart(2, "0"); };
+    var row = function(a, b, c){ return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:13.5px' + (c ? ';color:' + c : '') + '"><span>' + a + '</span><b>' + b + '</b></div>'; };
+    var h = '<div style="font:800 18px var(--display)">الرحلة خلصت</div><b class="num" style="font:800 46px/1 var(--display);color:var(--fare)">' + res.fare + ' ج</b><div style="font-weight:700">اقبض من الراكب نقداً</div>';
+    if(bl) h += '<div style="background:var(--inset);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:6px;text-align:start">'
+      + row("المشاوير · " + bl.km + " كم", bl.distCost + " ج") + row("انتظار إجمالي · " + bl.stops + " وقفة", f2(bl.waitSec))
+      + row("منها مجاني", f2(bl.freeSec), "var(--accent-ink)") + row("مدفوع · " + bl.paidMin + " دقيقة", bl.waitCost + " ج")
+      + row("المجموع " + bl.sum + " ← مقرّب", bl.final + " ج", "var(--muted)") + '</div>';
+    if(td) h += '<div style="background:var(--accent-soft);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:5px;text-align:start"><b style="color:var(--accent-ink)">كسبك النهارده</b>'
+      + row(td.rides + " مشوار · " + td.km + " كم", td.fare + " ج") + row("انتظار مدفوع", td.paidMin + " دقيقة = " + td.waitCost + " ج") + '</div>';
+    h += '<button class="btn btn-primary btn-wide" type="button" data-close-done>تمام</button>';
+    var o = document.createElement("div");
+    o.style.cssText = "position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:grid;place-items:center;padding:16px";
+    o.innerHTML = '<div style="width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:10px;text-align:center">' + h + '</div>';
+    o.addEventListener("click", function(e){ if(e.target === o || e.target.closest("[data-close-done]")) o.remove(); });
+    document.body.appendChild(o);
+  }
   function renderRide(r){
     $("rideWrap").hidden = !r;
     $("feedWrap").hidden = Boolean(r);
@@ -502,7 +592,8 @@
     $("rNote").innerHTML = r.note ? '<span>📍</span><span><b>علامة من الراكب:</b> ' + TT.esc(r.note) + '</span>' : "";
     $("rFrom").textContent = r.from.label;
     $("rTo").textContent = r.to.label;
-    $("rFare").textContent = r.fare + " ج نقداً" + (r.discount ? " (بعد خصم دعوة " + r.discount + " ج — الإدارة هتدفعهولك)" : "");
+    $("rFare").textContent = r.multi ? "مشوار متعدد · بالعدّاد" : r.fare + " ج نقداً" + (r.discount ? " (بعد خصم دعوة " + r.discount + " ج — الإدارة هتدفعهولك)" : "");
+    dmSet(r);
     $("rRider").textContent = r.riderName;
     if(!chat || chatId !== r.id){ chatId = r.id; chat = TT.chat.mount({ rid: r.id, headers: function(){ return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId() }; }, msgBtn: $("rMsg"), callBtn: $("rNet") }); }
     $("rNavA").href = navUrl(r.from);
@@ -580,7 +671,7 @@
       window.__mhFinishing = true;
       var finFare = window.__mhRide && window.__mhRide.fare;
       call("finish", { method: "POST", body: { requestId: rid, status: rel ? "released" : "done" } })
-        .then(function(){ var fr = finFare; TT.sound(rel ? "cancel" : "done"); TT.toast(rel ? "رجع للسواقين" : "تمّت الرحلة ✓" + (fr ? " · استلم " + fr + " ج نقداً" : "")); })
+        .then(function(res){ if(!rel) doneSheet(res); var fr = (res && res.fare) || finFare; TT.sound(rel ? "cancel" : "done"); TT.toast(rel ? "رجع للسواقين" : "تمّت الرحلة ✓" + (fr ? " · استلم " + fr + " ج نقداً" : "")); })
         .catch(function(err){ TT.toast(err.message || "خطأ"); })
         .then(function(){ lastIds = ""; return tick(); })
         .then(function(){ d.disabled = false; }, function(){ d.disabled = false; });
@@ -618,8 +709,9 @@
     baJob = job.id; baLeft = BA_SECS;
     $("baFare").textContent = job.fare;
     $("baFrom").textContent = job.from.label; $("baTo").textContent = job.to.label;
-    $("baChip").textContent = (job.distM != null ? (job.distM < 1000 ? job.distM + " م منك · " : (job.distM/1000).toFixed(1) + " كم منك · ") : "") + (job.outside ? "خارج كفر صقر · حوالي " + job.distKm + " كم × " + (job.perKm || 7.5) + " ج · أجرة تقريبية" : job.sameZone ? "أقل من ٢ كم" : "أكتر من ٢ كم") + (job.scheduledAt ? " · محجوز" : "");
-        $("baChip").className = "chip " + (job.outside ? "c-warn" : "c-neutral");
+    $("baChip").textContent = (job.distM != null ? (job.distM < 1000 ? job.distM + " م منك · " : (job.distM/1000).toFixed(1) + " كم منك · ") : "") + (job.multi ? "مشوار متعدد · بالعدّاد " + (job.perKm || 8) + " ج/كم · الراكب هيقولك على الأماكن" : job.distKm != null ? "حوالي " + job.distKm + " كم × " + (job.perKm || 8) + " ج" : job.sameZone ? "مشوار قصير" : "مشوار طويل") + (job.scheduledAt ? " · محجوز" : "");
+        $("baChip").className = "chip " + (job.multi ? "c-warn" : "c-neutral");
+    if(job.multi) $("baFare").textContent = "عدّاد";
     $("baTake").setAttribute("data-take", job.id); $("baTake").disabled = false; $("baTake").textContent = job.source === "phone" ? "خد المشوار" : "وافق على المشوار";
     $("bigAlert").hidden = false; paintBig();
     /* بيقرا الطلب بصوت عالي بعد النغمة — للسواقين اللي مش بيقروا بسهولة */
