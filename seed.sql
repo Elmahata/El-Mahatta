@@ -1,12 +1,12 @@
 -- البيانات المبدئية: مناطق التشغيل ونقاط الركوب في مدينة كفر صقر
 -- الأسماء مأخوذة من عناوين حقيقية في دليل المدينة — عدّلها من التطبيق بعد المعاينة الميدانية
 
-DELETE FROM docs WHERE kind IN ('zones','places','config');
+-- آمن: بيضيف الناقص بس. لو المنطقة أو المكان أو الأسعار موجودين بالفعل، مابيتغيّروش ولا بيتمسحوا
 
-INSERT INTO docs (kind,id,data,updated) VALUES
+INSERT OR IGNORE INTO docs (kind,id,data,updated) VALUES
 ('config','pricing','{"same":10,"cross":15,"cutKm":2,"paidFrom":"","week":30,"month":100,"grace":3}',0);
 
-INSERT INTO docs (kind,id,data,updated) VALUES
+INSERT OR IGNORE INTO docs (kind,id,data,updated) VALUES
 ('zones','z0','{"id":"z0","name":"وسط البلد — التحرير","official":false,"order":0}',0),
 ('zones','z1','{"id":"z1","name":"الجلاء وعمر أفندي","official":false,"order":1}',0),
 ('zones','z2','{"id":"z2","name":"حي النصر","official":true,"order":2}',0),
@@ -15,7 +15,7 @@ INSERT INTO docs (kind,id,data,updated) VALUES
 ('zones','z5','{"id":"z5","name":"شارع البحر","official":false,"order":5}',0),
 ('zones','z6','{"id":"z6","name":"العرب والساحة","official":false,"order":6}',0);
 
-INSERT INTO docs (kind,id,data,updated) VALUES
+INSERT OR IGNORE INTO docs (kind,id,data,updated) VALUES
 ('places','p0','{"id":"p0","name":"شارع التحرير","zoneId":"z0","lat":null,"lng":null,"order":0}',0),
 ('places','p1','{"id":"p1","name":"بنك مصر","zoneId":"z0","lat":null,"lng":null,"order":1}',0),
 ('places','p2','{"id":"p2","name":"السنترال","zoneId":"z0","lat":null,"lng":null,"order":2}',0),

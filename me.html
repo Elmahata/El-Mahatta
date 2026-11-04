@@ -386,8 +386,10 @@
     var m = {}; try{ m = JSON.parse(localStorage.getItem("tt-me") || "{}"); }catch(e){}
     if(!confirm("متأكد إنك عايز تحذف حسابك؟ مايتعملهوش رجوع.")) return;
     b.disabled = true;
-    var go = m.phone ? TT.api("delete-account", { method:"POST", verify:{ phone:m.phone, role:"rider" }, body:{ phone:m.phone } }) : Promise.resolve();
-    go.then(function(){
+    var toks = getJSON(HIST, []).map(function(x){ return x.token; }).filter(Boolean).slice(0, 30);
+    var go = m.phone ? TT.api("delete-account", { method:"POST", retry:false, verify:{ phone:m.phone, role:"rider" }, body:{ phone:m.phone, name:m.name || "", rideTokens:toks } }) : Promise.resolve({});
+    go.then(function(res){
+      if(res && res.queued){ alert("وصل طلبك للإدارة ✓ — هيكلّموك على رقمك يتأكدوا، وبعدها يتحذف كل حاجة خلال ٧ أيام."); b.disabled = false; return; }
       try{ Object.keys(localStorage).forEach(function(k){ if(/^(tt-|mh-)/.test(k)) localStorage.removeItem(k); }); sessionStorage.clear(); }catch(e){}
       alert("اتحذف حسابك. شكراً إنك جرّبت المحطة.");
       location.href = "/";

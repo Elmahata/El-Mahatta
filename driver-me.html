@@ -102,6 +102,10 @@
       <p class="hint" style="margin:0">رايح ناحية منطقة (راجع البيت أو رايح تجيب حاجة)؟ اختارها، وهتشوف بس الطلبات اللي وجهتها هناك. مرتين في اليوم.</p>
       <div id="headList"></div>
     </section>
+    <div style="margin-top:28px;padding-top:16px;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:8px">
+      <button class="btn btn-ghost btn-wide" id="delAcct" type="button" style="color:var(--crit)">احذف حسابي</button>
+      <p class="hint" style="margin:0">بيتمسح حسابك من التطبيق. سجل رحلاتك وبيانات تسجيلك بيفضلوا في أرشيف الإدارة سنة (للأمان وتسجيل التكاتك) وبعدها بيتمسحوا. <a href="/privacy.html">التفاصيل</a></p>
+    </div>
   </div>
 </div>
 
@@ -114,6 +118,14 @@
   try{ auth = JSON.parse(localStorage.getItem("tt-driver") || "null"); }catch(e){}
   if(!auth || !auth.phone){ $("needLogin").hidden = false; return; }
   $("app").hidden = false; $("who").textContent = auth.name || "";
+  $("delAcct").addEventListener("click", function(){
+    if(!confirm("متأكد إنك عايز تحذف حسابك؟ مش هتقدر تدخل تاني غير بتسجيل جديد من الإدارة.")) return;
+    var b = this; b.disabled = true;
+    fetch("/api/driver/delete-account", { method:"POST", headers:{ "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId(), "content-type":"application/json" }, body:"{}" })
+      .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ if(!r.ok) throw new Error(j.error || "خطأ"); return j; }); })
+      .then(function(){ try{ Object.keys(localStorage).forEach(function(k){ if(/^(tt-|mh-)/.test(k)) localStorage.removeItem(k); }); }catch(e){} alert("اتحذف حسابك. شكراً إنك اشتغلت مع المحطة."); location.href = "/driver.html"; })
+      .catch(function(e){ b.disabled = false; TT.toast(e.message || "ماقدرناش نحذف — جرّب تاني"); });
+  });
 
   function call(path, opts){
     opts = opts || {};

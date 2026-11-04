@@ -81,7 +81,7 @@
       <p class="hint">اكتب رقم موبايلك والكود اللي أخدته من الإدارة. حسابك هيتربط بالموبايل ده — لو غيّرته، الإدارة لازم توافق.</p>
       <div style="margin-top:14px">
         <div class="field"><label for="ph">رقم الموبايل</label><input id="ph" inputmode="tel" placeholder="01xxxxxxxxx"></div>
-        <div class="field"><label for="cd">الكود</label><input id="cd" type="password" inputmode="numeric" maxlength="6" placeholder="••••" autocomplete="current-password"></div>
+        <div class="field"><label for="cd">الكود</label><input id="cd" type="password" inputmode="numeric" maxlength="4" placeholder="••••" autocomplete="current-password"></div>
         <label hidden style="display:flex;gap:10px;align-items:center;min-height:44px;margin:-4px 0 8px;cursor:pointer"><input type="checkbox" id="remember" checked style="width:20px;height:20px;accent-color:var(--accent)"><span>احفظ الدخول على الموبايل ده</span></label>
         <button class="btn btn-primary btn-wide" id="go">دخول</button>
         <p class="hint" id="gateErr" style="margin-top:10px;color:var(--crit)" hidden></p>
@@ -260,8 +260,27 @@
 
   /* السائق الفاضي الأونلاين بيظهر للركاب: بيبعت مكانه كل ٣٠ ثانية لو اتحرك ٥٠ متر (وكل ٩٠ ثانية على الأقل) */
   var idleW = null, idleLast = null, idleAt = 0, idleHd = TT.headingTracker();
+  /* توضيح الموقع (شرط جوجل): بيظهر مرة واحدة قبل ما التطبيق يطلب إذن الموقع */
+  var LOC_K = "mh-loc-notice-1";
+  function locAgreed(){ try{ return localStorage.getItem(LOC_K) === "1"; }catch(e){ return true; } }
+  function locNotice(){
+    if(document.getElementById("locNotice")) return;
+    var ov = document.createElement("div"); ov.id = "locNotice";
+    ov.style.cssText = "position:fixed;inset:0;z-index:6100;background:rgba(11,18,16,.72);display:flex;align-items:flex-end;justify-content:center";
+    ov.innerHTML = '<div role="dialog" aria-modal="true" aria-labelledby="lnT" style="background:var(--surface);color:var(--ink);width:100%;max-width:480px;border-radius:22px 22px 0 0;padding:22px 18px calc(22px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px">'
+      + '<h2 id="lnT" style="margin:0;font:800 20px/1.3 var(--display)">📍 التطبيق محتاج موقعك</h2>'
+      + '<p style="margin:0;line-height:1.8">«المحطة للسائق» بتجمع موقعك <b>طول ما «استقبال المشاوير» شغال أو إنت في رحلة — حتى لو الشاشة مقفولة أو التطبيق في الخلفية</b>.</p>'
+      + '<p style="margin:0;line-height:1.8;color:var(--ink-2)">ليه؟ علشان الطلبات توصلك إنت لو إنت الأقرب، والراكب (واللي شاركهم الرحلة) يشوفوا التوكتوك جاي. الموقع بيقف أول ما تقفل «استقبال المشاوير».</p>'
+      + '<a href="/privacy.html" target="_blank" rel="noopener" style="font-size:14px">سياسة الخصوصية</a>'
+      + '<button class="btn btn-primary btn-wide" id="lnOk" type="button">موافق</button>'
+      + '<button class="btn btn-ghost btn-wide" id="lnNo" type="button">مش دلوقتي</button></div>';
+    document.body.appendChild(ov);
+    ov.querySelector("#lnOk").onclick = function(){ try{ localStorage.setItem(LOC_K, "1"); }catch(e){} ov.remove(); tick(); };
+    ov.querySelector("#lnNo").onclick = function(){ ov.remove(); if($("onl").checked){ $("onl").checked = false; $("onl").dispatchEvent(new Event("change")); } };
+  }
   function idleTrack(on){
     if(!navigator.geolocation) return;
+    if(on && !locAgreed()){ locNotice(); return; }
     if(!on){ if(idleW != null){ navigator.geolocation.clearWatch(idleW); idleW = null; } return; }
     if(idleW != null) return;
     idleW = navigator.geolocation.watchPosition(function(p){
@@ -317,7 +336,7 @@
       body: JSON.stringify({ phone: phone, code: code, device: TT.devId() })
     }).then(function(r){ return r.json().then(function(j){ if(!r.ok) throw new Error(j.error || "خطأ"); return j; }); })
       .then(function(j){
-        auth = { phone: phone, code: code, name: j.driver.name };
+        auth = { phone: phone, code: j.token || code, name: j.driver.name };
         try{ localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); (rem ? localStorage : sessionStorage).setItem(KEY, JSON.stringify(auth)); }catch(x){}
         if(window.MHConsent) MHConsent.sync();
         start();
@@ -489,6 +508,7 @@
     if(rRoute){ rMap.removeLayer(rRoute); rRoute = null; } rr = { at:0 }; rideEta("");
     /* مسار واحد بس: قبل الركوب من مكانك للراكب، وبعد الركوب من مكانك للوجهة (updRoute بترسمه من الـ GPS) */
     if(!navigator.geolocation){ rideEta("الموبايل ده مش بيدعم تحديد المكان"); }
+    else if(watchId == null && !locAgreed()){ locNotice(); }
     else if(watchId == null){
       var rideHd = idleHd, sentH = null;
       watchId = navigator.geolocation.watchPosition(function(p){
@@ -819,11 +839,16 @@
         ? "وافق على المشوار — الراكب قدامه ٣٠ ثانية يختار من اللي وافقوا"
         : "افتح استقبال المشاوير علشان تشوف الطلبات";
     }).catch(function(err){
-      if(err.status === 401 || err.status === 403){
+      if(err.status === 401){
         if(timer) clearInterval(timer);
         try{ localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); }catch(e){}
         auth = null;
         $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true; $("acct").hidden = true;
+        $("gateErr").textContent = err.message; $("gateErr").hidden = false;
+      } else if(err.status === 403){
+        /* موقوف مؤقتاً: بنوريه السبب، والدخول بيفضل محفوظ — أول ما الإدارة ترجّعه يفتح عادي */
+        if(timer) clearInterval(timer);
+        $("app").hidden = true; $("gate").hidden = false;
         $("gateErr").textContent = err.message; $("gateErr").hidden = false;
       }
     });
@@ -841,7 +866,13 @@
 
   document.addEventListener("visibilitychange", function(){ if(!document.hidden && auth) tick(); });
 
-  if(auth && auth.phone && auth.code) start();
+  /* سواقين داخلين من قبل التحديث بالكود القديم: بنبدّله بتذكرة دايمة من غير ما يحس */
+  if(auth && auth.phone && auth.code && String(auth.code).length < 32){
+    fetch("/api/driver/login", { method:"POST", headers:{ "content-type":"application/json" }, body: JSON.stringify({ phone: auth.phone, code: auth.code, device: TT.devId() }) })
+      .then(function(r){ return r.json().catch(function(){ return {}; }); })
+      .then(function(j){ if(j && j.token){ auth.code = j.token; try{ localStorage.setItem(KEY, JSON.stringify(auth)); }catch(e){} } })
+      .catch(function(){}).then(start);
+  } else if(auth && auth.phone && auth.code) start();
 })();
 </script>
 <script>

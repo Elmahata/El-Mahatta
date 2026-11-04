@@ -1361,7 +1361,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     if(!show || document.hidden){ TT.syncMarkers(map, nearStore, [], TT.tukIcon); $("nearPill").hidden = true; return; }
     /* بنحسب من مكان الركوب اللي الراكب اختاره (مش من نص الخريطة) */
     var c = trip.from && trip.from.lat != null && isFinite(+trip.from.lat) ? { lat:+trip.from.lat, lng:+trip.from.lng } : map.getCenter();
-    fetch("/api/nearby?lat=" + c.lat.toFixed(4) + "&lng=" + c.lng.toFixed(4)).then(function(r){ return r.json(); }).then(function(j){
+    fetch("/api/nearby?lat=" + c.lat.toFixed(4) + "&lng=" + c.lng.toFixed(4), { headers: TT.sessionToken && TT.sessionToken("rider") ? { "x-session": TT.sessionToken("rider") } : {} }).then(function(r){ return r.json(); }).then(function(j){
       TT.syncMarkers(map, nearStore, j.drivers || [], function(p){ return TT.tukIcon(false, p.h); });
       var n = j.near != null ? j.near : (j.count || 0), all = j.count || 0, m = j.nearestM;
       $("nearPill").hidden = false;

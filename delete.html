@@ -7,22 +7,32 @@
   <h1 style="margin:0;text-align:center;font:800 24px/1.3 var(--display)">حذف الحساب والبيانات</h1>
   <div class="card">
     <p style="margin:0 0 10px"><b>من جوه التطبيق (أسرع):</b> افتح «حسابي» ← البروفايل ← «احذف حسابي وبياناتي».</p>
-    <p style="margin:0 0 12px"><b>أو من هنا:</b> اكتب رقمك، والإدارة هتحذف بياناتك خلال ٧ أيام.</p>
+    <p style="margin:0 0 12px"><b>أو من هنا:</b> اكتب رقمك وأكّده. لو اتأكد، كل بياناتك بتتحذف على طول. ولو مااتأكدش، الإدارة هتكلّمك على الرقم ده تتأكد إنه بتاعك، وبعدها تحذف خلال ٧ أيام.</p>
+    <div class="field"><label for="dr">الحساب</label><select id="dr"><option value="rider">راكب</option><option value="driver">سائق</option></select></div>
     <div class="field"><label for="dn">اسمك</label><input id="dn" autocomplete="name"></div>
     <div class="field"><label for="dp">رقم الموبايل المسجّل</label><input id="dp" inputmode="tel" dir="ltr" placeholder="01xxxxxxxxx"></div>
     <button class="btn btn-primary btn-wide" id="go">ابعت طلب الحذف</button>
     <p class="hint" id="msg" style="margin-top:10px" hidden></p>
   </div>
-  <p class="hint" style="text-align:center">بيتحذف: الاسم، رقم الموبايل، الملاحظات. بيفضل: سجل الرحلة من غير أي بيانات شخصية (للحسابات). <a href="/privacy.html">سياسة الخصوصية</a></p>
+  <p class="hint" style="text-align:center">بيتحذف على طول: الرسايل، الرصيد، المشاوير الثابتة، ربط الأهل، الإشعارات، جلسات الدخول. بيفضل في أرشيف الإدارة <b>سنة واحدة</b> (للأمان والشكاوى وتسجيل التكاتك) وبعدها بيتمسح: سجل الرحلات واسمك ورقمك، وللسائق بيانات تسجيله. <a href="/privacy.html">سياسة الخصوصية</a></p>
 </div>
 <script src="/assets/common.js"></script>
+<script src="/assets/verify.js"></script>
 <script>
 document.getElementById("go").addEventListener("click", function(){
   var p = document.getElementById("dp").value.replace(/\D/g,""), n = document.getElementById("dn").value.trim(), m = document.getElementById("msg"), b = this;
   if(!/^01\d{9}$/.test(p)){ m.hidden = false; m.style.color = "var(--crit)"; m.textContent = "اكتب رقم موبايل صحيح"; return; }
   b.disabled = true;
-  TT.api("support", { method:"POST", body:{ phone:p, name:n, kind:"other", note:"طلب حذف الحساب وكل البيانات (من صفحة الحذف)" } })
-    .then(function(){ m.hidden = false; m.style.color = "var(--ok)"; m.textContent = "وصل طلبك ✓ — هيتحذف خلال ٧ أيام."; })
+  if(!confirm("متأكد إنك عايز تحذف حسابك وكل بياناتك؟ مايتعملهوش رجوع.")) { b.disabled = false; return; }
+  var toks = []; try{ toks = (JSON.parse(localStorage.getItem("tt-history") || "[]") || []).map(function(x){ return x.token; }).filter(Boolean).slice(0, 30); }catch(e){}
+  var role = document.getElementById("dr").value;
+  TT.api("delete-account", role === "driver" ? { method:"POST", retry:false, body:{ phone:p, name:n, role:"driver" } } : { method:"POST", retry:false, verify:{ phone:p, role:"rider" }, body:{ phone:p, name:n, rideTokens:toks } })
+    .then(function(r){
+      m.hidden = false; m.style.color = "var(--ok)";
+      if(r && r.queued){ m.textContent = "وصل طلبك ✓ — الإدارة هتكلّمك على الرقم ده تتأكد، وبعدها يتحذف خلال ٧ أيام."; return; }
+      try{ Object.keys(localStorage).forEach(function(k){ if(/^(tt-|mh-)/.test(k)) localStorage.removeItem(k); }); }catch(e){}
+      m.textContent = "اتحذف حسابك وكل بياناتك ✓";
+    })
     .catch(function(e){ b.disabled = false; m.hidden = false; m.style.color = "var(--crit)"; m.textContent = e.message; });
 });
 </script>
