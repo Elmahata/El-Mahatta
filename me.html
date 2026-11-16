@@ -83,6 +83,13 @@
       <h2 style="margin:0 0 8px;font-size:16px">بتابع</h2>
       <div id="famWatch"></div>
     </div>
+    <div class="card">
+      <h2 style="margin:0 0 4px;font-size:16px">مشاركة رحلاتي</h2>
+      <p class="hint" style="margin:0 0 10px">أهلك (لحد ٥) يوصلهم لينك الرحلة لوحده أول ما تركب، ويتقفل بعد ما توصل بربع ساعة.</p>
+      <label style="display:flex;gap:10px;align-items:center;min-height:44px"><input type="checkbox" id="shAuto" style="width:22px;height:22px"> شارك كل رحلاتي تلقائياً</label>
+      <label style="display:flex;gap:10px;align-items:center;min-height:44px"><input type="checkbox" id="shNight" style="width:22px;height:22px"> بالليل بس (من ٨ م لـ ٦ ص)</label>
+      <label style="display:flex;gap:10px;align-items:center;min-height:44px"><input type="checkbox" id="shCode" style="width:22px;height:22px"> كود الركوب يشتغل لوحده بالليل (من ٨ م لـ ٦ ص)</label>
+    </div>
     <p class="hint" style="text-align:center">مشاركة الرحلة على واتساب لسه شغالة زي ما هي لأي حد.</p>
   </section>
 
@@ -149,6 +156,7 @@
 <script src="/assets/verify.js"></script>
 <script src="/assets/family.js"></script>
 <script src="/assets/fcm-config.js"></script>
+<script src="/assets/native.js"></script>
 <script src="/assets/push.js"></script>
 <script>
 (function(){
@@ -157,6 +165,17 @@
   var ME = "tt-me", SAVED = "tt-saved", HIST = "tt-history";
   var state = { zones:[], places:[], cfg:{} }, kind = "overcharge", here = null;
   function getJSON(k, d){ try{ return JSON.parse(localStorage.getItem(k) || "null") || d; }catch(e){ return d; } }
+  (function(){
+    var K = "tt-share", p = (function(){ try{ return JSON.parse(localStorage.getItem(K) || "null") || { on:true, night:false, code:true }; }catch(e){ return { on:true, night:false, code:true }; } })();
+    var A = document.getElementById("shAuto"), N = document.getElementById("shNight");
+    var Cd = document.getElementById("shCode");
+    if(!A) return; A.checked = p.on !== false; Cd.checked = p.code !== false; N.checked = Boolean(p.night); N.disabled = !A.checked;
+    function save(){ N.disabled = !A.checked; var v = { on:A.checked, night:N.checked, code:Cd.checked }; try{ localStorage.setItem(K, JSON.stringify(v)); }catch(e){}
+      var me = (function(){ try{ return JSON.parse(localStorage.getItem("tt-me") || "{}"); }catch(e){ return {}; } })();
+      if(!me.phone) return;
+      TT.api("share-prefs", { method:"POST", verify:{ phone: me.phone, role:"rider" }, body:{ phone: me.phone, on:v.on, night:v.night, code:v.code } }).then(function(){ TT.toast("اتحفظ ✓"); }).catch(function(e){ TT.toast(e.message); }); }
+    A.onchange = save; N.onchange = save; Cd.onchange = save;
+  })();
   function setJSON(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch(e){} }
 
   /* ---------- التبويبات ---------- */
@@ -369,7 +388,7 @@
   TT.api("public").then(function(raw){
     var s = TT.shape(raw);
     state.zones = s.zones; state.places = s.places; state.cfg = s.cfg;
-    $("prices").textContent = s.cfg.same + " ج لحد ٢ كم · " + s.cfg.cross + " ج أكتر من ٢ كم";
+    $("prices").textContent = s.cfg.perKm + " ج للكيلو · أقل أجرة " + s.cfg.minFare + " ج";
     var admin = (s.cfg.adminPhone || "").replace(/\D/g,"");
     if(admin){ $("supCall").href = "tel:" + admin; $("supWa").href = "https://wa.me/" + TT.waNum(admin); }
     else { $("supCall").hidden = true; $("supWa").hidden = true; }

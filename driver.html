@@ -67,6 +67,7 @@
         <p class="sub" id="who">المحطة</p>
       </div>
       <a class="btn btn-ghost btn-sm" id="acct" href="/driver-me.html" hidden style="margin-inline-start:auto">حسابي</a>
+      <button class="btn btn-ghost btn-sm" id="shareMe" type="button" hidden title="أهلك يشوفوا مكانك وإنت شغّال — من غير أي بيانات عن الركاب">شارك مكاني مع أهلي</button>
       <button class="btn btn-ghost btn-sm" id="out" hidden>خروج</button>
     </div>
     <div style="height:14px"></div>
@@ -238,6 +239,7 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="/assets/native.js"></script>
 <script src="/assets/common.js"></script>
 <script src="/assets/terms.js" data-role="driver"></script>
 <script src="/assets/chat.js"></script>
@@ -366,8 +368,9 @@
     if(timer) clearInterval(timer);
     try{ localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); }catch(e){}
     auth = null;
-    $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true; $("acct").hidden = true;
+    $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true; $("acct").hidden = true; $("shareMe").hidden = true;
     $("who").textContent = "المحطة";
+    if(window.TTNative) TTNative.stop();
   });
 
   /* ---------- أونلاين ---------- */
@@ -377,7 +380,20 @@
     $("onlSub").textContent = on ? "سيب الصفحة مفتوحة علشان توصلك الطلبات" : "مفيش طلبات هتوصلك";
     $("pulse").hidden = !on;
     call("online", { method: "POST", body: { online: on } }).then(tick).catch(function(){});
+    nativeSync(on);
   });
+  /* «شارك مكاني مع أهلي» — لينك ثابت للسائق، أهله يشوفوا مكانه وحالته بس */
+  $("shareMe").addEventListener("click", function(){ var b = this; b.disabled = true;
+    call("share-link", { method:"POST" }).then(function(j){ var u = location.origin + j.url, txt = "تابع مكاني وأنا شغّال على المحطة:";
+      if(navigator.share) navigator.share({ title:"المحطة", text: txt, url: u }).catch(function(){}); else location.href = "https://wa.me/?text=" + encodeURIComponent(txt + " " + u); })
+      .catch(function(e){ TT.toast(e.message || "خطأ"); }).then(function(){ b.disabled = false; }); });
+  /* التطبيق الأصلي: المكان يتبعت والشاشة مطفية طول ما السائق «بستقبل مشاوير» */
+  function nativeSync(on){
+    if(!window.TTNative || !TTNative.on || !auth) return;
+    if(!on){ TTNative.stop(); return; }
+    TTNative.start({ url: location.origin + "/api/driver/loc", headers: { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId() },
+      intervalMs: 3000, title: "المحطة — بتستقبل مشاوير", text: "مكانك بيتبعت علشان توصلك الطلبات القريبة" }, auth.phone + ":" + auth.code);
+  }
 
   /* ---------- مستوى السائق ---------- */
   function renderLvl(me){
@@ -407,7 +423,7 @@
   /* ---------- العرض ---------- */
   function renderJobs(list){
     var host = $("jobs");
-    var ids = list.map(function(j){ return j.id + (j.offered ? "+" + j.offers : "") + (j.urgent ? "!" + j.waitMin : ""); }).join(",");
+    var ids = list.map(function(j){ return j.id + (j.offered ? "+" + j.offers : "") + (j.urgent ? "!" + j.waitMin : "") + (j.farExtra ? "$" + j.farExtra : ""); }).join(",");
     $("cnt").hidden = !list.length;
     $("cnt").textContent = list.length;
 
@@ -441,8 +457,8 @@
       var when = j.scheduledAt ? new Date(j.scheduledAt).toLocaleTimeString("ar-EG", { hour:"numeric", minute:"2-digit" }) : "";
       return '<div class="job' + (prevSeen[j.id] ? '' : ' is-new') + (idx === nearIdx ? ' is-near' : '') + '" style="--i:' + idx + '">'
         + (idx === nearIdx ? '<span class="job-near">الأقرب ليك</span>' : '')
-        + '<div class="head"><span class="price">' + (j.multi ? 'عدّاد' : j.fare + '<small> ج</small>') + '</span>'
-        + (j.multi ? '<span class="chip c-warn">مشوار متعدد · بالعدّاد ' + (j.perKm || 8) + ' ج/كم</span>' : '<span class="chip c-neutral">' + (j.distKm != null ? 'حوالي ' + j.distKm + ' كم × ' + (j.perKm || 8) + ' ج' : (j.sameZone ? "مشوار قصير" : "مشوار طويل")) + '</span>')
+        + '<div class="head"><span class="price">' + (j.multi ? '~' + j.fare + '<small> ج</small>' : (j.fare + (j.farExtra || 0)) + '<small> ج</small>') + '</span>'
+        + (j.multi ? '<span class="chip c-warn">مشوار متعدد · ' + (j.stops || []).length + ' توقف · تقديري، والحساب بالعدّاد</span>' : '<span class="chip c-neutral">' + (j.distKm != null ? 'حوالي ' + j.distKm + ' كم × ' + (j.perKm || 8) + ' ج' : (j.sameZone ? "مشوار قصير" : "مشوار طويل")) + '</span>')
         + (j.distM != null ? '<span class="chip c-accent num">' + (j.distM < 1000 ? j.distM + ' م منك' : (j.distM/1000).toFixed(1) + ' كم منك') + '</span>' : '')
         + (when ? '<span class="chip c-warn">محجوز ' + when + '</span>' : '')
         + (j.urgent && !j.offered ? '<span class="chip c-warn num">مستني من ' + j.waitMin + ' دقايق</span>' : '')
@@ -452,8 +468,10 @@
         + (j.from && j.from.lat != null ? TT.miniMap(+j.from.lat, +j.from.lng) : '')
         + '<div class="route">'
         + '<div class="r"><span class="d" style="background:var(--accent)"></span><div><b>' + TT.esc(String(j.from.label || "").replace(/^موقعي\s*·\s*/, "")) + '</b><span class="n">مكان الراكب</span></div></div>'
+        + (j.stops || []).map(function(s, i){ return '<div class="r"><span class="d" style="background:var(--warn,#C98A1B)"></span><div><b>' + TT.esc(s) + '</b><span class="n">توقف ' + (i + 1) + '</span></div></div>'; }).join("")
         + '<div class="r"><span class="d" style="background:var(--fare)"></span><div><b>' + TT.esc(j.to.label) + '</b><span class="n">الوصول</span></div></div>'
         + '</div>'
+        + (j.farExtra ? farNote(j) : '')
         + (j.offered
           ? '<button class="btn btn-ghost btn-take" disabled style="opacity:1;border:1.5px dashed var(--accent);color:var(--accent-ink)">✓ وافقت — مستني الراكب يختار' + (j.offers > 1 ? ' (' + j.offers + ' سواقين وافقوا)' : '') + '</button>'
           : '<button class="btn btn-primary btn-take" data-take="' + TT.esc(j.id) + '">' + (j.source === "phone" ? "خد المشوار" : "وافق على المشوار") + '</button>'
@@ -531,7 +549,7 @@
   /* عدّاد المشوار المتعدد عند السائق */
   var DM = { m:null, off:0, rid:null, iv:null };
   function dmSet(r){
-    var on = Boolean(r && r.multi && r.startedAt && r.meterV);
+    var on = Boolean(r && (r.multi || (r.stops || []).length) && r.startedAt && r.meterV);
     $("dMeter").hidden = !on; $("dMeter").style.display = on ? "flex" : "none";
     if(!on){ DM.m = null; if(DM.iv){ clearInterval(DM.iv); DM.iv = null; } return; }
     DM.m = r.meterV; DM.off = r.meterV.now - Date.now(); DM.rid = r.id;
@@ -596,7 +614,30 @@
       + row("المجموع " + bl.sum + " ← مقرّب", bl.final + " ج", "var(--muted)") + '</div>';
     if(td) h += '<div style="background:var(--accent-soft);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:5px;text-align:start"><b style="color:var(--accent-ink)">كسبك النهارده</b>'
       + row(td.rides + " مشوار · " + td.km + " كم", td.fare + " ج") + row("انتظار مدفوع", td.paidMin + " دقيقة = " + td.waitCost + " ج") + '</div>';
+    /* السائق يقيّم الراكب — الراكب مابيشوفش التقييم، والإدارة بتشوفه */
+    var RID = window.__finId;
+    if(RID) h += '<div id="rrBox" style="border-top:1px solid var(--line);padding-top:10px;display:flex;flex-direction:column;gap:8px"><b>قيّم الراكب</b>'
+      + '<div style="display:flex;gap:6px;justify-content:center">' + [1,2,3,4,5].map(function(n){ return '<button type="button" data-rs="' + n + '" style="font-size:30px;line-height:1;background:none;border:0;color:var(--line);min-width:44px;min-height:44px">★</button>'; }).join("") + '</div>'
+      + '<div id="rrTags" style="display:flex;flex-wrap:wrap;gap:6px;justify-content:center"></div>'
+      + '<label style="display:flex;gap:8px;align-items:center;justify-content:center;font-size:13px;min-height:40px"><input type="checkbox" id="rrBlock" style="width:20px;height:20px"> ماتجيليش طلبات الراكب ده تاني</label>'
+      + '<button type="button" class="btn btn-ghost btn-wide" id="rrSend" disabled>ابعت التقييم</button></div>';
     h += '<button class="btn btn-primary btn-wide" type="button" data-close-done>تمام</button>';
+    setTimeout(function(){
+      var box = document.getElementById("rrBox"); if(!box) return;
+      var st = 0, tg = {}, GOOD = ["محترم", "كان مستني في المعاد"], BAD = ["اتأخر على الركوب", "اتخانق على الأجرة", "أسلوبه مش كويس", "بوّظ التوكتوك"];
+      var paint = function(){ box.querySelectorAll("[data-rs]").forEach(function(b){ b.style.color = +b.getAttribute("data-rs") <= st ? "#F5B301" : "var(--line)"; });
+        var L = st >= 4 ? GOOD : st ? BAD : [];
+        box.querySelector("#rrTags").innerHTML = L.map(function(t){ return '<button type="button" data-rt="' + t + '" class="chip' + (tg[t] ? ' c-warn' : '') + '" style="min-height:36px;border:1px solid var(--line);cursor:pointer">' + t + '</button>'; }).join("");
+        box.querySelector("#rrSend").disabled = !st; };
+      box.addEventListener("click", function(e){
+        var s = e.target.closest("[data-rs]"), t = e.target.closest("[data-rt]");
+        if(s){ st = +s.getAttribute("data-rs"); tg = {}; paint(); }
+        else if(t){ var k = t.getAttribute("data-rt"); tg[k] = !tg[k]; paint(); }
+        else if(e.target.id === "rrSend"){ e.target.disabled = true;
+          call("rate-rider", { method:"POST", body:{ requestId: RID, stars: st, tags: Object.keys(tg).filter(function(k){ return tg[k]; }), block: box.querySelector("#rrBlock").checked } })
+            .then(function(){ box.innerHTML = '<b style="color:var(--accent-ink);text-align:center">شكراً ✓</b>'; }).catch(function(err){ TT.toast(err.message || "خطأ"); e.target.disabled = false; }); }
+      });
+    }, 0);
     var o = document.createElement("div");
     o.style.cssText = "position:fixed;inset:0;z-index:9000;background:rgba(0,0,0,.6);display:grid;place-items:center;padding:16px";
     o.innerHTML = '<div style="width:100%;max-width:380px;background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:18px;display:flex;flex-direction:column;gap:10px;text-align:center">' + h + '</div>';
@@ -608,11 +649,16 @@
     $("feedWrap").hidden = Boolean(r);
     if(!r){ if(chat){ chat.stop(); chat = null; chatId = ""; } rMapId = ""; curRide = null; if(rRoute && rMap){ rMap.removeLayer(rRoute); rRoute = null; } if(meDot && rMap){ rMap.removeLayer(meDot); meDot = null; } if(watchId != null){ navigator.geolocation.clearWatch(watchId); watchId = null; } return; }
     drawRideMap(r);
+    /* الراكب شارك مكانه اللايف (قبل ما يركب) */
+    if(rMap){ if(r.riderLoc && !r.startedAt){ var rp = [r.riderLoc.lat, r.riderLoc.lng]; if(!window.__rDot) window.__rDot = L.circleMarker(rp, { radius:9, color:"#fff", weight:3, fillColor:"#2F6FD6", fillOpacity:1 }).addTo(rMap).bindTooltip("الراكب هنا دلوقتي", { permanent:true, direction:"top" }); else window.__rDot.setLatLng(rp); }
+      else if(window.__rDot){ rMap.removeLayer(window.__rDot); window.__rDot = null; } }
     $("rNote").hidden = !r.note;
     $("rNote").innerHTML = r.note ? '<span>📍</span><span><b>علامة من الراكب:</b> ' + TT.esc(r.note) + '</span>' : "";
     $("rFrom").textContent = r.from.label;
-    $("rTo").textContent = r.to.label;
-    $("rFare").textContent = r.multi ? "مشوار متعدد · بالعدّاد" : r.fare + " ج نقداً" + (r.discount ? " (بعد خصم دعوة " + r.discount + " ج — الإدارة هتدفعهولك)" : "");
+    $("rTo").textContent = (r.stops || []).map(function(s){ return s.label; }).concat([r.to.label]).join(" ← ");
+    $("rFare").textContent = (r.multi ? "مشوار متعدد · تقديري ~" + r.fare + " ج · الحساب بالعدّاد + الانتظار" : r.fare + " ج نقداً")
+      + (r.farExtra ? " · منها +" + r.farExtra + " تسعيرة خاصة ليك" : "") + (r.penalty ? " · منها +" + r.penalty + " تعويض إلغاء من الراكب (ليك)" : "");
+    stopAsk(r); chainToggle(r);
     dmSet(r);
     $("rRider").textContent = r.riderName;
     if(!chat || chatId !== r.id){ chatId = r.id; chat = TT.chat.mount({ rid: r.id, headers: function(){ return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId() }; }, msgBtn: $("rMsg"), callBtn: $("rNet") }); }
@@ -689,9 +735,9 @@
       q.then(function(ok){ if(!ok) return;
       d.disabled = true;
       window.__mhFinishing = true;
-      var finFare = window.__mhRide && window.__mhRide.fare;
+      var finFare = window.__mhRide && window.__mhRide.fare; window.__finId = window.__mhRide && window.__mhRide.id;
       call("finish", { method: "POST", body: { requestId: rid, status: rel ? "released" : "done" } })
-        .then(function(res){ if(!rel) doneSheet(res); var fr = (res && res.fare) || finFare; TT.sound(rel ? "cancel" : "done"); TT.toast(rel ? "رجع للسواقين" : "تمّت الرحلة ✓" + (fr ? " · استلم " + fr + " ج نقداً" : "")); })
+        .then(function(res){ if(!rel) doneSheet(res); if(res && res.nextId){ setTimeout(function(){ TT.sound("confirm"); TT.toast("الطلب التالي بقى بتاعك — روح للراكب الجديد 🛺"); try{ navigator.vibrate && navigator.vibrate([120,60,120]); }catch(x){} }, 1200); } var fr = (res && res.fare) || finFare; TT.sound(rel ? "cancel" : "done"); TT.toast(rel ? "رجع للسواقين" : "تمّت الرحلة ✓" + (fr ? " · استلم " + fr + " ج نقداً" : "")); })
         .catch(function(err){ TT.toast(err.message || "خطأ"); })
         .then(function(){ lastIds = ""; return tick(); })
         .then(function(){ d.disabled = false; }, function(){ d.disabled = false; });
@@ -795,6 +841,65 @@
       .then(function(){ s.disabled = false; return tick(); });
   });
 
+  /* ---------- التسعيرة الخاصة (السائق أبعد من ٢ كم عن الراكب) ---------- */
+  function farNote(j){
+    var p = window.__pr || { farFromKm:2, farBase:10, farPerKm:5, farMaxKm:5 };
+    return '<div class="banner b-warn" style="margin:8px 0;flex-direction:column;align-items:stretch;gap:4px"><b>تسعيرة خاصة — بُعد ' + j.farKm + ' كم: +' + j.farExtra + ' ج ليك</b>'
+      + '<span style="font-size:12px;line-height:1.7">الشروط: لو أبعد من ' + p.farFromKm + ' كم عن الراكب ← ' + p.farBase + ' ج ثابتة + ' + p.farPerKm + ' ج لكل كيلو بعدها، والبُعد بيتقرّب لأقرب كيلو، وأقصى بُعد ' + p.farMaxKm + ' كم. الراكب وافق عليها، وهتظهر له مع الأجرة.</span></div>';
+  }
+  /* ---------- توقف إضافي طلبه الراكب ---------- */
+  function stopAsk(r){
+    var sa = $("stopAsk");
+    if(!sa){ sa = document.createElement("div"); sa.id = "stopAsk"; sa.className = "banner b-warn"; sa.style.cssText = "flex-direction:column;align-items:stretch;gap:8px;margin:8px 0"; $("rideWrap").insertBefore(sa, $("rideWrap").firstChild); }
+    var q = r && r.stopReq; sa.hidden = !q; sa.style.display = q ? "flex" : "none";
+    if(!q){ sa.removeAttribute("data-k"); return; }
+    if(sa.getAttribute("data-k") === String(q.at)) return;
+    sa.setAttribute("data-k", String(q.at));
+    try{ TT.sound("offer"); navigator.vibrate && navigator.vibrate([150, 80, 150]); }catch(e){}
+    sa.innerHTML = '<b style="font-size:16px">الراكب عايز يضيف توقف</b><span>' + TT.esc(q.label) + (q.fare != null ? ' · الأجرة الجديدة <b>' + q.fare + ' ج</b>' : '') + '</span>'
+      + '<span style="font-size:12px">عند التوقف دوس «انتظار»: أول ٣ دقايق ببلاش وبعدها ١ ج للدقيقة، وماتتحركش أكتر من ٥٠ م.</span>'
+      + '<div style="display:flex;gap:8px"><button type="button" class="btn btn-primary" data-sy style="flex:1;min-height:52px">موافق</button><button type="button" class="btn btn-ghost" data-sn style="flex:1;min-height:52px">مش هينفع</button></div>';
+    var ans = function(ok){ sa.querySelectorAll("button").forEach(function(b){ b.disabled = true; });
+      call("stop-answer", { method:"POST", body:{ requestId: r.id, ok: ok } }).then(function(j){ TT.sound(ok ? "confirm" : "tap"); TT.toast(ok ? "التوقف اتضاف — الأجرة " + j.fare + " ج" : "اتبلّغ الراكب"); })
+        .catch(function(e){ TT.toast(e.message || "خطأ"); }).then(function(){ return tick(); }); };
+    sa.querySelector("[data-sy]").onclick = function(){ ans(true); };
+    sa.querySelector("[data-sn]").onclick = function(){ ans(false); };
+  }
+  /* ---------- الطلب التالي أثناء المشوار ---------- */
+  function chainToggle(r){
+    var b = $("chainTg");
+    if(!b){ b = document.createElement("button"); b.id = "chainTg"; b.type = "button"; b.className = "btn btn-ghost btn-wide"; b.style.marginTop = "10px"; $("rDone").parentNode.insertBefore(b, $("rDone"));
+      b.onclick = function(){ var on = b.getAttribute("data-on") === "1"; b.disabled = true;
+        call("prefs", { method:"POST", body:{ chain: !on } }).then(function(){ TT.sound("tap"); TT.toast(!on ? "هتوصلك الطلبات القريبة من وصولك" : "اتقفلت"); }).catch(function(e){ TT.toast(e.message || "خطأ"); }).then(function(){ b.disabled = false; return tick(); }); }; }
+    var show = Boolean(r && r.startedAt && !r.multi); b.hidden = !show;
+  }
+  var chainSeen = {};
+  function chainPaint(j){
+    var on = Boolean(j.me && j.me.chain), b = $("chainTg");
+    if(b){ b.setAttribute("data-on", on ? "1" : ""); b.textContent = on ? "✓ بستقبل طلبات قريبة من وصولي — اقفل" : "استقبل طلبات قريبة من وصولي"; }
+    var nb = $("nextBan");
+    if(!nb){ nb = document.createElement("div"); nb.id = "nextBan"; nb.className = "banner b-note"; nb.style.cssText = "margin:8px 0;flex-direction:column;align-items:stretch;gap:6px"; $("rideWrap").insertBefore(nb, $("rideWrap").firstChild); }
+    var nx = j.mine && j.next; nb.hidden = !nx; nb.style.display = nx ? "flex" : "none";
+    if(nx){ nb.innerHTML = '<b>✓ الطلب التالي محجوز ليك · ' + nx.fare + ' ج</b><span>' + TT.esc(String(nx.from.label || "")) + ' ← ' + TT.esc(nx.to.label) + '</span><span class="hint" style="font-size:12px">هيتحوّل لك أول ما توصّل الراكب اللي معاك' + (nx.stopDelay ? ' · الراكب الجديد اتبلّغ إنك هتتأخر بسبب التوقف' : '') + '</span><button type="button" class="btn btn-ghost btn-sm" data-nd>مش هقدر — سيبه لسواق تاني</button>';
+      nb.querySelector("[data-nd]").onclick = function(){ this.disabled = true; call("next-drop", { method:"POST", body:{ requestId: nx.id } }).then(function(){ TT.toast("رجع للسواقين"); }).catch(function(){}).then(function(){ return tick(); }); }; }
+    /* كارت كبير بزرار واحد «اقبل» + نغمة مميزة — علشان السائق سايق */
+    var c = (j.mine && !j.next && j.chainAvail || []).filter(function(x){ return !IGN[x.id]; })[0], ov = $("chainOv");
+    if(!c || c.offered){ if(ov) ov.remove(); return; }
+    if(ov && ov.getAttribute("data-id") === c.id) return;
+    if(ov) ov.remove();
+    if(!chainSeen[c.id]){ chainSeen[c.id] = 1; try{ TT.sound("dailySoon"); navigator.vibrate && navigator.vibrate([300, 120, 300]); }catch(e){} }
+    ov = document.createElement("div"); ov.id = "chainOv"; ov.setAttribute("data-id", c.id);
+    ov.style.cssText = "position:fixed;left:10px;right:10px;bottom:calc(12px + env(safe-area-inset-bottom,0px));z-index:900;max-width:480px;margin:0 auto;background:var(--accent);color:#fff;border-radius:22px;padding:16px;display:flex;flex-direction:column;gap:10px;box-shadow:0 14px 34px rgba(0,0,0,.35)";
+    ov.innerHTML = '<b style="font:800 18px var(--display)">طلب جنب نقطة وصولك · ' + c.fare + ' ج</b><span style="opacity:.95">' + TT.esc(String(c.from.label || "")) + ' — على بُعد ' + c.distM + ' م من وصولك</span>'
+      + '<button type="button" data-ca style="min-height:64px;border:0;border-radius:16px;background:#fff;color:var(--accent-ink,#0A5A4E);font:800 22px var(--display)">اقبل</button>'
+      + '<button type="button" data-cx style="min-height:44px;border:0;background:transparent;color:#fff;font:600 14px inherit;opacity:.85">مش دلوقتي</button>';
+    document.body.appendChild(ov);
+    ov.querySelector("[data-ca]").onclick = function(){ this.disabled = true; this.textContent = "جارٍ الإرسال…";
+      call("claim", { method:"POST", body:{ requestId: c.id } }).then(function(res){ if(res && res.offered){ TT.sound("confirm"); TT.toast("وافقت — لو الراكب اختارك هيتحوّل لك بعد ما توصّل اللي معاك"); } })
+        .catch(function(e){ TT.toast(e.message || "خطأ"); }).then(function(){ ov.remove(); return tick(); }); };
+    ov.querySelector("[data-cx]").onclick = function(){ IGN[c.id] = 1; ov.remove(); };
+  }
+
   /* ---------- النبض ---------- */
   function tick(){
     if(!auth) return Promise.resolve();
@@ -822,6 +927,7 @@
       if(window.__mhRide && !j.mine && !window.__mhFinishing){ TT.sound("cancel"); try{ navigator.vibrate && navigator.vibrate([200,100,200]); }catch(e){} TT.toast("الراكب لغى المشوار"); }
       window.__mhRide = j.mine ? j.mine.id : null; window.__mhFinishing = false;
       renderRide(j.mine);
+      window.__pr = j.pricing || window.__pr; chainPaint(j); nativeSync(Boolean(j.me && j.me.online));
       if(baJob && (j.mine || !j.available.some(function(x){ return x.id === baJob; }))) hideBig();
       var hd = j.me.heading;
       $("headBan").hidden = !hd;
@@ -843,7 +949,7 @@
         if(timer) clearInterval(timer);
         try{ localStorage.removeItem(KEY); sessionStorage.removeItem(KEY); }catch(e){}
         auth = null;
-        $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true; $("acct").hidden = true;
+        $("app").hidden = true; $("gate").hidden = false; $("out").hidden = true; $("acct").hidden = true; $("shareMe").hidden = true;
         $("gateErr").textContent = err.message; $("gateErr").hidden = false;
       } else if(err.status === 403){
         /* موقوف مؤقتاً: بنوريه السبب، والدخول بيفضل محفوظ — أول ما الإدارة ترجّعه يفتح عادي */
@@ -858,7 +964,7 @@
   TT.api("public").then(function(raw){ zonesCache = raw.zones || []; }).catch(function(){});
 
   function start(){
-    $("gate").hidden = true; $("app").hidden = false; $("out").hidden = false; $("acct").hidden = false;
+    $("gate").hidden = true; $("app").hidden = false; $("out").hidden = false; $("shareMe").hidden = false; $("acct").hidden = false;
     tick();
     if(timer) clearInterval(timer);
     timer = setInterval(function(){ if(!document.hidden) tick(); }, 4000);
