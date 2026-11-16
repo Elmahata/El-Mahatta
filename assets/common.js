@@ -63,15 +63,12 @@
 
     /* السعر يُعرض هنا للمستخدم؛ الخادم يعيد حسابه عند التأكيد ولا يثق بالعميل */
     fareFor: function (state, fromId, toId) {
+      /* التسعير الموحّد: الكيلو × سعر الكيلو، مقرّب لأعلى ٥ ج، ومايقلش عن أقل أجرة — نفس حسبة الخادم */
       var a = T.byId(state.places, fromId), b = T.byId(state.places, toId);
-      var cfg = state.cfg || { same: 10, cross: 15 };
-      if (!a || !b) return { amount: cfg.cross, same: false, known: false };
-      if (a.lat != null && b.lat != null && isFinite(+a.lat) && isFinite(+b.lat)) {
-        var sh = T.dist({ lat: +a.lat, lng: +a.lng }, { lat: +b.lat, lng: +b.lng }) * 1.3 <= (+cfg.cutKm > 0 ? +cfg.cutKm : 2);
-        return { amount: sh ? cfg.same : cfg.cross, same: sh, known: true };
-      }
-      var same = Boolean(a.zoneId && b.zoneId && a.zoneId === b.zoneId);
-      return { amount: same ? cfg.same : cfg.cross, same: same, known: Boolean(a.zoneId && b.zoneId) };
+      var cfg = state.cfg || {}, per = +cfg.perKm > 0 ? +cfg.perKm : 8, min = cfg.minFare != null && isFinite(+cfg.minFare) ? +cfg.minFare : 10;
+      if (!a || !b || a.lat == null || b.lat == null || !isFinite(+a.lat) || !isFinite(+b.lat)) return { amount: min, same: true, known: false };
+      var km = Math.round(T.dist({ lat: +a.lat, lng: +a.lng }, { lat: +b.lat, lng: +b.lng }) * 1.3 * 10) / 10;
+      return { amount: Math.max(min, Math.ceil((km * per - 1e-9) / 5) * 5), km: km, same: true, known: true };
     },
 
     mapsUrl: function (from, to) {
@@ -304,6 +301,8 @@
   /* ---------- أصوات التطبيق: نغمات قصيرة متولّدة (من غير ملفات) — تتقفل من «حسابي» ---------- */
   var SND = {
     tap:      [[880, 0, .06, "sine", .12]],
+    /* «تمام» في بانر الأمان: نوتتين ناعمين */
+    ok:       [[784, 0, .12, "sine", .14], [1175, .1, .22, "sine", .13]],
     confirm:  [[523, 0, .12], [659, .1, .12], [784, .2, .22]],
     accepted: [[587, 0, .14], [740, .12, .14], [880, .24, .14], [1175, .36, .34]],
     offer:    [[740, 0, .12, "triangle"], [988, .13, .24, "triangle"]],
@@ -582,7 +581,7 @@
 
   /* شاشة البداية (1d): بتظهر بس جوه التطبيق المتثبّت، مرة واحدة في أول الفتح */
   try {
-    var standalone = (global.matchMedia && matchMedia("(display-mode: standalone)").matches) || /android-app:/.test(document.referrer);
+    var standalone = (global.matchMedia && matchMedia("(display-mode: standalone)").matches) || /android-app:/.test(document.referrer) || Boolean(global.Capacitor && global.Capacitor.isNativePlatform && global.Capacitor.isNativePlatform());
     var p = location.pathname;
     if ((standalone || /[?&]splash=1/.test(location.search)) && !sessionStorage.getItem("mh-splash") && (p === "/" || p === "/index.html" || p === "/driver.html")) {
       sessionStorage.setItem("mh-splash", "1");

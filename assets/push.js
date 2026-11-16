@@ -11,13 +11,16 @@
       .then(function () { return load("https://www.gstatic.com/firebasejs/" + V + "/firebase-messaging-compat.js"); });
     return loading;
   }
-  function ready() { var c = window.MH_FCM; return Boolean(c && c.config && c.vapid && "serviceWorker" in navigator && "Notification" in window); }
+  /* جوه التطبيق الأصلي: الإشعارات الأصلية (assets/native.js) بدل إشعارات المتصفح */
+  function isNative() { try { return Boolean(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()); } catch (e) { return false; } }
+  function ready() { if (isNative()) return true; var c = window.MH_FCM; return Boolean(c && c.config && c.vapid && "serviceWorker" in navigator && "Notification" in window); }
 
   window.TT = window.TT || {};
   TT.push = {
     ready: ready,
     init: function (role, headersFn) {
       if (!ready() || done[role]) return Promise.resolve(false);
+      if (isNative()) return (window.TTNative && TTNative.pushInit ? TTNative.pushInit(role, headersFn) : Promise.resolve(false)).then(function (ok) { if (ok) done[role] = true; return ok; });
       var ask = Notification.permission === "default" ? Notification.requestPermission() : Promise.resolve(Notification.permission);
       return ask.then(function (p) {
         if (p !== "granted") return false;
@@ -38,7 +41,7 @@
   };
 
   /* لو الإذن متاخد قبل كده: سجّل على طول من غير ما تسأل */
-  if (ready() && Notification.permission === "granted") {
+  if (ready() && (isNative() || Notification.permission === "granted")) {
     setTimeout(function () {
       var drv = /driver/.test(location.pathname);
       if (drv) { try { var a = JSON.parse(localStorage.getItem("tt-driver") || "null"); if (a && a.phone) TT.push.init("driver", function () { return { "x-driver-phone": a.phone, "x-driver-code": a.code, "x-driver-device": TT.devId() }; }); } catch (e) {} }
