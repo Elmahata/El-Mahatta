@@ -397,6 +397,7 @@
   show((location.hash || "#profile").slice(1) in { profile:1, places:1, history:1, invite:1, support:1 } ? (location.hash || "#profile").slice(1) : "profile");
 })();
 </script>
+<script>(function(){try{if(window.Capacitor&&Capacitor.isNativePlatform&&Capacitor.isNativePlatform()){var s=document.querySelector('[data-switch="driver"]');if(s)s.remove();}}catch(e){}})();</script>
 <script>document.addEventListener("click",function(e){var b=e.target.closest("[data-switch]");if(!b)return;var r=b.getAttribute("data-switch");try{localStorage.setItem("mh-role",r);}catch(x){}location.href=r==="driver"?"/driver.html":"/";});</script>
 <script>
 (function(){

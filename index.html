@@ -1676,6 +1676,9 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     }).catch(function(){});
   }
   var role = ""; try { role = localStorage.getItem("mh-role") || ""; } catch(e){}
+  /* تطبيق الراكب الأصلي: راكب بس — السائق ليه تطبيق «المحطة للسائق» لوحده */
+  var nativeRider = false; try { nativeRider = Boolean(window.Capacitor && Capacitor.isNativePlatform && Capacitor.isNativePlatform()); } catch(e){}
+  if(nativeRider){ role = "rider"; try { localStorage.setItem("mh-role", "rider"); } catch(e){} }
   if(role === "rider") openRider();
   else {
     var ch = document.createElement("div");
