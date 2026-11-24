@@ -323,6 +323,66 @@
     /* تنبيه المشوار اليومي (قبل الطلب بـ ١٠ دقايق): «دينج-دونج» مرتين */
     dailySoon:[[784, 0, .22, "sine", .16], [1047, .2, .3, "sine", .16], [784, .62, .22, "sine", .14], [1047, .82, .45, "sine", .16], [2093, .82, .2, "sine", .03]],
     newReq:   [[880, 0, .16, "square"], [660, .2, .16, "square"], [880, .4, .26, "square"]],
+    /* «نقاطي» (3b «أنعم»): سلّم ٦ نوتات + ختمة · coins5 = نفسها + لمعة (السائق +٥ على الـ ٥ نجوم) */
+    coins:    [[1047, 0, .12, "sine", .12], [1175, .09, .12, "sine", .12], [1319, .18, .12, "sine", .12], [1568, .27, .12, "sine", .12], [1760, .36, .12, "sine", .12], [2093, .45, .12, "sine", .12], [2093, .56, .22, "sine", .09], [2637, .64, .3, "sine", .07]],
+    coins5:   [[1047, 0, .12, "sine", .12], [1175, .09, .12, "sine", .12], [1319, .18, .12, "sine", .12], [1568, .27, .12, "sine", .12], [1760, .36, .12, "sine", .12], [2093, .45, .12, "sine", .12], [2093, .56, .22, "sine", .09], [2637, .64, .3, "sine", .07], [3136, .99, .25, "sine", .05], [3951, 1.04, .2, "sine", .03], [2637, .99, .3, "sine", .05]],
+  };
+  /* ===== «نقاطي»: ١٠ نقاط على كل رحلة بتخلص (السيرفر هو اللي بيحسب) — حركة 1a «قوس هادي» + نغمة 3b ===== */
+  T.points = {
+    coin: function (size) {
+      var e = document.createElement("span");
+      e.style.cssText = "position:fixed;left:0;top:0;z-index:6000;pointer-events:none;width:" + size + "px;height:" + size + "px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FFE69A,#E8B23A 55%,#B7801A);box-shadow:0 2px 6px rgba(0,0,0,.45),inset 0 -2px 0 rgba(0,0,0,.18);display:grid;place-items:center;font:800 " + Math.round(size * .5) + "px var(--display);color:#5A3D00";
+      e.textContent = "★"; return e;
+    },
+    paint: function (el, n) { if (!el) return; var b = el.querySelector("[data-n]"); if (b) b.textContent = String(n); el.hidden = false; el.style.display = "flex"; },
+    /* العملات بتطير من «from» لـ «to» في قوس، والرقم بيعدّ لحد «to» */
+    fly: function (from, pill, before, after, bonus) {
+      var self = this; if (!pill) return;
+      var plus = after - before; if (plus <= 0) { self.paint(pill, after); return; }
+      var to = pill.querySelector("[data-coin]") || pill;
+      var S = (from || pill).getBoundingClientRect(), D = to.getBoundingClientRect();
+      var sx = S.left + S.width / 2, sy = S.top + S.height / 2, tx = D.left + D.width / 2, ty = D.top + D.height / 2, n = 6, end = 0;
+      if (!from || !Element.prototype.animate) { self.paint(pill, after); T.sound(bonus ? "coins5" : "coins"); return; }
+      for (var i = 0; i < n; i++) (function (i) {
+        var c = self.coin(22); document.body.appendChild(c);
+        var dx = (i - (n - 1) / 2) * 14, delay = i * 90, dur = 820;
+        var a = c.animate([
+          { transform: "translate(" + (sx - 11 + dx) + "px," + (sy - 11) + "px) scale(.4)", opacity: 0 },
+          { transform: "translate(" + (sx - 11 + dx) + "px," + (sy - 40) + "px) scale(1.1)", opacity: 1, offset: .18 },
+          { transform: "translate(" + ((sx + tx) / 2 - 11 + 40) + "px," + (Math.min(sy, ty) - 30) + "px) scale(.95)", opacity: 1, offset: .6 },
+          { transform: "translate(" + (tx - 11) + "px," + (ty - 11) + "px) scale(.55)", opacity: .9 }
+        ], { duration: dur, delay: delay, easing: "cubic-bezier(.45,.05,.4,1)", fill: "forwards" });
+        a.onfinish = function () { c.remove(); try { pill.animate([{ transform: "scale(1)" }, { transform: "scale(1.25)" }, { transform: "scale(1)" }], { duration: 380 }); } catch (e) {} };
+        end = Math.max(end, delay + dur);
+      })(i);
+      T.sound(bonus ? "coins5" : "coins");
+      setTimeout(function () {
+        var p = pill.querySelector("[data-plus]");
+        if (p) { p.textContent = "+" + plus; try { p.animate([{ opacity: 0, transform: "translateY(6px)" }, { opacity: 1, transform: "translateY(0)", offset: .2 }, { opacity: 1, offset: .8 }, { opacity: 0, transform: "translateY(-14px)" }], { duration: 1400 }); } catch (e) {} }
+        var v = before, st = function () { v += 1; self.paint(pill, v); if (v < after) setTimeout(st, 45); }; st();
+      }, end + 60);
+    },
+    pillHtml: function () {
+      return '<span data-coin style="width:22px;height:22px;border-radius:50%;flex:none;background:radial-gradient(circle at 35% 30%,#FFE69A,#E8B23A 55%,#B7801A);display:grid;place-items:center;font:800 11px var(--display);color:#5A3D00">★</span>'
+        + '<span style="font:700 12px var(--body);color:#F3D488">نقاطي</span><b data-n class="num" style="font:800 14px var(--display);color:#FFE69A">0</b>'
+        + '<span data-plus style="position:absolute;top:-18px;inset-inline-start:50%;font:800 13px var(--display);color:#FFE69A;opacity:0;pointer-events:none"></span>';
+    },
+    pillStyle: "position:relative;display:none;align-items:center;gap:6px;min-height:44px;background:#2A2410;border:1px solid #E8B23A;border-radius:22px;padding:4px 10px 4px 8px;cursor:pointer;color:inherit;flex:none",
+    sheet: function (points, log) {
+      var ov = document.createElement("div");
+      ov.style.cssText = "position:fixed;inset:0;z-index:5200;background:rgba(10,15,14,.6);display:flex;align-items:flex-end;justify-content:center";
+      var rows = (log || []).slice(0, 10).map(function (l) {
+        return '<div style="display:flex;justify-content:space-between;gap:10px;font-size:13.5px;padding:8px 0;border-bottom:1px solid var(--line)"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + T.esc(l.t || "مشوار") + (l.five ? " ⭐" : "") + '</span><b class="num" style="font-family:var(--display);color:#FFE69A;flex:none">+' + l.p + '</b></div>';
+      }).join("") || '<p class="hint" style="margin:0;text-align:center">لسه مفيش — كل مشوار بيخلص بيجيبلك ١٠ نقاط</p>';
+      ov.innerHTML = '<div style="background:var(--surface);color:var(--ink);width:100%;max-width:480px;max-height:85vh;overflow:auto;border-radius:22px 22px 0 0;padding:20px 16px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px">'
+        + '<div style="flex:none;display:flex;flex-direction:column;align-items:center;gap:6px;text-align:center"><span style="width:56px;height:56px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FFE69A,#E8B23A 55%,#B7801A);display:grid;place-items:center;font:800 24px var(--display);color:#5A3D00">★</span><span class="hint">نقاطي</span><b class="num" style="font:800 40px/1 var(--display);color:#FFE69A">' + (points || 0) + '</b><span class="hint" style="font-size:12.5px">١٠ نقاط على كل مشوار بيخلص</span></div>'
+        + '<div style="flex:none;background:linear-gradient(135deg,#2A2410,#382215);border:1.5px dashed #E8B23A;border-radius:16px;padding:14px;display:flex;flex-direction:column;gap:6px;align-items:center;text-align:center"><b style="flex:none;font:800 16px/1.5 var(--display);color:#FFE69A;text-wrap:balance">🎁 عروض وخصومات — قريباً</b><span style="font-size:13px;color:#F3D488;line-height:1.6">جمّع نقاطك من دلوقتي — هتقدر تستخدمها في عروض المحطة أول ما تنزل.</span></div>'
+        + '<div style="flex:none;display:flex;flex-direction:column;gap:2px"><b style="font:700 13px var(--display);color:var(--ink-2)">آخر المشاوير</b>' + rows + '</div>'
+        + '<span style="flex:none;color:var(--muted);font-size:11.5px;text-align:center;line-height:1.6">النقاط مالهاش قيمة نقدية ومابتتحوّلش لفلوس.</span>'
+        + '<button type="button" class="btn btn-ghost btn-wide" data-x style="flex:none">رجوع</button></div>';
+      document.body.appendChild(ov);
+      ov.addEventListener("click", function (e) { if (e.target === ov || e.target.closest("[data-x]")) ov.remove(); });
+    },
   };
   var sctx = null;
   T.soundOn = function () { try { return localStorage.getItem("tt-sound") !== "off"; } catch (e) { return true; } };

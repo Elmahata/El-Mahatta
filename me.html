@@ -43,6 +43,10 @@
 
   <!-- البروفايل -->
   <section id="t-profile" class="stack">
+    <div class="card" id="bioCard" hidden>
+      <label style="display:flex;gap:10px;align-items:center;min-height:44px"><input type="checkbox" id="bioOn" style="width:22px;height:22px"> اقفل «حسابي» و«أهلي» بـ Face ID</label>
+      <p class="hint" style="margin:4px 0 0">لو الموبايل اتاخد منك، محدش يقدر يشوف أهلك أو يغيّر بياناتك.</p>
+    </div>
     <button class="btn btn-ghost btn-wide" data-switch="driver" type="button">التبديل لحساب سائق</button>
     <div class="card">
       <div class="field"><label for="pName">اسمك</label><input id="pName" autocomplete="name"></div>
@@ -411,10 +415,27 @@
     go.then(function(res){
       if(res && res.queued){ alert("وصل طلبك للإدارة ✓ — هيكلّموك على رقمك يتأكدوا، وبعدها يتحذف كل حاجة خلال ٧ أيام."); b.disabled = false; return; }
       try{ Object.keys(localStorage).forEach(function(k){ if(/^(tt-|mh-)/.test(k)) localStorage.removeItem(k); }); sessionStorage.clear(); }catch(e){}
+      if(window.TTNative && TTNative.reset) TTNative.reset();
       alert("اتحذف حسابك. شكراً إنك جرّبت المحطة.");
       location.href = "/";
     }).catch(function(e){ b.disabled = false; TT.toast(e.message || "ماقدرناش نحذف — جرّب تاني"); });
   });
+})();
+</script>
+<script>
+(function(){
+  "use strict";
+  var N = window.TTNative; if(!N || !N.ios) return;
+  var card = document.getElementById("bioCard"), box = document.getElementById("bioOn");
+  if(card){ card.hidden = false; box.checked = localStorage.getItem("mh-bio") === "1";
+    box.onchange = function(){ var on = box.checked; N.bio(on ? "فعّل قفل حسابك" : "اقفل قفل Face ID").then(function(r){ if(r && r.ok){ localStorage.setItem("mh-bio", on ? "1" : "0"); TT.toast(on ? "اتقفل بـ Face ID ✓" : "اتشال القفل"); } else { box.checked = !on; if(r && r.none) TT.toast("شغّل قفل الشاشة في الموبايل الأول (Face ID أو باسورد)"); } }); }; }
+  if(localStorage.getItem("mh-bio") !== "1") return;
+  var ov = document.createElement("div");
+  ov.style.cssText = "position:fixed;inset:0;z-index:6000;background:var(--ground,#0E1614);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;text-align:center";
+  ov.innerHTML = '<span style="font-size:40px">🔒</span><b style="font:800 19px var(--display,inherit);color:var(--ink,#E6ECEA)">«حسابي» مقفول</b><button type="button" class="btn btn-primary" style="min-height:52px;min-width:220px">افتح بـ Face ID</button><a href="/" class="hint">رجوع للرئيسية</a>';
+  document.body.appendChild(ov);
+  var go = function(){ N.bio("افتح «حسابي»").then(function(r){ if(r && r.ok) ov.remove(); else if(r && r.none) ov.querySelector("b").textContent = "شغّل قفل الشاشة في الموبايل (Face ID أو باسورد) علشان تفتح «حسابي»"; }); };
+  ov.querySelector("button").onclick = go; setTimeout(go, 250);
 })();
 </script>
 </body>

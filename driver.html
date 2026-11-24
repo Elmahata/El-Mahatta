@@ -67,6 +67,7 @@
         <p class="sub" id="who">المحطة</p>
       </div>
       <a class="btn btn-ghost btn-sm" id="acct" href="/driver-me.html" hidden style="margin-inline-start:auto">حسابي</a>
+      <button type="button" id="ptsPill" aria-label="نقاطي" hidden></button>
       <button class="btn btn-ghost btn-sm" id="shareMe" type="button" hidden title="أهلك يشوفوا مكانك وإنت شغّال — من غير أي بيانات عن الركاب">شارك مكاني مع أهلي</button>
       <button class="btn btn-ghost btn-sm" id="out" hidden>خروج</button>
     </div>
@@ -187,6 +188,7 @@
           <a class="btn btn-ghost" id="rNavB" target="_blank" rel="noopener" href="#">مسار الوصول</a>
         </div>
         <button class="btn btn-primary btn-wide mh-shine" id="rArrived" style="margin-top:12px;font-size:16px;padding:13px">وصلت عند الراكب</button>
+        <button class="btn btn-ghost btn-wide" id="rMaps" type="button" style="margin-top:8px">🧭 افتح في جوجل ماب</button>
         <div id="waitBox" class="banner b-note" hidden style="margin-top:12px;flex-direction:column;align-items:stretch;gap:8px">
           <div style="display:flex;align-items:center;gap:10px"><span style="flex:1"><b>الراكب وصله إشعار إنك وصلت.</b><br><span id="waitTxt">استنى ٣ دقايق بس.</span></span><b id="waitClock" class="num" style="font:800 26px var(--display)">3:00</b></div>
           <button class="btn btn-ghost btn-wide" id="rNoShow" hidden>الراكب ماجاش — إلغاء المشوار</button>
@@ -306,17 +308,30 @@
     return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId(), "content-type": "application/json" };
   }
 
+  /* «اقبل» / «وصلت» / «وصلنا» والنت فاصل ← التطبيق الأصلي بيحفظ الأمر ويبعته لوحده أول ما النت يرجع */
+  var QOK = { claim:1, arrived:1, finish:1 };
   function call(path, opts){
     opts = opts || {};
+    var q = QOK[path] && (opts.method || "GET") === "POST" && window.TTNative && TTNative.queue;
+    if(q && TTNative.online && TTNative.online() === false) return queued(path, opts);
     return fetch("/api/driver/" + path, {
       method: opts.method || "GET",
       headers: hdr(),
       body: opts.body ? JSON.stringify(opts.body) : undefined
-    }).then(function(r){
+    }).catch(function(e){ if(q) return queued(path, opts); throw e; }).then(function(r){
+      if(r && r.__queued) return r.j;
       return r.json().catch(function(){ return {}; }).then(function(j){
         if(!r.ok) throw Object.assign(new Error(j.error || "خطأ"), { status: r.status });
         return j;
       });
+    });
+  }
+
+  function queued(path, opts){
+    return TTNative.queue(location.origin + "/api/driver/" + path, hdr(), opts.body || {}).then(function(ok){
+      if(!ok) throw new Error("النت فاصل — جرّب تاني");
+      TT.toast("النت فاصل — هيتبعت أول ما النت يرجع ✓");
+      return { __queued: true, j: { ok: true, queued: true } };
     });
   }
 
@@ -382,6 +397,9 @@
     call("online", { method: "POST", body: { online: on } }).then(tick).catch(function(){});
     nativeSync(on);
   });
+  /* «افتح في جوجل ماب» بالملاحة الصوتية — مكان الراكب قبل الركوب، والوجهة بعده */
+  document.addEventListener("click", function(e){ var b = e.target.closest("#rMaps"); if(!b) return; var r = window.__mhMine, g = r && (r.startedAt ? r.to : r.from); if(!g) return;
+    if(window.TTNative && TTNative.openMaps) TTNative.openMaps(g.lat, g.lng); else window.open("https://www.google.com/maps/dir/?api=1&destination=" + g.lat + "," + g.lng + "&travelmode=driving", "_blank"); });
   /* «شارك مكاني مع أهلي» — لينك ثابت للسائق، أهله يشوفوا مكانه وحالته بس */
   $("shareMe").addEventListener("click", function(){ var b = this; b.disabled = true;
     call("share-link", { method:"POST" }).then(function(j){ var u = location.origin + j.url, txt = "تابع مكاني وأنا شغّال على المحطة:";
@@ -391,8 +409,58 @@
   function nativeSync(on){
     if(!window.TTNative || !TTNative.on || !auth) return;
     if(!on){ TTNative.stop(); return; }
-    TTNative.start({ url: location.origin + "/api/driver/loc", headers: { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId() },
-      intervalMs: 3000, title: "المحطة — بتستقبل مشاوير", text: "مكانك بيتبعت علشان توصلك الطلبات القريبة" }, auth.phone + ":" + auth.code);
+    TTNative.start({ url: location.origin + "/api/driver/loc", headers: { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId() }, role: "driver",
+      intervalMs: 2000, title: "المحطة — بتستقبل مشاوير", text: "مكانك بيتبعت علشان توصلك الطلبات القريبة" }, auth.phone + ":" + auth.code)
+      .then(function(ok){ if(ok) setTimeout(batteryCheck, 1500); });
+  }
+  /* «البطارية بدون قيود» + «طلب جديد فوق القفل»: مرة كل يوم لحد ما يتظبطوا */
+  function batteryCheck(){
+    if(!window.TTNative || !TTNative.battery) return;
+    var k = "mh-batt-ask", last = 0; try{ last = +localStorage.getItem(k) || 0; }catch(e){}
+    if(Date.now() - last < 20 * 3600e3 || document.getElementById("battOv")) return;
+    Promise.all([TTNative.battery(), TTNative.fullScreen()]).then(function(r){
+      var bat = r[0] || {}, fs = r[1] || {};
+      if(bat.unrestricted && fs.allowed !== false) return;
+      try{ localStorage.setItem(k, String(Date.now())); }catch(e){}
+      var ov = document.createElement("div"); ov.id = "battOv"; ov.style.cssText = "position:fixed;inset:0;z-index:5200;background:rgba(10,15,14,.6);display:flex;align-items:flex-end;justify-content:center";
+      ov.innerHTML = '<div style="background:var(--surface);color:var(--ink);width:100%;max-width:480px;border-radius:22px 22px 0 0;padding:20px 16px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:12px">'
+        + '<b style="font:800 18px var(--display)">علشان الطلبات توصلك والشاشة مقفولة</b>'
+        + (bat.unrestricted ? '' : '<div style="display:flex;flex-direction:column;gap:6px"><b>🔋 خلّي البطارية «بدون قيود»</b><span class="hint" style="line-height:1.7">الموبايل ممكن يقفل التطبيق في الخلفية علشان يوفّر بطارية، فالطلبات ماتوصلكش. دوس الزرار ← <b>البطارية</b> ← <b>بدون قيود</b>' + (/xiaomi|redmi|poco|oppo|realme|vivo|huawei|honor/.test(bat.brand || "") ? '، وشغّل <b>التشغيل التلقائي</b>' : '') + '.</span><button type="button" class="btn btn-primary btn-wide" data-b style="min-height:48px;font-weight:800">افتح إعدادات البطارية</button></div>')
+        + (fs.allowed === false ? '<div style="display:flex;flex-direction:column;gap:6px"><b>📲 «طلب جديد» على الشاشة المقفولة</b><span class="hint" style="line-height:1.7">اسمح للمحطة تظهر بشاشة كاملة، علشان الطلب يصحّي الموبايل وتقبله من غير ما تفتح القفل.</span><button type="button" class="btn btn-ghost btn-wide" data-f>اسمح بالشاشة الكاملة</button></div>' : '')
+        + '<span class="hint" style="font-size:12px">وماتقفلش التطبيق من قايمة التطبيقات المفتوحة.</span><button type="button" class="btn btn-ghost btn-wide" data-x>بعدين</button></div>';
+      document.body.appendChild(ov);
+      ov.addEventListener("click", function(e){
+        if(e.target.closest("[data-b]")) TTNative.openBattery();
+        else if(e.target.closest("[data-f]")) TTNative.openFullScreen();
+        else if(e.target === ov || e.target.closest("[data-x]")) ov.remove();
+      });
+    });
+  }
+  /* التطبيق اتفتح من «طلب جديد» على الشاشة المقفولة */
+  if(window.TTNative && TTNative.takeLaunch) setTimeout(function(){ TTNative.takeLaunch().then(function(r){ if(r && r.rid && r.accepted) TT.toast("وافقت على الطلب ✓ — الراكب بيختار دلوقتي"); }); }, 800);
+
+  /* ===== «نقاطي» للسائق: ١٠ على كل رحلة + ٥ لو اتقيّم ٥ نجوم ===== */
+  var DPTS = { n: null, log: [] };
+  function dPts(me){
+    var p = $("ptsPill"); if(!p || !me) return;
+    if(!p.getAttribute("data-ok")){ p.setAttribute("data-ok", "1"); p.style.cssText = TT.points.pillStyle; p.innerHTML = TT.points.pillHtml(); p.onclick = function(){ TT.points.sheet(DPTS.n || 0, DPTS.log); }; }
+    var n = me.points || 0; DPTS.log = me.ptsLog || [];
+    if(DPTS.n == null){ DPTS.n = n; TT.points.paint(p, n); return; }
+    if(n > DPTS.n){ var five = DPTS.log[0] && DPTS.log[0].five; TT.points.fly($("rideWrap") && !$("rideWrap").hidden ? $("rideWrap") : p, p, DPTS.n, n, five); DPTS.n = n; }
+    else if(n !== DPTS.n){ DPTS.n = n; TT.points.paint(p, n); }
+  }
+
+  /* ===== «الراكب عايز يكمّل» (السائق بيطلب، والراكب يوافق من موبايله) ===== */
+  function extBtn(r){
+    var b = $("extBtn");
+    if(!b){ b = document.createElement("button"); b.id = "extBtn"; b.type = "button"; b.className = "btn btn-ghost btn-wide"; b.style.marginTop = "8px"; $("dMeter").parentNode.insertBefore(b, $("dMeter"));
+      b.onclick = function(){ if(this.disabled || !window.__mhRide) return; var me = this; me.disabled = true;
+        call("extend", { method:"POST", body:{ requestId: window.__mhRide } }).then(function(){ TT.toast("اتبعت للراكب — مستنيين موافقته"); }).catch(function(e){ TT.toast(e.message); me.disabled = false; }); }; }
+    var e = r && r.ext, st = e && e.state, show = Boolean(r && r.startedAt && !r.multi);
+    b.hidden = !show; if(!show) return;
+    b.disabled = Boolean(e);
+    b.textContent = !e ? "الراكب عايز يكمّل بعد الوجهة" : st === "ask" ? "مستني الراكب يوافق على التكملة…" : st === "on" ? "● العداد شغّال — " + e.km + " كم إضافي (أقصى " + (e.maxKm || 5) + ")" : st === "cap" ? "وصل لأقصى تكملة (" + (e.maxKm || 5) + " كم)" : "الراكب هينزل عند الوجهة";
+    if(st && b.getAttribute("data-st") !== st){ b.setAttribute("data-st", st); if(st === "on"){ TT.sound("accepted"); TT.toast("الراكب وافق — العداد شغّال ✓"); } else if(st === "no") TT.toast("الراكب هينزل عند الوجهة"); }
   }
 
   /* ---------- مستوى السائق ---------- */
@@ -549,7 +617,7 @@
   /* عدّاد المشوار المتعدد عند السائق */
   var DM = { m:null, off:0, rid:null, iv:null };
   function dmSet(r){
-    var on = Boolean(r && (r.multi || (r.stops || []).length) && r.startedAt && r.meterV);
+    var on = Boolean(r && (r.multi || (r.stops || []).length || (r.ext && (r.ext.state === "on" || r.ext.state === "cap"))) && r.startedAt && r.meterV);
     $("dMeter").hidden = !on; $("dMeter").style.display = on ? "flex" : "none";
     if(!on){ DM.m = null; if(DM.iv){ clearInterval(DM.iv); DM.iv = null; } return; }
     DM.m = r.meterV; DM.off = r.meterV.now - Date.now(); DM.rid = r.id;
@@ -649,6 +717,9 @@
     $("feedWrap").hidden = Boolean(r);
     if(!r){ if(chat){ chat.stop(); chat = null; chatId = ""; } rMapId = ""; curRide = null; if(rRoute && rMap){ rMap.removeLayer(rRoute); rRoute = null; } if(meDot && rMap){ rMap.removeLayer(meDot); meDot = null; } if(watchId != null){ navigator.geolocation.clearWatch(watchId); watchId = null; } return; }
     drawRideMap(r);
+    window.__mhMine = r;
+    if(window.TTNative && TTNative.driverRide) TTNative.driverRide(r);
+    (function(){ var mb = $("rMaps"); if(!mb) return; var g = r && (r.startedAt ? r.to : r.from); mb.hidden = !(g && isFinite(+g.lat) && isFinite(+g.lng)); mb.textContent = r && r.startedAt ? "🧭 افتح الوجهة في جوجل ماب" : "🧭 افتح مكان الراكب في جوجل ماب"; })();
     /* الراكب شارك مكانه اللايف (قبل ما يركب) */
     if(rMap){ if(r.riderLoc && !r.startedAt){ var rp = [r.riderLoc.lat, r.riderLoc.lng]; if(!window.__rDot) window.__rDot = L.circleMarker(rp, { radius:9, color:"#fff", weight:3, fillColor:"#2F6FD6", fillOpacity:1 }).addTo(rMap).bindTooltip("الراكب هنا دلوقتي", { permanent:true, direction:"top" }); else window.__rDot.setLatLng(rp); }
       else if(window.__rDot){ rMap.removeLayer(window.__rDot); window.__rDot = null; } }
@@ -659,7 +730,7 @@
     $("rFare").textContent = (r.multi ? "مشوار متعدد · تقديري ~" + r.fare + " ج · الحساب بالعدّاد + الانتظار" : r.fare + " ج نقداً")
       + (r.farExtra ? " · منها +" + r.farExtra + " تسعيرة خاصة ليك" : "") + (r.penalty ? " · منها +" + r.penalty + " تعويض إلغاء من الراكب (ليك)" : "");
     stopAsk(r); chainToggle(r);
-    dmSet(r);
+    dmSet(r); extBtn(r);
     $("rRider").textContent = r.riderName;
     if(!chat || chatId !== r.id){ chatId = r.id; chat = TT.chat.mount({ rid: r.id, headers: function(){ return { "x-driver-phone": auth.phone, "x-driver-code": auth.code, "x-driver-device": TT.devId() }; }, msgBtn: $("rMsg"), callBtn: $("rNet") }); }
     $("rNavA").href = navUrl(r.from);
@@ -856,7 +927,7 @@
     if(sa.getAttribute("data-k") === String(q.at)) return;
     sa.setAttribute("data-k", String(q.at));
     try{ TT.sound("offer"); navigator.vibrate && navigator.vibrate([150, 80, 150]); }catch(e){}
-    sa.innerHTML = '<b style="font-size:16px">الراكب عايز يضيف توقف</b><span>' + TT.esc(q.label) + (q.fare != null ? ' · الأجرة الجديدة <b>' + q.fare + ' ج</b>' : '') + '</span>'
+    sa.innerHTML = '<b style="font-size:16px">' + (q.replace ? "الراكب عايز يغيّر الوجهة" : "الراكب عايز يضيف توقف") + '</b><span>' + TT.esc(q.label) + (q.fare != null ? ' · الأجرة الجديدة <b>' + q.fare + ' ج</b>' : '') + '</span>'
       + '<span style="font-size:12px">عند التوقف دوس «انتظار»: أول ٣ دقايق ببلاش وبعدها ١ ج للدقيقة، وماتتحركش أكتر من ٥٠ م.</span>'
       + '<div style="display:flex;gap:8px"><button type="button" class="btn btn-primary" data-sy style="flex:1;min-height:52px">موافق</button><button type="button" class="btn btn-ghost" data-sn style="flex:1;min-height:52px">مش هينفع</button></div>';
     var ans = function(ok){ sa.querySelectorAll("button").forEach(function(b){ b.disabled = true; });
@@ -926,8 +997,9 @@
       /* المشوار اختفى من غير ما السائق يخلّصه = الراكب أو الإدارة لغوه */
       if(window.__mhRide && !j.mine && !window.__mhFinishing){ TT.sound("cancel"); try{ navigator.vibrate && navigator.vibrate([200,100,200]); }catch(e){} TT.toast("الراكب لغى المشوار"); }
       window.__mhRide = j.mine ? j.mine.id : null; window.__mhFinishing = false;
+      if(!j.mine && window.TTNative && TTNative.driverRide) TTNative.driverRide(null);
       renderRide(j.mine);
-      window.__pr = j.pricing || window.__pr; chainPaint(j); nativeSync(Boolean(j.me && j.me.online));
+      window.__pr = j.pricing || window.__pr; chainPaint(j); nativeSync(Boolean(j.me && j.me.online)); dPts(j.me);
       if(baJob && (j.mine || !j.available.some(function(x){ return x.id === baJob; }))) hideBig();
       var hd = j.me.heading;
       $("headBan").hidden = !hd;

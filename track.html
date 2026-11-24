@@ -84,7 +84,11 @@
         photo(j.driver);
         var al = $("alert"), msg = j.sos ? "⚠ " + who + " داس استغاثة — مكانه ظاهر على الخريطة. اتصل بيه أو بالنجدة ١٢٢" : j.anom ? (j.anom.kind === "route" ? "التوكتوك خرج عن الطريق المتوقع" : "التوكتوك واقف من شوية") + (j.anom.esc ? " و" + who + " مارَدّش — حاول تكلّمه" : " — بنسأل " + who + " لو كويس") : "";
         al.hidden = !msg; al.textContent = msg;
-        if(j.sos && j.riderLoc && map){ var rp = [j.riderLoc.lat, j.riderLoc.lng]; if(!lv.rider) lv.rider = L.circleMarker(rp, { radius:9, color:"#fff", weight:3, fillColor:"#A9382B", fillOpacity:1 }).addTo(map).bindTooltip(who); else lv.rider.setLatLng(rp); }
+        if(j.riderLoc && map){ var rp = [j.riderLoc.lat, j.riderLoc.lng]; if(!lv.rider) lv.rider = L.circleMarker(rp, { radius:9, color:"#fff", weight:3, fillColor: j.sos ? "#A9382B" : "#2F6FD6", fillOpacity:1 }).addTo(map).bindTooltip(who + " (موبايله)"); else { lv.rider.setLatLng(rp); lv.rider.setStyle({ fillColor: j.sos ? "#A9382B" : "#2F6FD6" }); }
+          /* مكان موبايله وقف يتبعت؟ نكتب من إمتى (والتوكتوك لايف جنبه) */
+          var age = j.riderLoc.at ? Math.round((Date.now() - j.riderLoc.at) / 60000) : 0;
+          lv.rider.setTooltipContent(age >= 1 ? "آخر مكان لموبايل " + who + " من " + age + " دقيقة" : who + " (موبايله)");
+          lv.rider.setStyle({ fillOpacity: age >= 1 ? .45 : 1 }); }
         var st = j.status, started = Boolean(j.startedAt);
         $("title").textContent =
           st === "done" ? who + " وصل بالسلامة ✓" :

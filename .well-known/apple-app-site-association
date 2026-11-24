@@ -1,0 +1,20 @@
+{
+  "applinks": {
+    "apps": [],
+    "details": [
+      {
+        "appIDs": [
+          "TEAMID.app.elmahatta.rider"
+        ],
+        "components": [
+          {
+            "/": "/track.html*"
+          },
+          {
+            "/": "/download.html*"
+          }
+        ]
+      }
+    ]
+  }
+}
