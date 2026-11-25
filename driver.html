@@ -345,7 +345,7 @@
   $("go").addEventListener("click", function(){
     var phone = $("ph").value.replace(/\D/g,""), code = $("cd").value.replace(/\D/g,"");
     var e = $("gateErr"); e.hidden = true;
-    if(phone.length < 9 || !code){ e.textContent = "اكتب رقم الموبايل والكود"; e.hidden = false; return; }
+    if(phone.length < 9){ e.textContent = "اكتب رقم الموبايل"; e.hidden = false; return; }
     var b = this; b.disabled = true; b.textContent = "جارٍ الدخول…";
     var rem = true; /* الدخول بيتحفظ دايماً — مابيتمسحش غير بـ «خروج» */
     fetch("/api/driver/login", {
