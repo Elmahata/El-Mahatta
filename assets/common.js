@@ -1,4 +1,32 @@
 /* أدوات مشتركة بين صفحة الراكب وصفحة الإدارة */
+/* v103 — أي خطأ في الشاشات بيتبعت لسجل الأخطاء علشان وكيل المراجعة يشوفه (من غير أي بيانات شخصية). أقصى ١٠ أخطاء لكل فتحة صفحة */
+(function () {
+  var sent = 0, seen = {};
+  function rep(o) {
+    try {
+      if (sent >= 10) return;
+      var k = o.msg + "|" + (o.src || "") + "|" + (o.line || 0);
+      if (seen[k]) return;
+      seen[k] = 1; sent++;
+      var C = window.Capacitor;
+      o.app = C && C.isNativePlatform && C.isNativePlatform() ? C.getPlatform() : "web";
+      o.page = location.pathname; o.ua = navigator.userAgent; o.ver = "v103";
+      var b = JSON.stringify(o);
+      if (navigator.sendBeacon && navigator.sendBeacon("/api/err", new Blob([b], { type: "application/json" }))) return;
+      fetch("/api/err", { method: "POST", headers: { "content-type": "application/json" }, body: b, keepalive: true }).catch(function () {});
+    } catch (e) {}
+  }
+  window.addEventListener("error", function (e) {
+    if (!e || !e.message || e.message === "Script error.") return;
+    rep({ msg: e.message, src: e.filename, line: e.lineno, col: e.colno, stack: e.error && e.error.stack });
+  });
+  window.addEventListener("unhandledrejection", function (e) {
+    var r = (e && e.reason) || {};
+    var m = r.message || String(r);
+    if (!m || /Failed to fetch|NetworkError|Load failed|AbortError/i.test(m)) return; /* النت فاصل — مش خطأ في الكود */
+    rep({ msg: "Promise: " + m, stack: r.stack });
+  });
+})();
 (function (global) {
   "use strict";
 
