@@ -6,10 +6,6 @@
 /.well-known/apple-app-site-association
   Content-Type: application/json
 
-/play-upload/apk/*
-  Access-Control-Allow-Origin: *
-  Cache-Control: no-store
-
 /play-upload/*
-  Access-Control-Allow-Origin: https://play.google.com
+  Access-Control-Allow-Origin: *
   Cache-Control: no-store
