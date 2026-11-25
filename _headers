@@ -5,3 +5,7 @@
 
 /.well-known/apple-app-site-association
   Content-Type: application/json
+
+/play-upload/*
+  Access-Control-Allow-Origin: https://play.google.com
+  Cache-Control: no-store
