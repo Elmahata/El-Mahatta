@@ -767,12 +767,17 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
         B.qKey = key; sb.disabled = true; sb.dataset.q = "1";
         var done = function(){ if(sb.dataset.q){ delete sb.dataset.q; if(!sb.dataset.far) sb.disabled = false; } };
         var tm = setTimeout(done, 4000);
-        fetch("/api/fare-quote?alat=" + A.lat + "&alng=" + A.lng + "&blat=" + B.lat + "&blng=" + B.lng)
-          .then(function(r){ return r.json(); }).then(function(j){
-            if(j && j.km != null && trip.to === B){ B.roadKm = j.km; B.roadFrom = key; clearTimeout(tm); done(); if(step === "confirm") renderConfirm(); } else { clearTimeout(tm); done(); }
-          }).catch(function(){ clearTimeout(tm); done(); });
+        TT.route(A, B).then(function(j){
+            if(j && j.road && j.km != null && trip.to === B){ B.roadKm = Math.round(j.km * 10) / 10; B.roadFrom = key; B.noRoute = false; clearTimeout(tm); done(); if(step === "confirm") renderConfirm(); }
+            else {
+              /* مقدرناش نحسب الطريق: مانبعتش الطلب بسعر تقريبي — نجرّب تاني بعد شوية */
+              clearTimeout(tm); B.noRoute = true; done(); if(step === "confirm") renderConfirm();
+              setTimeout(function(){ if(trip.to === B && B.noRoute){ B.qKey = null; if(step === "confirm") renderConfirm(); } }, 20000);
+            }
+          });
       }
     } else if(sb.dataset.q){ delete sb.dataset.q; sb.disabled = false; }
+    if(!f.multi && B && B.noRoute && B.roadFrom !== key){ $("fareCap").innerHTML = '<b style="color:var(--crit)">مش قادرين نحسب الطريق دلوقتي.</b><br>هنجرّب تاني لوحدنا خلال ثواني…'; sb.disabled = true; return; }
     /* برّه منطقة الخدمة: المشوار أطول من الحد — غالباً الـGPS غلط */
     var far = !f.multi && f.km != null && f.km > PRc().maxTripKm;
     if(far){ $("fareCap").innerHTML = '<b style="color:var(--crit)">المشوار ده حوالي ' + f.km + ' كم — المحطة شغالة في كفر صقر وحواليها بس.</b><br>اتأكد إن مكانك على الخريطة صح (دوس «تغيير»).'; sb.disabled = true; sb.dataset.far = "1"; }
@@ -1394,11 +1399,14 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     if(!target) return;
     if(!liveL.tgt) liveL.tgt = L.marker([target.lat, target.lng], { icon:TT.markerIcon(phase ? "#BC4E1E" : "#0E7566", true), interactive:false }).addTo(map);
     if(liveL.phase !== phase){ liveL.tgt.setLatLng([target.lat, target.lng]); liveL.tgt.setIcon(TT.markerIcon(phase ? "#BC4E1E" : "#0E7566", true)); liveL.fitted = 0; liveL.at = 0; }
-    var moved = !liveL.last || TT.dist(liveL.last, j.driverLoc) > 0.06 || liveL.phase !== phase;
-    if(moved && Date.now() - liveL.at > 8000){
+    /* مسار جديد بس لو المرحلة اتغيرت أو التوكتوك خرج عن المسار (>٨٠ م) — غير كده بنحسب الباقي من نفس المسار (من غير ما نسحب من رصيد الخرائط) */
+    var off = !liveL.rt || liveL.phase !== phase || TT.offRoute(liveL.rt.coords, j.driverLoc) > 80;
+    if(!off && eta) eta.textContent = (!phase && j.arrivedAt) ? "" : (phase ? "هتوصل خلال " : "السائق هيوصلك خلال ") + TT.etaText(TT.remain(liveL.rt, j.driverLoc));
+    if(off && Date.now() - liveL.at > (liveL.rt && !liveL.rt.road ? 30000 : 8000)){
       liveL.at = Date.now(); liveL.last = j.driverLoc; liveL.phase = phase;
       TT.route(j.driverLoc, target).then(function(rt){
         if(!liveL.drv) return;
+        liveL.rt = rt;
         liveL.coords = rt.road ? rt.coords : null;
         if(!liveL.line) liveL.line = TT.animRoute(map, rt.coords, phase ? "#BC4E1E" : "#131E1C");
         else liveL.line.setLatLngs(rt.coords);
@@ -1688,9 +1696,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
   /* ---------- الإقلاع ---------- */
   map = L.map("map", { zoomControl:false }).setView(TT.CENTER, 16);
   TT.autoFit(map, function(){ return (step === "confirm" || step === "search" || step === "matched") && window.__mhFitB ? window.__mhFitB() : null; }, { sheet:".sheet", bar:".topbar" });
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom:19, attribution:"&copy; OpenStreetMap"
-  }).addTo(map);
+  TT.baseLayer(map);
 
   /* التكاتك القريبة — كل ١٥ ثانية، وبس قبل ما سائق يقبل */
   var nearStore = {}, nearT = null;

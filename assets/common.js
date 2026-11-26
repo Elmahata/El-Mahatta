@@ -10,7 +10,7 @@
       seen[k] = 1; sent++;
       var C = window.Capacitor;
       o.app = C && C.isNativePlatform && C.isNativePlatform() ? C.getPlatform() : "web";
-      o.page = location.pathname; o.ua = navigator.userAgent; o.ver = "v105";
+      o.page = location.pathname; o.ua = navigator.userAgent; o.ver = "v106";
       var b = JSON.stringify(o);
       if (navigator.sendBeacon && navigator.sendBeacon("/api/err", new Blob([b], { type: "application/json" }))) return;
       fetch("/api/err", { method: "POST", headers: { "content-type": "application/json" }, body: b, keepalive: true }).catch(function () {});
@@ -192,10 +192,7 @@
 
     initMap: function (elId) {
       var map = L.map(elId, { scrollWheelZoom: false }).setView(CENTER, 15);
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-      }).addTo(map);
+      T.baseLayer(map);
       map.on("focus", function () { map.scrollWheelZoom.enable(); });
       map.on("blur", function () { map.scrollWheelZoom.disable(); });
       return map;
@@ -267,24 +264,106 @@
     return 2 * R * Math.asin(Math.sqrt(x));
   };
   var RC = {};
-  /* بيرجّع { coords:[[lat,lng]…], km, min, road } — لو الخدمة وقعت بيرجّع خط مستقيم */
-  T.route = function (a, b) {
-    var k = [a.lat, a.lng, b.lat, b.lng].map(function (x) { return (+x).toFixed(4); }).join(",");
+  /* بيرجّع { coords:[[lat,lng]…], km, min, road } من السيرفر (جوجل أو Stadia حسب اختيار الإدارة).
+     لو الخدمة وقعت: خط مستقيم متقطع للرسم بس (الأجرة بتتحسب في السيرفر ومفيهاش خط مستقيم).
+     o.cheap = لتحريك التوكتوك بس (خدمة مجانية — مابتتحسبش على رصيد جوجل) */
+  T.route = function (a, b, o) {
+    o = o || {};
+    var k = [a.lat, a.lng, b.lat, b.lng].map(function (x) { return (+x).toFixed(4); }).join(",") + (o.cheap ? ":c" : "");
     if (RC[k]) return RC[k];
     var km = T.dist(a, b) * 1.3;
     var straight = { coords: [[a.lat, a.lng], [b.lat, b.lng]], km: km, min: Math.max(2, Math.round(km / 15 * 60) + 1), road: false };
-    RC[k] = fetch("https://router.project-osrm.org/route/v1/driving/" + a.lng + "," + a.lat + ";" + b.lng + "," + b.lat + "?overview=full&geometries=geojson")
+    /* نفس طلب سعر المشوار — مرة واحدة بتجيب السعر والمسار مع بعض (طلب واحد على رصيد الخرائط) */
+    var qs = "alat=" + a.lat + "&alng=" + a.lng + "&blat=" + b.lat + "&blng=" + b.lng;
+    RC[k] = fetch(o.cheap ? "/api/route?" + qs + "&cheap=1" : "/api/fare-quote?" + qs)
       .then(function (r) { return r.json(); })
       .then(function (j) {
-        var rt = j && j.routes && j.routes[0]; if (!rt) throw new Error("no route");
-        /* التوكتوك أبطأ من العربية — ×١.٤ على الوقت */
-        var out = { coords: rt.geometry.coordinates.map(function (p) { return [p[1], p[0]]; }), km: rt.distance / 1000, min: Math.max(2, Math.round(Math.max(rt.duration / 60 * 1.4, rt.distance / 1000 / 15 * 60)) + 1), road: true };
-        /* لفّة مش منطقية (أطول من ٣ أضعاف الخط المستقيم) = غالباً نقطة متحددة غلط أو كوبري مشاه — نرجع للتقدير */
-        if (out.km > Math.max(8, km * 3)) { straight.odd = true; return straight; }
-        return out;
+        if (!j || j.road === false || !j.coords) { straight.code = j && j.code; throw new Error("no route"); }
+        return { coords: j.coords, km: j.km, min: j.min, road: true, prov: j.prov, fare: j.fare };
       })
       .catch(function () { delete RC[k]; return straight; });
     return RC[k];
+  };
+  /* أقرب مسافة (بالمتر) من نقطة لخط المسار — لو التوكتوك خرج عن المسار بنحسب مسار جديد بس */
+  T.offRoute = function (cs, p) {
+    if (!cs || cs.length < 2 || !p) return Infinity;
+    var kx = Math.cos(p.lat * Math.PI / 180), best = Infinity;
+    for (var i = 0; i < cs.length - 1; i++) {
+      var a = cs[i], b = cs[i + 1], ax = a[1] * kx, ay = a[0], bx = b[1] * kx, by = b[0], px = p.lng * kx, py = p.lat;
+      var dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy, t = L2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0;
+      var qx = ax + dx * t - px, qy = ay + dy * t - py, m = Math.sqrt(qx * qx + qy * qy) * 111320;
+      if (m < best) best = m;
+    }
+    return best;
+  };
+  /* الباقي من المسار (كيلو + دقايق) من مكان التوكتوك — من غير ما نطلب مسار جديد */
+  T.remain = function (rt, p) {
+    var cs = rt && rt.coords; if (!cs || cs.length < 2 || !p) return rt;
+    var kx = Math.cos(p.lat * Math.PI / 180), bi = 0, bt = 0, bm = Infinity, seg = [], tot = 0;
+    for (var i = 0; i < cs.length - 1; i++) {
+      var a = cs[i], b = cs[i + 1], ax = a[1] * kx, ay = a[0], bx = b[1] * kx, by = b[0], px = p.lng * kx, py = p.lat;
+      var dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy, t = L2 ? Math.max(0, Math.min(1, ((px - ax) * dx + (py - ay) * dy) / L2)) : 0;
+      var qx = ax + dx * t - px, qy = ay + dy * t - py, m = Math.sqrt(qx * qx + qy * qy);
+      if (m < bm) { bm = m; bi = i; bt = t; }
+      var l = Math.sqrt(L2) * 111.32; seg.push(l); tot += l;
+    }
+    var left = seg[bi] * (1 - bt); for (var j = bi + 1; j < seg.length; j++) left += seg[j];
+    var f = tot > 0 ? left / tot : 1, km = (rt.km || tot) * f;
+    return { km: km, min: Math.max(1, Math.round((rt.min || 2) * f)), coords: cs, road: rt.road };
+  };
+  /* ---------- طبقة الخريطة: جوجل / Stadia / OpenStreetMap — حسب اختيار الإدارة ---------- */
+  var MCK = "mh-mapcfg", mcP = null, gP = null;
+  function mapCfgCached() { try { return JSON.parse(localStorage.getItem(MCK) || "null"); } catch (e) { return null; } }
+  T.mapCfg = function () {
+    if (mcP) return mcP;
+    mcP = fetch("/api/maps-config").then(function (r) { return r.json(); }).then(function (j) {
+      if (j && j.provider) { try { localStorage.setItem(MCK, JSON.stringify(j)); } catch (e) {} return j; }
+      throw new Error("cfg");
+    }).catch(function () { mcP = null; return mapCfgCached() || { provider: "osm" }; });
+    return mcP;
+  };
+  function loadScript(src) { return new Promise(function (ok, no) { var s = document.createElement("script"); s.src = src; s.async = true; s.onload = ok; s.onerror = no; document.head.appendChild(s); }); }
+  function loadGoogle(key) {
+    if (gP) return gP;
+    gP = new Promise(function (ok, no) {
+      var done = false, to = setTimeout(function () { if (!done) { done = true; gP = null; no(new Error("timeout")); } }, 9000);
+      window.gm_authFailure = function () { T.__gFail = true; document.dispatchEvent(new Event("mh-gfail")); };
+      window.__mhGReady = function () { if (done) return; loadScript("/assets/gmutant.js").then(function () { done = true; clearTimeout(to); ok(); }).catch(function (e) { done = true; clearTimeout(to); gP = null; no(e); }); };
+      loadScript("https://maps.googleapis.com/maps/api/js?key=" + encodeURIComponent(key) + "&v=weekly&language=ar&region=EG&loading=async&callback=__mhGReady").catch(function (e) { if (!done) { done = true; clearTimeout(to); gP = null; no(e); } });
+    });
+    return gP;
+  }
+  function osmLayer() { return L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }); }
+  function stadiaLayer() { return L.tileLayer("https://tiles.stadiamaps.com/tiles/osm_bright/{z}/{x}/{y}{r}.png", { maxZoom: 20, attribution: '&copy; <a href="https://stadiamaps.com/">Stadia Maps</a> &copy; <a href="https://openmaptiles.org/">OpenMapTiles</a> &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }); }
+  function mapBeacon(p, fail) { try { var b = JSON.stringify({ p: p, fail: fail ? 1 : 0 }); if (navigator.sendBeacon) navigator.sendBeacon("/api/map-usage", new Blob([b], { type: "application/json" })); else fetch("/api/map-usage", { method: "POST", headers: { "content-type": "application/json" }, body: b, keepalive: true }); } catch (e) {} }
+  /* بتحط طبقة الخريطة على خريطة Leaflet — الأيقونات والمسارات زي ما هي فوقها */
+  T.baseLayer = function (map) {
+    var st = { p: null, layer: null, errs: 0 };
+    function put(layer, p) { if (st.layer) map.removeLayer(st.layer); st.layer = layer.addTo(map); st.p = p; if (layer.bringToBack) layer.bringToBack(); }
+    function useOsm() { if (st.p !== "osm") { put(osmLayer(), "osm"); mapBeacon("osm"); } }
+    function useStadia() {
+      if (st.p === "stadia") return;
+      var l = stadiaLayer(); st.errs = 0;
+      l.on("tileerror", function () { if (++st.errs >= 4 && st.p === "stadia") useOsm(); });
+      put(l, "stadia"); mapBeacon("stadia");
+    }
+    function useGoogle(cfg) {
+      if (st.p === "google" || !cfg.gkey || T.__gFail) { if (T.__gFail) useOsm(); return; }
+      st.want = "google";
+      loadGoogle(cfg.gkey).then(function () {
+        if (st.want !== "google" || T.__gFail) return useOsm();
+        put(L.gridLayer.googleMutant({ type: "roadmap", maxZoom: 20 }), "google"); mapBeacon("google");
+      }).catch(function () { mapBeacon("google", true); useOsm(); });
+    }
+    function apply(cfg) {
+      var p = (cfg && cfg.provider) || "osm";
+      if (p === "google") useGoogle(cfg); else if (p === "stadia") { st.want = p; useStadia(); } else { st.want = p; useOsm(); }
+    }
+    document.addEventListener("mh-gfail", function () { if (st.p === "google" || st.want === "google") { st.want = "osm"; mapBeacon("google", true); useOsm(); } });
+    var cached = mapCfgCached();
+    if (cached) apply(cached);
+    T.mapCfg().then(function (cfg) { if (!cached || cached.provider !== cfg.provider || cached.gkey !== cfg.gkey) apply(cfg); });
+    return st;
   };
   /* اسم الشارع من الخريطة (مجاني — OpenStreetMap). بيرجّع "" لو مفيش */
   var GC = {};
@@ -510,7 +589,7 @@
     var pts = onPath(coords);
     if (pts) return run(pts);
     if (!T.route) return;
-    T.route({ lat: A[0], lng: A[1] }, { lat: B[0], lng: B[1] }).then(function (rt) {
+    T.route({ lat: A[0], lng: A[1] }, { lat: B[0], lng: B[1] }, { cheap: true }).then(function (rt) {
       if (!rt || !rt.road || !rt.coords || rt.coords.length < 2) return; /* مفيش شارع معروف ← يفضل مكانه */
       var cs = rt.coords.slice();
       if (d2(A, cs[0]) > 1) cs.unshift(A);

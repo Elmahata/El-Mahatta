@@ -127,11 +127,13 @@
     else if(!(lv.last && lv.last[0] === d[0] && lv.last[1] === d[1])) TT.glidePath(lv.drv, d, lv.coords, 2000, function(h){ var el = lv.drv.getElement && lv.drv.getElement(), tk = el && el.querySelector(".tk"); if(tk && TT.rotTo) TT.rotTo(tk, h); else lv.drv.setIcon(TT.driverIcon(h, tier)); });
     lv.last = d;
     if(!target || target.lat == null) return;
-    var moved = !lv.lp || TT.dist(lv.lp, dl) > 0.06 || lv.phase !== phase;
-    if(moved && Date.now() - lv.at > 8000){
+    var off = !lv.rt || lv.phase !== phase || TT.offRoute(lv.rt.coords, dl) > 80;
+    if(!off) $("eta").textContent = (phase ? "هيوصل خلال " : "السائق هيوصل خلال ") + TT.etaText(TT.remain(lv.rt, dl));
+    if(off && Date.now() - lv.at > (lv.rt && !lv.rt.road ? 30000 : 8000)){
       lv.at = Date.now(); lv.lp = dl; var ph = lv.phase; lv.phase = phase;
       TT.route(dl, target).then(function(rt){
         if(!lv.drv) return;
+        lv.rt = rt;
         lv.coords = rt.road ? rt.coords : null;
         if(!lv.line) lv.line = TT.animRoute(map, rt.coords, phase ? "#BC4E1E" : "#131E1C"); else lv.line.setLatLngs(rt.coords);
         $("eta").textContent = (phase ? "هيوصل خلال " : "السائق هيوصل خلال ") + TT.etaText(rt);

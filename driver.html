@@ -568,12 +568,15 @@
     if(!curRide || !rMap) return;
     var phase = curRide.startedAt ? 1 : 0, t = phase ? curRide.to : curRide.from;
     if(!t || t.lat == null) return;
-    var moved = !rr.last || TT.dist(rr.last, me) > 0.06 || rr.phase !== phase;
-    if(!moved || Date.now() - rr.at < 8000) return;
+    /* مسار جديد بس لو المرحلة اتغيرت أو خرجت عن المسار (>٨٠ م) — غير كده الباقي بيتحسب من نفس المسار */
+    var off = !rr.rt || rr.phase !== phase || TT.offRoute(rr.rt.coords, me) > 80;
+    if(!off){ rideEta((phase ? "للوجهة: " : "للراكب: ") + TT.etaText(TT.remain(rr.rt, me))); return; }
+    if(Date.now() - rr.at < (rr.rt && !rr.rt.road ? 30000 : 8000)) return;
     var refit = rr.phase !== phase;
     rr.at = Date.now(); rr.last = me; rr.phase = phase;
     TT.route(me, t).then(function(rt){
       if(!curRide) return;
+      rr.rt = rt;
       if(!rRoute) rRoute = TT.animRoute(rMap, rt.coords, phase ? "#BC4E1E" : "#0E7566");
       else rRoute.setLatLngs(rt.coords);
       rideEta((phase ? "للوجهة: " : "للراكب: ") + TT.etaText(rt));
@@ -584,8 +587,8 @@
     if(!window.L) return;
     curRide = r;
     if(!rMap){
-      rMap = L.map("rMap", { zoomControl:false, attributionControl:false });
-      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:19 }).addTo(rMap);
+      rMap = L.map("rMap", { zoomControl:false });
+      TT.baseLayer(rMap);
     }
     setTimeout(function(){ rMap.invalidateSize(); }, 50);
     if(rMapId === r.id) return;
