@@ -40,12 +40,12 @@
     }
   };
 
-  /* لو الإذن متاخد قبل كده: سجّل على طول من غير ما تسأل */
+  /* لو الراكب مسجّل دخول بالفعل: سجّل على طول. الراكب الجديد بيتسأل عن الإشعارات أول ما يطلب مشوار (مش أول ما يفتح التطبيق) */
   if (ready() && (isNative() || Notification.permission === "granted")) {
     setTimeout(function () {
       var drv = /driver/.test(location.pathname);
       if (drv) { try { var a = JSON.parse(localStorage.getItem("tt-driver") || "null"); if (a && a.phone) TT.push.init("driver", function () { return { "x-driver-phone": a.phone, "x-driver-code": a.code, "x-driver-device": TT.devId() }; }); } catch (e) {} }
-      else if (TT.sessionToken || localStorage.getItem("tt-me")) TT.push.init("rider", function () { return TT.sessionToken ? { "x-session": TT.sessionToken("rider") } : {}; });
+      else if ((TT.sessionToken && TT.sessionToken("rider")) || localStorage.getItem("tt-me")) TT.push.init("rider", function () { return TT.sessionToken ? { "x-session": TT.sessionToken("rider") } : {}; });
     }, 2500);
   }
 })();
