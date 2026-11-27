@@ -1,0 +1,36 @@
+# فحص صحة المحطة كل ٥ دقايق — لو الموقع أو السيرفر واقع بيبعت تنبيه تيليجرام فوراً
+name: health-check
+on:
+  schedule: [{ cron: "*/5 * * * *" }]
+  workflow_dispatch:
+permissions: {}
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Check site and API
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          TG_CHAT_ID: ${{ secrets.TG_CHAT_ID }}
+        run: |
+          fail=""
+          for u in "https://el-mahatta.pages.dev/api/health" "https://el-mahatta.pages.dev/" "https://el-mahatta-admin.pages.dev/"; do
+            ok=0
+            for i in 1 2 3; do
+              c=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "$u" || echo 000)
+              if [ "$c" = "200" ]; then ok=1; break; fi
+              sleep 20
+            done
+            [ $ok = 1 ] || fail="$fail\n$u → $c"
+          done
+          if [ -n "$fail" ]; then
+            echo -e "DOWN:$fail"
+            if [ -n "$TG_BOT_TOKEN" ] && [ -n "$TG_CHAT_ID" ]; then
+              curl -s -X POST "https://api.telegram.org/bot${TG_BOT_TOKEN}/sendMessage" \
+                --data-urlencode "chat_id=${TG_CHAT_ID}" \
+                --data-urlencode "text=$(echo -e "🔴 المحطة واقعة — مش بترد (٣ محاولات):$fail")" > /dev/null
+            fi
+            exit 1
+          fi
+          echo "all up"

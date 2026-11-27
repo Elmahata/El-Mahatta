@@ -1767,7 +1767,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
   /* رصيد الراكب: مخفي تماماً في الفترة المجانية. بيظهر بانر صغير بس لما يوصل ٥ ج أو يخلص */
   function checkWallet(){
     var me = getJSON(ME, {}); if(!me.phone) return;
-    TT.api("wallet?phone=" + encodeURIComponent(me.phone), { retry:false }).then(function(w){
+    TT.api("wallet?phone=" + encodeURIComponent(me.phone), { retry:false, session: TT.sessionToken ? TT.sessionToken("rider") : "" }).then(function(w){
       window.__owed = +w.owed || 0; if(step === "confirm") try{ renderConfirm(); }catch(x){}
       var el = document.getElementById("walletPill");
       if(!(w.state === "low" || w.state === "stopped")){ if(el) el.remove(); return; }
