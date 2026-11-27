@@ -10,7 +10,7 @@
       seen[k] = 1; sent++;
       var C = window.Capacitor;
       o.app = C && C.isNativePlatform && C.isNativePlatform() ? C.getPlatform() : "web";
-      o.page = location.pathname; o.ua = navigator.userAgent; o.ver = "v107";
+      o.page = location.pathname; o.ua = navigator.userAgent; o.ver = "v108";
       var b = JSON.stringify(o);
       if (navigator.sendBeacon && navigator.sendBeacon("/api/err", new Blob([b], { type: "application/json" }))) return;
       fetch("/api/err", { method: "POST", headers: { "content-type": "application/json" }, body: b, keepalive: true }).catch(function () {});
@@ -538,6 +538,23 @@
       ov.addEventListener("click", function (e) { var b = e.target.closest("[data-a]"); if (b) done(b.getAttribute("data-a") === "1"); else if (e.target === ov) done(false); });
       document.body.appendChild(ov);
       setTimeout(function () { var n = ov.querySelector('[data-a="0"]'); n && n.focus(); }, 30);
+    });
+  };
+  /* رسالة معلومة بزرار واحد (رد الدعم اللحظي) */
+  T.say = function (title, body) {
+    return new Promise(function (res) {
+      var ov = document.createElement("div");
+      ov.setAttribute("role", "dialog"); ov.setAttribute("aria-modal", "true");
+      ov.style.cssText = "position:fixed;inset:0;z-index:7000;background:rgba(19,30,28,.5);display:flex;align-items:center;justify-content:center;padding:24px;animation:mh-fade .2s both";
+      ov.innerHTML = '<div style="width:100%;max-width:360px;background:var(--surface);color:var(--ink);border-radius:18px;padding:20px;box-shadow:0 24px 60px -20px rgba(0,0,0,.5);animation:mh-pop .35s var(--ease-spring) both;display:flex;flex-direction:column;gap:12px">'
+        + '<div style="font:700 17px/1.5 var(--display)">' + T.esc(title) + '</div>'
+        + '<div style="font-size:15px;line-height:1.75;white-space:pre-line">' + T.esc(body) + '</div>'
+        + '<div class="hint" style="font-size:12px">رد تلقائي من فريق الدعم — الإدارة هتراجع بلاغك برضه.</div>'
+        + '<button type="button" class="btn" style="min-height:48px;font-weight:700;color:#fff;background:var(--accent)">تمام</button></div>';
+      var done = function () { ov.remove(); res(true); };
+      ov.querySelector("button").addEventListener("click", done);
+      ov.addEventListener("click", function (e) { if (e.target === ov) done(); });
+      document.body.appendChild(ov);
     });
   };
   /* المسار المتحرك: حدّ أبيض + خط بيترسم + نقط ماشية فوقه في اتجاه المشوار */

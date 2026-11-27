@@ -1,0 +1,39 @@
+# Vault — نسخة احتياطية يومية مشفّرة من قاعدة بيانات المحطة (الساعة ٢:٣٧ الفجر بتوقيت مصر)
+# النسخة متشفّرة بـ AES-256 بكلمة سر BACKUP_PASS — من غيرها محدش يقدر يفتحها (حتى لو الـ repo عام)
+name: vault-backup
+on:
+  schedule: [{ cron: "37 0 * * *" }]
+  workflow_dispatch:
+permissions: { contents: read }
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Export, verify, encrypt
+        env:
+          AGENT_KEY: ${{ secrets.AGENT_KEY }}
+          BACKUP_PASS: ${{ secrets.BACKUP_PASS }}
+        run: |
+          set -e
+          [ -n "$AGENT_KEY" ] && [ -n "$BACKUP_PASS" ] || { echo "missing secrets"; exit 1; }
+          curl -sf --max-time 120 -H "x-agent-key: $AGENT_KEY" "https://el-mahatta.pages.dev/api/guard?view=backup" -o db.json
+          n=$(jq '.count' db.json); k=$(jq '[.docs[].kind]|unique|length' db.json)
+          echo "docs=$n kinds=$k"; [ "$n" -gt 10 ] && [ "$k" -gt 3 ]
+          d=$(date -u +%F); gzip -9 db.json
+          openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -in db.json.gz -out "mahatta-$d.json.gz.enc" -pass env:BACKUP_PASS
+          rm db.json.gz
+          # تأكيد إن الملف بيتفك صح
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in "mahatta-$d.json.gz.enc" -pass env:BACKUP_PASS | gunzip | jq -e '.count' > /dev/null
+          echo "n=$n" >> "$GITHUB_ENV"
+      - uses: actions/upload-artifact@v4
+        with: { name: vault-${{ github.run_id }}, path: "mahatta-*.enc", retention-days: 30 }
+      - name: Report
+        if: always()
+        env:
+          AGENT_KEY: ${{ secrets.AGENT_KEY }}
+        run: |
+          if [ "${{ job.status }}" = "success" ]; then t="🗄️ Vault — النسخة الاحتياطية اتعملت واتأكدت ($n سجل)"; k=""; else t="🔴 Vault — النسخة الاحتياطية فشلت النهارده، محتاج مراجعة"; k="vault-fail"; fi
+          [ -n "$AGENT_KEY" ] && curl -s -X POST -H "x-agent-key: $AGENT_KEY" -H "content-type: application/json" \
+            -d "$(jq -nc --arg t "$t" --arg k "$k" '{action:(if $k=="" then "note" else "alert" end),by:"Vault",text:$t,key:$k,dedupMin:600}')" \
+            https://el-mahatta.pages.dev/api/guard > /dev/null || true

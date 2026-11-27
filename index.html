@@ -1115,7 +1115,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     document.body.appendChild(ov);
     ov.querySelector("[data-x]").onclick = function(){ ov.remove(); };
     ov.querySelector("[data-go]").onclick = function(){ var n = ov.querySelector("#lostN").value.trim(); this.disabled = true;
-      TT.api("report", { method:"POST", body:{ id: lr.id, token: lr.token, kind:"lost", note: n || "نسيت حاجة في التوكتوك" } }).then(function(){ TT.toast("السائق اتبلّغ ✓ والإدارة عندها البلاغ"); }).catch(function(){})
+      TT.api("report", { method:"POST", body:{ id: lr.id, token: lr.token, kind:"lost", note: n || "نسيت حاجة في التوكتوك" } }).then(function(j){ TT.toast("السائق اتبلّغ ✓ والإدارة عندها البلاغ"); if(j && j.reply && TT.say) TT.say("وصلنا بلاغك 🙏", j.reply); }).catch(function(){})
         .then(function(){ ov.remove(); a.setAttribute("data-sent", "1"); location.href = a.href; }); };
   });
   /* بانر «علشان مشوارك يبدأ مريح»: الصورة + رقم التوكتوك — بيظهر مع كل رحلة لحد ما الراكب يدوس «تمام» أو يركب */
@@ -1625,7 +1625,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     var b = this; b.disabled = true;
     TT.api("report", { method:"POST", body:{ id:reportFor.id, token:reportFor.token, kind:$("repKind").value,
       asked:$("repAsked").value.replace(/\D/g,""), note:$("repNote").value.trim() } })
-      .then(function(){ TT.toast("البلاغ وصل للإدارة ✓"); $("repNote").value = ""; $("repAsked").value = ""; setStep(beforeReport); })
+      .then(function(j){ TT.toast("البلاغ وصل للإدارة ✓"); $("repNote").value = ""; $("repAsked").value = ""; setStep(beforeReport); if(j && j.reply && TT.say) TT.say("وصلنا بلاغك 🙏", j.reply); })
       .catch(function(err){ TT.toast(err.message || "تعذّر الإرسال"); })
       .then(function(){ b.disabled = false; });
   });

@@ -1,0 +1,40 @@
+# Reviewer — بيجيب تقييمات جوجل بلاي كل ٦ ساعات ويحفظها للوكيل يجهّز ردود
+# محتاج PLAY_SA (ملف Service Account من Google Cloud مربوط بـ Play Console بصلاحية الردود على التقييمات)
+name: play-reviews
+on:
+  schedule: [{ cron: "17 */6 * * *" }]
+  workflow_dispatch:
+permissions: {}
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fetch reviews
+        env:
+          PLAY_SA: ${{ secrets.PLAY_SA }}
+          AGENT_KEY: ${{ secrets.AGENT_KEY }}
+        run: |
+          if [ -z "$PLAY_SA" ] || [ -z "$AGENT_KEY" ]; then echo "PLAY_SA/AGENT_KEY not set yet — skipping"; exit 0; fi
+          pip install -q google-auth requests
+          python3 - <<'PY'
+          import os, json, requests
+          from google.oauth2 import service_account
+          from google.auth.transport.requests import Request
+          cr = service_account.Credentials.from_service_account_info(json.loads(os.environ["PLAY_SA"]), scopes=["https://www.googleapis.com/auth/androidpublisher"])
+          cr.refresh(Request())
+          pkg = "dev.pages.el_mahatta.twa"
+          r = requests.get(f"https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{pkg}/reviews", headers={"Authorization": "Bearer " + cr.token}, params={"maxResults": 100}, timeout=30)
+          r.raise_for_status()
+          out = []
+          for rv in r.json().get("reviews", []):
+              c = [x for x in rv.get("comments", []) if "userComment" in x]
+              dev = [x for x in rv.get("comments", []) if "developerComment" in x]
+              if not c: continue
+              u = c[0]["userComment"]
+              out.append({"reviewId": rv["reviewId"], "stars": u.get("starRating", 0), "text": u.get("text", "").strip(), "lang": u.get("reviewerLanguage", ""),
+                          "device": u.get("deviceMetadata", {}).get("productName", ""), "appVersion": u.get("appVersionName", ""),
+                          "at": int(u.get("lastModified", {}).get("seconds", 0)) * 1000, "replied": bool(dev)})
+          requests.post("https://el-mahatta.pages.dev/api/guard", headers={"x-agent-key": os.environ["AGENT_KEY"]}, json={"action": "playrev", "reviews": out}, timeout=30).raise_for_status()
+          print("reviews:", len(out))
+          PY

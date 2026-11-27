@@ -382,7 +382,7 @@
     if(!note){ $("supNote").focus(); return; }
     var b = this; b.disabled = true;
     TT.api("support", { method:"POST", session: TT.sessionToken ? TT.sessionToken("rider") : "", body:{ name:m.name, phone:m.phone, kind:kind, note:note, requestId:$("supTrip").value } })
-      .then(function(){ TT.toast("وصلت للإدارة ✓ — هيكلموك قريب"); $("supNote").value = ""; })
+      .then(function(j){ TT.toast("وصلت للإدارة ✓ — هيكلموك قريب"); $("supNote").value = ""; if(j && j.reply && TT.say) TT.say("فريق الدعم", j.reply); })
       .catch(function(e){ TT.toast(e.message || "تعذّر الإرسال"); })
       .then(function(){ b.disabled = false; });
   });
