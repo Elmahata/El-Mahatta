@@ -158,7 +158,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
   <div style="width:100%;max-width:780px;margin:0 auto;background:var(--surface);border-radius:22px 22px 0 0;padding:22px 18px calc(24px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 30px rgba(0,0,0,.5);max-height:86vh;overflow-y:auto">
     <div id="vListen" style="display:flex;flex-direction:column;align-items:center;gap:16px">
       <h2 id="vTitle" style="margin:0;font:700 20px var(--display)">سامعك… قول رايح فين</h2>
-      <p class="hint" style="margin:-8px 0 0;text-align:center">ممكن تقول أكتر من مكان: «السجل المدني وبعدين كوبري السوق»</p>
+      <p class="hint" style="margin:-8px 0 0;text-align:center">قول اسم المكان، أو «البيت» لو حافظه. ولو أكتر من مكان قول «وبعدين» بينهم</p>
       <div class="v-orb" aria-hidden="true"><i></i><i></i><span><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></span></div>
       <div id="vLive" aria-live="polite" style="min-height:52px;width:100%;box-sizing:border-box;border-radius:12px;background:var(--inset);padding:12px 14px;text-align:center;font-size:18px;font-weight:600">…</div>
       <div style="display:flex;gap:10px;width:100%">
@@ -747,34 +747,37 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
   var SR = window.SpeechRecognition || window.webkitSpeechRecognition, VOICE = !!SR && !IOSAPP, vRec = null, vText = "", vFinal = "";
   var FILL = ["عايز","عاوز","عايزه","عاوزه","انا","اروح","روح","روحني","وديني","وصلني","خدني","على","علي","لحد","عند","الى","الي","ل","لـ","يا","اسطى","اسطي","لو","سمحت","من","فضلك","المكان","مكان","هناك","بتاع","بتاعه","اللي","في","هروح","رايح","رايحه","ممكن","توصلني","توديني","لي","ده","دي"];
   function vTokens(t){ return norm(t).replace(/[^\u0600-\u06FFa-z0-9 ]/g," ").split(/\s+/).filter(function(w){ return w && FILL.indexOf(w) < 0; }).map(function(w){ return w.replace(/^(وال|بال|فال|لل|ال|و)(?=..)/, ""); }).filter(function(w){ return w && FILL.indexOf(w) < 0; }); }
+  var GENERIC = ["مستشفي","عياده","صيدليه","موقف","محطه","مدرسه","معهد","كليه","مجلس","سوق","محل","جامع","مسجد","كنيسه","نادي","بنك","مركز","شارع","كوبري","قريه","عزبه","مكتب","مصنع","كبير","صغير","جديد","قديم"];
   var CATW = { health:["مستشفي","عياده","صيدليه","دكتور","طبيب","اسعاف","وحده"], transport:["موقف","محطه","مواصلات","عربيات","ميكروباص"], edu:["مدرسه","معهد","كليه","حضانه"], gov:["مجلس","بنك","بريد","مصلحه","سجل","شهر","قسم","مركز","محكمه"], market:["سوق","محل","سوبر","ماركت","مول"], public:["جامع","مسجد","كنيسه","نادي","حديقه","جنينه"] };
   function vMatch(text){
     var tk = vTokens(text), joined = tk.join(" "); if(!tk.length) return [];
     var other = trip.from;
-    return state.places.filter(function(p){ return p.lat != null && p.lng != null && !(other && metres(other, p) < 60); }).map(function(p){
-      var nt = vTokens(p.name), sc = 0;
-      nt.forEach(function(w){ tk.forEach(function(x){ if(w === x) sc += 3; else if(w.length > 2 && x.length > 2 && (w.indexOf(x) === 0 || x.indexOf(w) === 0)) sc += 2; }); });
+    var mine = getJSON(SAVED, []).filter(function(x){ return x.place && x.place.lat != null && x.label; }).map(function(x, i){ return { id:"saved-" + i, name:x.label, lat:x.place.lat, lng:x.place.lng, zoneId:x.place.zoneId || "", cat:"", mine:true }; });
+    return state.places.concat(mine).filter(function(p){ return p.lat != null && p.lng != null && !(other && metres(other, p) < 60); }).map(function(p){
+      var nt = vTokens(p.name), sc = 0, strong = false;
+      nt.forEach(function(w){ tk.forEach(function(x){ var hit = w === x ? 3 : (w.length > 2 && x.length > 2 && (w.indexOf(x) === 0 || x.indexOf(w) === 0)) ? 2 : 0; if(hit){ sc += hit; if(GENERIC.indexOf(w) < 0) strong = true; } }); });
+      if(p.mine && sc) strong = true;
       var nj = nt.join(" "); if(nj && joined.indexOf(nj) >= 0) sc += 4;
       var cat = vTokens(CATS[p.cat] || "").concat(CATW[p.cat] || []); cat.forEach(function(w){ if(tk.indexOf(w) >= 0) sc += 1; });
-      return { p:p, sc:sc };
+      return { p:p, sc:sc, strong:strong };
     }).filter(function(x){ return x.sc > 0; }).sort(function(a, b){ return b.sc - a.sc; }).slice(0, 3);
   }
   function vShow(which){
     $("vListen").hidden = which !== "listen"; $("vListen").style.display = which === "listen" ? "flex" : "none";
     $("vRes").hidden = which !== "res"; $("vRes").style.display = which === "res" ? "flex" : "none";
   }
-  function vClose(){ try{ vRec && vRec.abort(); }catch(e){} vRec = null; $("vBox").hidden = true; document.body.style.overflow = ""; }
+  function vClose(){ try{ window.speechSynthesis && speechSynthesis.cancel(); }catch(e){} try{ vRec && vRec.abort(); }catch(e){} vRec = null; $("vBox").hidden = true; document.body.style.overflow = ""; }
   /* اللي بيظهر على الشاشة مش كلام الراكب بالحرف: جملة نضيفة = فعل الطلب + أسماء الأماكن من القايمة بس. أي كلام تاني بيتشال */
   var VERBS = [[/^(عايزه|عاوزه)$/, "عايزة أروح"], [/^(عايز|عاوز)$/, "عايز أروح"], [/^محتاجه$/, "محتاجة أروح"], [/^محتاج$/, "محتاج أروح"], [/^(وصلني|توصلني)$/, "وصّلني"], [/^(روحني)$/, "روّحني"], [/^(خدني|خودني)$/, "خدني"], [/^(وديني|توديني)$/, "وديني"]];
   function vVerb(text){
     var ws = norm(text).split(/\s+/);
     for(var i = 0; i < ws.length; i++) for(var j = 0; j < VERBS.length; j++) if(VERBS[j][0].test(ws[i])) return VERBS[j][1];
-    return "وديني";
+    return "وصّلني";
   }
   function vPlan(text){
     var segs = norm(text).split(/\s*(?:و\s*)?(?:بعدين|بعدها|بعد كده|بعد كدا|بعد ما|ثم|وبعد)\s*/).filter(function(x){ return x && x.trim(); });
     var stops = [];
-    segs.forEach(function(sg){ var h = vMatch(sg); if(h.length && (!stops.length || stops[stops.length - 1].p.id !== h[0].p.id)) stops.push({ p:h[0].p, alts:h }); });
+    segs.forEach(function(sg){ var h = vMatch(sg); if(h.length && h[0].strong && (!stops.length || stops[stops.length - 1].p.id !== h[0].p.id)) stops.push({ p:h[0].p, alts:h }); });
     return { verb:vVerb(text), stops:stops.slice(0, 4), all:vMatch(text) };
   }
   function vSentence(pl){
@@ -784,7 +787,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
   function vRow(p, i, attr){
     var km = trip.from ? Math.round(TT.dist({ lat:+trip.from.lat, lng:+trip.from.lng }, { lat:+p.lat, lng:+p.lng }) * 1.3 * 10) / 10 : null;
     var f = null; if(trip.from){ var keep = trip.to; trip.to = { lat:p.lat, lng:p.lng }; f = fareOf(); trip.to = keep; }
-    var zn = TT.zoneName ? TT.zoneName(state.zones, p.zoneId) : "";
+    var zn = p.mine ? "مكانك المحفوظ" : (TT.zoneName && p.zoneId ? TT.zoneName(state.zones, p.zoneId) : "");
     return '<button type="button" class="v-opt" ' + attr + '="' + i + '"><span style="width:42px;height:42px;flex:none;border-radius:11px;background:var(--accent-soft);color:var(--accent-ink);display:grid;place-items:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>'
       + '<span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:16px">' + TT.esc(p.name) + '</span><span style="display:block;color:var(--muted);font-size:13px">' + TT.esc([CATS[p.cat] || "", zn, km != null ? km + " كم" : ""].filter(Boolean).join(" · ")) + '</span></span>'
       + (f && f.known ? '<b class="f">≈ ' + f.amount + ' ج</b>' : '') + '</button>';
@@ -796,7 +799,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     if(!said){ vClose(); TT.toast("ماسمعناش حاجة — جرّب تاني وقرّب الموبايل"); return; }
     var pl = vPlan(said), multi = pl.stops.length >= 2;
     $("vHeardL").hidden = !pl.stops.length;
-    $("vHeard").textContent = pl.stops.length ? vSentence(pl) : "مالقيناش المكان اللي قلته";
+    $("vHeard").textContent = pl.stops.length ? vSentence(pl) : pl.all.length ? "مالقيناش المكان ده بالظبط" : "مالقيناش المكان اللي قلته";
     if(multi){
       $("vPickT").textContent = "مشوار متعدد — " + pl.stops.length + " أماكن بالترتيب:";
       var tot = null; if(trip.from){ var k1 = trip.to, k2 = trip.stops, k3 = trip.multi; trip.multi = true; trip.stops = pl.stops.slice(0, -1).map(function(s){ return vPt(s.p); }); trip.to = vPt(pl.stops[pl.stops.length - 1].p); tot = fareOf(); trip.to = k1; trip.stops = k2; trip.multi = k3; }
@@ -807,7 +810,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
         + '<button type="button" class="btn btn-ghost btn-wide" data-vone style="min-height:44px">لأ، مكان واحد بس</button>';
     } else {
       var hits = pl.stops.length ? pl.stops[0].alts : pl.all;
-      $("vPickT").textContent = hits.length ? "اختار المكان الصح:" : "جرّب تقول اسم المكان تاني بوضوح، أو اكتبه.";
+      $("vPickT").textContent = pl.stops.length ? "اختار المكان الصح:" : hits.length ? "يمكن تقصد واحد من دول؟" : "جرّب تقول اسم المكان تاني بوضوح، أو اكتبه.";
       $("vList").innerHTML = hits.map(function(h, i){ return vRow(h.p, i, "data-vi"); }).join("");
     }
     $("vList").onclick = function(e){
@@ -822,6 +825,24 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       if(t.closest("[data-vone]")){ pl.stops = pl.stops.slice(0, 1); $("vHeard").textContent = vSentence(pl); $("vPickT").textContent = "اختار المكان الصح:"; $("vList").innerHTML = pl.stops[0].alts.map(function(h, i){ return vRow(h.p, i, "data-vi"); }).join(""); }
     };
     vShow("res");
+    if(pl.stops.length){
+      var fx = null; if(trip.from){ var k1 = trip.to, k2 = trip.stops, k3 = trip.multi; if(multi){ trip.multi = true; trip.stops = pl.stops.slice(0, -1).map(function(s){ return vPt(s.p); }); } trip.to = vPt(pl.stops[pl.stops.length - 1].p); fx = fareOf(); trip.to = k1; trip.stops = k2; trip.multi = k3; }
+      vSay(vSentence(pl) + (fx && fx.known ? "، السعر حوالي " + fx.amount + " جنيه" : "") + (multi ? ". لو تمام دوس كمّل" : ". اختار المكان من القايمة"));
+    } else {
+      vSay(pl.all.length ? "مالقيناش المكان ده بالظبط. يمكن تقصد واحد من دول" : "مالقيناش المكان. قول اسمه تاني أو اكتبه");
+      /* أماكن الناس بتطلبها ومش في القايمة: بنبعت كلمات قليلة من غير رقم ولا اسم الراكب — للإدارة علشان تضيف الأماكن الناقصة */
+      var miss = vTokens(said).filter(function(w){ return w.length > 1 && !/^[0-9]+$/.test(w); }).slice(0, 4).join(" ");
+      if(miss.length >= 3) try{ fetch("/api/vmiss", { method:"POST", headers:{ "content-type":"application/json" }, body:JSON.stringify({ q:miss }), keepalive:true }).catch(function(){}); }catch(e){}
+    }
+  }
+  /* بيقرا التأكيد بصوت الموبايل نفسه — مفيد للكبار. لو مفيش صوت عربي على الجهاز بنسكت */
+  function vSay(t){
+    try{
+      var sy = window.speechSynthesis; if(!sy || !t) return; sy.cancel();
+      var vs = sy.getVoices() || [], v = vs.filter(function(x){ return /^ar[-_]EG/i.test(x.lang); })[0] || vs.filter(function(x){ return /^ar/i.test(x.lang); })[0];
+      if(!v && vs.length) return;
+      var u = new SpeechSynthesisUtterance(t); u.lang = v ? v.lang : "ar-EG"; if(v) u.voice = v; u.rate = 0.95; sy.speak(u);
+    }catch(e){}
   }
   function vStart(){
     if(!VOICE) return;

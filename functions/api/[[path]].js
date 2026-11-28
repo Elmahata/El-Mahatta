@@ -1269,7 +1269,7 @@ async function guardApi(request, env, url) {
       .map((e) => ({ id: e.id, where: e.where, msg: e.msg, src: e.src, line: e.line, page: e.page, app: e.app, ver: e.ver, count: e.count, first: e.first, last: e.last, status: e.status }));
     const blocks = (await rows("ipblock", since, 100)).filter((b) => b.exp > Date.now());
     const lock = await getDoc(env, "guard", "adminlock");
-    return json({ at: Date.now(), hours: h, tg: Boolean(env.TG_BOT_TOKEN && env.TG_CHAT_ID), ver: "v108",
+    return json({ at: Date.now(), hours: h, tg: Boolean(env.TG_BOT_TOKEN && env.TG_CHAT_ID), ver: "v109",
       seclog: await rows("seclog", since, 300), audit: await rows("audit", since, 300), alerts: await rows("alert", since, 100),
       blocks, adminLock: lock && lock.exp > Date.now() ? lock : null, errs,
       usage: (await rows("usage", Date.now() - 3 * 864e5, 3)) });
@@ -1349,7 +1349,7 @@ async function afterReport(env, rep, req) {
   return reply;
 }
 /* أوامر الإدارة: بتشتغل من دومين الأدمن بس */
-const ADMIN_ROUTES = new Set(["login", "logout", "admin-errs", "admin-assign", "admin-wipe", "archive", "admin-maplink", "admin-review", "admin-trial-end", "admin-false-report", "admin-cancel", "restore", "ai", "phone-request", "consents", "state", "doc"]);
+const ADMIN_ROUTES = new Set(["login", "logout", "admin-errs", "admin-assign", "admin-wipe", "archive", "admin-maplink", "admin-review", "admin-trial-end", "admin-false-report", "admin-cancel", "restore", "ai", "phone-request", "consents", "state", "doc", "admin-vmiss"]);
 export async function onRequest(ctx) {
   const { request, env, params } = ctx;
   const parts = Array.isArray(params.path) ? params.path : [params.path].filter(Boolean);
@@ -1357,7 +1357,7 @@ export async function onRequest(ctx) {
   const url = new URL(request.url), ip = ipOf(request), method = request.method;
   if (route === "health") {
     let db = false; try { db = Boolean(env.DB && (await env.DB.prepare("SELECT 1 AS x").first())); } catch (e) {}
-    return json({ ok: db, db, ver: "v108", at: Date.now() }, db ? 200 : 503);
+    return json({ ok: db, db, ver: "v109", at: Date.now() }, db ? 200 : 503);
   }
   if (!env.DB) return handle(ctx);
   const isAdm = ADMIN_ROUTES.has(route) || (route === "map-usage" && method === "GET") || route === "admin-guard";
@@ -1530,6 +1530,18 @@ async function handle({ request, env, params }) {
       const b = await parseBody(request), f = { google: "gLoad", stadia: "sLoad", osm: "oLoad" }[b && b.p];
       if (f) await usageBump(env, f);
       if (b && b.fail) await usageBump(env, "gLoadFail");
+      return json({ ok: true });
+    }
+    /* طلب بالصوت مالقاش مكان في القايمة: كلمات قليلة بس (من غير رقم ولا اسم ولا IP محفوظ) — بنعدّها علشان الإدارة تضيف الأماكن الناقصة */
+    if (route === "vmiss" && method === "POST") {
+      if (!(await rateOk(env, "vm-" + ipOf(request), 10))) return json({ ok: true });
+      const b = await parseBody(request);
+      const q = String((b && b.q) || "").replace(/[^\u0600-\u06FF0-9 ]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter((w) => !/[0-9\u0660-\u0669]{4,}/.test(w)).slice(0, 4).join(" ").slice(0, 40);
+      if (q.length < 3) return json({ ok: true });
+      const cur = (await getDoc(env, "vmiss", q)) || { id: q, n: 0, first: Date.now() };
+      cur.n = (+cur.n || 0) + 1; cur.last = Date.now();
+      await putDoc(env, "vmiss", q, cur);
+      if (Math.random() < 0.02) { try { await env.DB.prepare("DELETE FROM docs WHERE kind='vmiss' AND updated<?").bind(Date.now() - 90 * 864e5).run(); } catch (e) {} }
       return json({ ok: true });
     }
     if (route === "map-usage" && method === "GET") {
@@ -3017,6 +3029,19 @@ async function handle({ request, env, params }) {
     }
     if (!(await adminOk(request, env))) return json({ error: "غير مصرّح" }, 401);
 
+    /* الإدارة: أماكن اتطلبت بالصوت ومش في القايمة */
+    if (route === "admin-vmiss") {
+      if (method === "GET") {
+        const { results } = await env.DB.prepare("SELECT data FROM docs WHERE kind='vmiss' ORDER BY updated DESC LIMIT 300").all();
+        const list = (results || []).map((r) => { try { return JSON.parse(r.data); } catch (e) { return null; } }).filter(Boolean).sort((a, b) => (b.n || 0) - (a.n || 0)).slice(0, 60);
+        return json({ list });
+      }
+      if (method === "POST") {
+        const b = await parseBody(request);
+        if (b && b.id) await env.DB.prepare("DELETE FROM docs WHERE kind='vmiss' AND id=?").bind(String(b.id).slice(0, 60)).run();
+        return json({ ok: true });
+      }
+    }
     /* الإدارة: نفس لوحة الحارس (للبورتال) + تجربة تنبيه تيليجرام */
     if (route === "admin-guard") return guardApi(request, env, url);
     /* الإدارة: سجل الأخطاء */
@@ -3341,7 +3366,7 @@ ${JSON.stringify(stats)}`;
     return json({ error: "غير موجود" }, 404);
   } catch (err) {
     const big = err && err.message === "too_large";
-    if (!big) await logErr(env, { where: "server", msg: (err && err.message) || String(err), stack: err && err.stack, page: method + " /api/" + parts.join("/").replace(/\/[A-Za-z0-9_-]{8,}/g, "/:id"), ver: "v108" });
+    if (!big) await logErr(env, { where: "server", msg: (err && err.message) || String(err), stack: err && err.stack, page: method + " /api/" + parts.join("/").replace(/\/[A-Za-z0-9_-]{8,}/g, "/:id"), ver: "v109" });
     return json({ error: big ? "حجم البيانات كبير" : "خطأ في الخادم" }, big ? 413 : 500);
   }
 }
