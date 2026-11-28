@@ -27,7 +27,10 @@ jobs:
           openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in "mahatta-$d.json.gz.enc" -pass env:BACKUP_PASS | gunzip | jq -e '.count' > /dev/null
           echo "n=$n" >> "$GITHUB_ENV"
       - uses: actions/upload-artifact@v4
-        with: { name: vault-${{ github.run_id }}, path: "mahatta-*.enc", retention-days: 30 }
+        with:
+          name: vault-${{ github.run_id }}
+          path: mahatta-*.enc
+          retention-days: 30
       - name: Report
         if: always()
         env:
