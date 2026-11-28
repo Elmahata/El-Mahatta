@@ -154,6 +154,41 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
 
 <div id="nearPill" hidden style="position:fixed;top:calc(68px + env(safe-area-inset-top,0px));inset-inline-start:12px;z-index:690;display:flex;align-items:center;gap:8px;padding:7px 13px;border-radius:999px;background:color-mix(in oklab,var(--surface) 88%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);box-shadow:var(--shadow);font:600 13px var(--body);color:var(--ink)"><span style="width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 4px color-mix(in oklab,var(--ok) 20%,transparent)"></span><span id="nearTxt"></span></div>
 
+<div id="vBox" hidden role="dialog" aria-modal="true" aria-labelledby="vTitle" style="position:fixed;inset:0;z-index:3000;background:rgba(14,22,20,.72);display:flex;align-items:flex-end">
+  <div style="width:100%;max-width:780px;margin:0 auto;background:var(--surface);border-radius:22px 22px 0 0;padding:22px 18px calc(24px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 30px rgba(0,0,0,.5);max-height:86vh;overflow-y:auto">
+    <div id="vListen" style="display:flex;flex-direction:column;align-items:center;gap:16px">
+      <h2 id="vTitle" style="margin:0;font:700 20px var(--display)">سامعك… قول رايح فين</h2>
+      <div class="v-orb" aria-hidden="true"><i></i><i></i><span><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></span></div>
+      <div id="vLive" aria-live="polite" style="min-height:52px;width:100%;box-sizing:border-box;border-radius:12px;background:var(--inset);padding:12px 14px;text-align:center;font-size:18px;font-weight:600">…</div>
+      <div style="display:flex;gap:10px;width:100%">
+        <button type="button" id="vDone" class="btn btn-primary" style="flex:1;min-height:52px">خلاص</button>
+        <button type="button" id="vCancel" class="btn btn-ghost" style="flex:1;min-height:52px">إلغاء</button>
+      </div>
+    </div>
+    <div id="vRes" hidden style="display:flex;flex-direction:column;gap:10px">
+      <div style="color:var(--ink-2);font-size:14px">سمعتك بتقول:</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div id="vHeard" style="flex:1;font:700 19px var(--display)"></div>
+        <button type="button" id="vAgain" class="btn btn-ghost btn-sm" style="min-height:40px;border-radius:999px;color:var(--accent-ink)">🎤 قول تاني</button>
+      </div>
+      <div id="vPickT" style="font-weight:600;margin-top:4px">اختار المكان الصح:</div>
+      <div id="vList" style="display:flex;flex-direction:column;gap:8px"></div>
+      <button type="button" id="vType" style="min-height:44px;background:none;border:0;color:var(--accent-ink);font:600 14px var(--body);text-decoration:underline;cursor:pointer">مش لاقي المكان؟ اكتبه أو حدده على الخريطة</button>
+    </div>
+  </div>
+</div>
+<style>
+.v-orb{position:relative;width:110px;height:110px;display:grid;place-items:center}
+.v-orb i{position:absolute;width:88px;height:88px;border-radius:50%;background:var(--accent);animation:vRing 1.6s cubic-bezier(.22,1,.36,1) infinite}
+.v-orb i+i{animation-delay:.55s}
+.v-orb span{position:relative;width:88px;height:88px;border-radius:50%;background:var(--accent);color:var(--ground,#0E1614);display:grid;place-items:center}
+.v-orb.off i{animation:none;opacity:0}
+@keyframes vRing{0%{transform:scale(1);opacity:.5}100%{transform:scale(2);opacity:0}}
+@media (prefers-reduced-motion:reduce){.v-orb i{animation:none;opacity:0}}
+.v-opt{display:flex;align-items:center;gap:12px;width:100%;text-align:start;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink);font:inherit;cursor:pointer;min-height:64px}
+.v-opt b.f{padding:6px 10px;border-radius:999px;background:var(--fare-soft);color:var(--fare);white-space:nowrap}
+</style>
+
 <div class="sheet" id="sheet">
   <div class="grab"></div>
 
@@ -171,7 +206,9 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       <div class="field" style="margin:8px 0 6px;position:relative">
         <input id="plSearch" type="search" placeholder="ابحث: مستشفى، المحطة، اسم قرية…" autocomplete="off" style="padding-inline-start:40px;min-height:50px;font-size:16px">
         <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="position:absolute;inset-inline-start:12px;top:15px;opacity:.55;pointer-events:none"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <button type="button" id="vMic" hidden aria-label="قول المكان بصوتك" style="position:absolute;inset-inline-end:4px;top:3px;width:44px;height:44px;border-radius:50%;border:0;background:var(--accent);color:var(--ground,#0E1614);display:grid;place-items:center;cursor:pointer;box-shadow:0 4px 14px color-mix(in oklab,var(--accent) 40%,transparent)"><svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></button>
       </div>
+      <p class="hint" id="vHint" hidden style="margin:0 2px 4px;font-size:13px">🎤 دوس على الميكروفون وقول المكان اللي رايحه</p>
       <div id="plList" style="max-height:38vh;overflow-y:auto;margin:0 -4px;padding:0 4px"></div>
       <button type="button" id="toMapMode" style="display:block;width:100%;margin-top:8px;min-height:44px;background:none;border:0;color:var(--accent-ink,#0A5A4E);font:600 14px var(--body);text-decoration:underline;cursor:pointer">مش لاقي المكان؟ حدده على الخريطة</button>
     </div>
@@ -613,6 +650,8 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       $("listMode").hidden = gpsOnly || mapMode; $("mapMode").hidden = gpsOnly || !mapMode;
       $("pickHint").textContent = gpsOnly ? "دوس الزرار، والسائق هيجيلك على مكانك بالظبط" : mapMode ? "حرّك الخريطة لحد ما الدبوس يبقى على المكان بالظبط" : "اكتب أو اختار المكان اللي رايحه";
       $("plSearch").value = ""; if(!gpsOnly) renderList();
+      $("vMic").hidden = !(VOICE && s === "to"); $("vHint").hidden = $("vMic").hidden;
+      $("plSearch").style.paddingInlineEnd = $("vMic").hidden ? "" : "54px";
       if(mapMode && !gpsOnly) updatePick();
     }
     if(s === "confirm"){ renderConfirm(); updMore(); if(!$("rName").value.trim() || !$("rPhone").value.trim()) $("moreOpts").open = true; }
@@ -700,6 +739,76 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     choosePt({ lat:p.lat, lng:p.lng, label:p.name, zone:TT.zoneName ? TT.zoneName(state.zones, p.zoneId) : "", zoneId:p.zoneId || "" });
   });
   function renderSug(){ if(step === "from" || step === "to") renderList(); }
+
+  /* ---------- طلب الوجهة بالصوت (v109) — التعرّف على الكلام بيتم على الموبايل نفسه، ومش بنسجّل ولا بنحفظ الصوت ---------- */
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition, VOICE = !!SR, vRec = null, vText = "", vFinal = "";
+  var FILL = ["عايز","عاوز","عايزه","عاوزه","انا","اروح","روح","روحني","وديني","وصلني","خدني","على","علي","لحد","عند","الى","الي","ل","لـ","يا","اسطى","اسطي","لو","سمحت","من","فضلك","المكان","مكان","هناك","بتاع","بتاعه","اللي","في","هروح","رايح","رايحه","ممكن","توصلني","توديني","لي","ده","دي"];
+  function vTokens(t){ return norm(t).replace(/[^\u0600-\u06FFa-z0-9 ]/g," ").split(/\s+/).filter(function(w){ return w && FILL.indexOf(w) < 0; }).map(function(w){ return w.replace(/^(وال|بال|فال|لل|ال|و)(?=..)/, ""); }).filter(function(w){ return w && FILL.indexOf(w) < 0; }); }
+  var CATW = { health:["مستشفي","عياده","صيدليه","دكتور","طبيب","اسعاف","وحده"], transport:["موقف","محطه","مواصلات","عربيات","ميكروباص"], edu:["مدرسه","معهد","كليه","حضانه"], gov:["مجلس","بنك","بريد","مصلحه","سجل","شهر","قسم","مركز","محكمه"], market:["سوق","محل","سوبر","ماركت","مول"], public:["جامع","مسجد","كنيسه","نادي","حديقه","جنينه"] };
+  function vMatch(text){
+    var tk = vTokens(text), joined = tk.join(" "); if(!tk.length) return [];
+    var other = trip.from;
+    return state.places.filter(function(p){ return p.lat != null && p.lng != null && !(other && metres(other, p) < 60); }).map(function(p){
+      var nt = vTokens(p.name), sc = 0;
+      nt.forEach(function(w){ tk.forEach(function(x){ if(w === x) sc += 3; else if(w.length > 2 && x.length > 2 && (w.indexOf(x) === 0 || x.indexOf(w) === 0)) sc += 2; }); });
+      var nj = nt.join(" "); if(nj && joined.indexOf(nj) >= 0) sc += 4;
+      var cat = vTokens(CATS[p.cat] || "").concat(CATW[p.cat] || []); cat.forEach(function(w){ if(tk.indexOf(w) >= 0) sc += 1; });
+      return { p:p, sc:sc };
+    }).filter(function(x){ return x.sc > 0; }).sort(function(a, b){ return b.sc - a.sc; }).slice(0, 3);
+  }
+  function vShow(which){
+    $("vListen").hidden = which !== "listen"; $("vListen").style.display = which === "listen" ? "flex" : "none";
+    $("vRes").hidden = which !== "res"; $("vRes").style.display = which === "res" ? "flex" : "none";
+  }
+  function vClose(){ try{ vRec && vRec.abort(); }catch(e){} vRec = null; $("vBox").hidden = true; document.body.style.overflow = ""; }
+  function vResults(){
+    try{ vRec && vRec.stop(); }catch(e){}
+    var said = (vFinal || vText).trim();
+    if(!said){ vClose(); TT.toast("ماسمعناش حاجة — جرّب تاني وقرّب الموبايل"); return; }
+    $("vHeard").textContent = "«" + said + "»";
+    var hits = vMatch(said);
+    $("vPickT").textContent = hits.length ? "اختار المكان الصح:" : "مالقيناش مكان بالاسم ده في القايمة.";
+    $("vList").innerHTML = hits.map(function(h, i){
+      var p = h.p, km = trip.from ? Math.round(TT.dist({ lat:+trip.from.lat, lng:+trip.from.lng }, { lat:+p.lat, lng:+p.lng }) * 1.3 * 10) / 10 : null;
+      var f = null; if(trip.from){ var keep = trip.to; trip.to = { lat:p.lat, lng:p.lng }; f = fareOf(); trip.to = keep; }
+      var zn = TT.zoneName ? TT.zoneName(state.zones, p.zoneId) : "";
+      return '<button type="button" class="v-opt" data-vi="' + i + '"><span style="width:42px;height:42px;flex:none;border-radius:11px;background:var(--accent-soft);color:var(--accent-ink);display:grid;place-items:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>'
+        + '<span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:16px">' + TT.esc(p.name) + '</span><span style="display:block;color:var(--muted);font-size:13px">' + TT.esc([CATS[p.cat] || "", zn, km != null ? km + " كم" : ""].filter(Boolean).join(" · ")) + '</span></span>'
+        + (f && f.known ? '<b class="f">≈ ' + f.amount + ' ج</b>' : '') + '</button>';
+    }).join("");
+    $("vList").onclick = function(e){
+      var b = e.target.closest && e.target.closest("[data-vi]"); if(!b) return;
+      var p = hits[+b.getAttribute("data-vi")].p; vClose();
+      choosePt({ lat:p.lat, lng:p.lng, label:p.name, zone:TT.zoneName ? TT.zoneName(state.zones, p.zoneId) : "", zoneId:p.zoneId || "" });
+    };
+    vShow("res");
+  }
+  function vStart(){
+    if(!VOICE) return;
+    vText = ""; vFinal = ""; $("vLive").textContent = "…"; $("vListen").querySelector(".v-orb").classList.remove("off");
+    $("vBox").hidden = false; document.body.style.overflow = "hidden"; vShow("listen");
+    try{
+      vRec = new SR(); vRec.lang = "ar-EG"; vRec.interimResults = true; vRec.continuous = false; vRec.maxAlternatives = 1;
+      vRec.onresult = function(ev){
+        var t = "", f = ""; for(var i = 0; i < ev.results.length; i++){ var r = ev.results[i]; t += r[0].transcript; if(r.isFinal) f += r[0].transcript; }
+        vText = t; vFinal = f || vFinal; $("vLive").textContent = t || "…";
+      };
+      vRec.onerror = function(ev){
+        var er = ev && ev.error;
+        if(er === "not-allowed" || er === "service-not-allowed"){ vClose(); TT.toast("محتاجين إذن الميكروفون — فعّله من إعدادات الموبايل أو اكتب المكان"); return; }
+        if(er === "no-speech"){ vClose(); TT.toast("ماسمعناش حاجة — جرّب تاني وقرّب الموبايل"); return; }
+        if(er === "network"){ vClose(); TT.toast("التعرّف على الصوت محتاج إنترنت — اكتب المكان"); return; }
+      };
+      vRec.onend = function(){ $("vListen").querySelector(".v-orb").classList.add("off"); if(!$("vBox").hidden && !$("vListen").hidden) vResults(); };
+      vRec.start();
+    }catch(e){ vClose(); TT.toast("الصوت مش شغّال على الموبايل ده — اكتب المكان"); }
+  }
+  $("vMic").addEventListener("click", vStart);
+  $("vAgain").addEventListener("click", vStart);
+  $("vDone").addEventListener("click", vResults);
+  $("vCancel").addEventListener("click", vClose);
+  $("vType").addEventListener("click", function(){ var t = vTokens(vFinal || vText).join(" "); vClose(); $("plSearch").value = t; renderList(); $("plSearch").focus(); });
+  $("vBox").addEventListener("click", function(e){ if(e.target === this) vClose(); });
   function renderSugOld(){
     var list = state.places.filter(function(p){ return p.lat != null; });
     $("sugWrap").hidden = !list.length;

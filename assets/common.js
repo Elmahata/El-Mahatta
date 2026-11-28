@@ -10,7 +10,7 @@
       seen[k] = 1; sent++;
       var C = window.Capacitor;
       o.app = C && C.isNativePlatform && C.isNativePlatform() ? C.getPlatform() : "web";
-      o.page = location.pathname; o.ua = navigator.userAgent; o.ver = "v108";
+      o.page = location.pathname; o.ua = navigator.userAgent; o.ver = "v109";
       var b = JSON.stringify(o);
       if (navigator.sendBeacon && navigator.sendBeacon("/api/err", new Blob([b], { type: "application/json" }))) return;
       fetch("/api/err", { method: "POST", headers: { "content-type": "application/json" }, body: b, keepalive: true }).catch(function () {});
