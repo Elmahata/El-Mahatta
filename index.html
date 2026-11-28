@@ -158,6 +158,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
   <div style="width:100%;max-width:780px;margin:0 auto;background:var(--surface);border-radius:22px 22px 0 0;padding:22px 18px calc(24px + env(safe-area-inset-bottom,0px));box-shadow:0 -10px 30px rgba(0,0,0,.5);max-height:86vh;overflow-y:auto">
     <div id="vListen" style="display:flex;flex-direction:column;align-items:center;gap:16px">
       <h2 id="vTitle" style="margin:0;font:700 20px var(--display)">سامعك… قول رايح فين</h2>
+      <p class="hint" style="margin:-8px 0 0;text-align:center">ممكن تقول أكتر من مكان: «السجل المدني وبعدين كوبري السوق»</p>
       <div class="v-orb" aria-hidden="true"><i></i><i></i><span><svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg></span></div>
       <div id="vLive" aria-live="polite" style="min-height:52px;width:100%;box-sizing:border-box;border-radius:12px;background:var(--inset);padding:12px 14px;text-align:center;font-size:18px;font-weight:600">…</div>
       <div style="display:flex;gap:10px;width:100%">
@@ -166,7 +167,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       </div>
     </div>
     <div id="vRes" hidden style="display:flex;flex-direction:column;gap:10px">
-      <div style="color:var(--ink-2);font-size:14px">سمعتك بتقول:</div>
+      <div id="vHeardL" style="color:var(--ink-2);font-size:14px">طلبك:</div>
       <div style="display:flex;align-items:center;gap:10px">
         <div id="vHeard" style="flex:1;font:700 19px var(--display)"></div>
         <button type="button" id="vAgain" class="btn btn-ghost btn-sm" style="min-height:40px;border-radius:999px;color:var(--accent-ink)">🎤 قول تاني</button>
@@ -763,25 +764,62 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
     $("vRes").hidden = which !== "res"; $("vRes").style.display = which === "res" ? "flex" : "none";
   }
   function vClose(){ try{ vRec && vRec.abort(); }catch(e){} vRec = null; $("vBox").hidden = true; document.body.style.overflow = ""; }
+  /* اللي بيظهر على الشاشة مش كلام الراكب بالحرف: جملة نضيفة = فعل الطلب + أسماء الأماكن من القايمة بس. أي كلام تاني بيتشال */
+  var VERBS = [[/^(عايزه|عاوزه)$/, "عايزة أروح"], [/^(عايز|عاوز)$/, "عايز أروح"], [/^محتاجه$/, "محتاجة أروح"], [/^محتاج$/, "محتاج أروح"], [/^(وصلني|توصلني)$/, "وصّلني"], [/^(روحني)$/, "روّحني"], [/^(خدني|خودني)$/, "خدني"], [/^(وديني|توديني)$/, "وديني"]];
+  function vVerb(text){
+    var ws = norm(text).split(/\s+/);
+    for(var i = 0; i < ws.length; i++) for(var j = 0; j < VERBS.length; j++) if(VERBS[j][0].test(ws[i])) return VERBS[j][1];
+    return "وديني";
+  }
+  function vPlan(text){
+    var segs = norm(text).split(/\s*(?:و\s*)?(?:بعدين|بعدها|بعد كده|بعد كدا|بعد ما|ثم|وبعد)\s*/).filter(function(x){ return x && x.trim(); });
+    var stops = [];
+    segs.forEach(function(sg){ var h = vMatch(sg); if(h.length && (!stops.length || stops[stops.length - 1].p.id !== h[0].p.id)) stops.push({ p:h[0].p, alts:h }); });
+    return { verb:vVerb(text), stops:stops.slice(0, 4), all:vMatch(text) };
+  }
+  function vSentence(pl){
+    if(!pl.stops.length) return "";
+    return pl.verb + " " + pl.stops.map(function(s){ return s.p.name; }).join(" وبعدها ");
+  }
+  function vRow(p, i, attr){
+    var km = trip.from ? Math.round(TT.dist({ lat:+trip.from.lat, lng:+trip.from.lng }, { lat:+p.lat, lng:+p.lng }) * 1.3 * 10) / 10 : null;
+    var f = null; if(trip.from){ var keep = trip.to; trip.to = { lat:p.lat, lng:p.lng }; f = fareOf(); trip.to = keep; }
+    var zn = TT.zoneName ? TT.zoneName(state.zones, p.zoneId) : "";
+    return '<button type="button" class="v-opt" ' + attr + '="' + i + '"><span style="width:42px;height:42px;flex:none;border-radius:11px;background:var(--accent-soft);color:var(--accent-ink);display:grid;place-items:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>'
+      + '<span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:16px">' + TT.esc(p.name) + '</span><span style="display:block;color:var(--muted);font-size:13px">' + TT.esc([CATS[p.cat] || "", zn, km != null ? km + " كم" : ""].filter(Boolean).join(" · ")) + '</span></span>'
+      + (f && f.known ? '<b class="f">≈ ' + f.amount + ' ج</b>' : '') + '</button>';
+  }
+  function vPt(p){ return { lat:p.lat, lng:p.lng, label:p.name, zone:TT.zoneName ? TT.zoneName(state.zones, p.zoneId) : "", zoneId:p.zoneId || "" }; }
   function vResults(){
     try{ vRec && vRec.stop(); }catch(e){}
     var said = (vFinal || vText).trim();
     if(!said){ vClose(); TT.toast("ماسمعناش حاجة — جرّب تاني وقرّب الموبايل"); return; }
-    $("vHeard").textContent = "«" + said + "»";
-    var hits = vMatch(said);
-    $("vPickT").textContent = hits.length ? "اختار المكان الصح:" : "مالقيناش مكان بالاسم ده في القايمة.";
-    $("vList").innerHTML = hits.map(function(h, i){
-      var p = h.p, km = trip.from ? Math.round(TT.dist({ lat:+trip.from.lat, lng:+trip.from.lng }, { lat:+p.lat, lng:+p.lng }) * 1.3 * 10) / 10 : null;
-      var f = null; if(trip.from){ var keep = trip.to; trip.to = { lat:p.lat, lng:p.lng }; f = fareOf(); trip.to = keep; }
-      var zn = TT.zoneName ? TT.zoneName(state.zones, p.zoneId) : "";
-      return '<button type="button" class="v-opt" data-vi="' + i + '"><span style="width:42px;height:42px;flex:none;border-radius:11px;background:var(--accent-soft);color:var(--accent-ink);display:grid;place-items:center"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>'
-        + '<span style="flex:1;min-width:0"><span style="display:block;font-weight:700;font-size:16px">' + TT.esc(p.name) + '</span><span style="display:block;color:var(--muted);font-size:13px">' + TT.esc([CATS[p.cat] || "", zn, km != null ? km + " كم" : ""].filter(Boolean).join(" · ")) + '</span></span>'
-        + (f && f.known ? '<b class="f">≈ ' + f.amount + ' ج</b>' : '') + '</button>';
-    }).join("");
+    var pl = vPlan(said), multi = pl.stops.length >= 2;
+    $("vHeardL").hidden = !pl.stops.length;
+    $("vHeard").textContent = pl.stops.length ? vSentence(pl) : "مالقيناش المكان اللي قلته";
+    if(multi){
+      $("vPickT").textContent = "مشوار متعدد — " + pl.stops.length + " أماكن بالترتيب:";
+      var tot = null; if(trip.from){ var k1 = trip.to, k2 = trip.stops, k3 = trip.multi; trip.multi = true; trip.stops = pl.stops.slice(0, -1).map(function(s){ return vPt(s.p); }); trip.to = vPt(pl.stops[pl.stops.length - 1].p); tot = fareOf(); trip.to = k1; trip.stops = k2; trip.multi = k3; }
+      $("vList").innerHTML = '<div style="display:flex;flex-direction:column;gap:6px;padding:12px;border-radius:14px;border:1px solid var(--line);background:var(--surface-2)">'
+        + pl.stops.map(function(s, i){ return '<div style="display:flex;align-items:center;gap:10px"><b style="width:26px;height:26px;flex:none;border-radius:50%;background:var(--fare-soft);color:var(--fare);display:grid;place-items:center;font-size:13px">' + (i + 1) + '</b><span style="font-weight:600">' + TT.esc(s.p.name) + '</span></div>'; }).join("")
+        + (tot && tot.known ? '<div style="margin-top:6px;color:var(--fare);font-weight:700">≈ ' + tot.amount + ' ج للمشوار كله</div>' : '') + '</div>'
+        + '<button type="button" class="btn btn-primary btn-wide" data-vmulti style="min-height:52px">تمام، كمّل</button>'
+        + '<button type="button" class="btn btn-ghost btn-wide" data-vone style="min-height:44px">لأ، مكان واحد بس</button>';
+    } else {
+      var hits = pl.stops.length ? pl.stops[0].alts : pl.all;
+      $("vPickT").textContent = hits.length ? "اختار المكان الصح:" : "جرّب تقول اسم المكان تاني بوضوح، أو اكتبه.";
+      $("vList").innerHTML = hits.map(function(h, i){ return vRow(h.p, i, "data-vi"); }).join("");
+    }
     $("vList").onclick = function(e){
-      var b = e.target.closest && e.target.closest("[data-vi]"); if(!b) return;
-      var p = hits[+b.getAttribute("data-vi")].p; vClose();
-      choosePt({ lat:p.lat, lng:p.lng, label:p.name, zone:TT.zoneName ? TT.zoneName(state.zones, p.zoneId) : "", zoneId:p.zoneId || "" });
+      var t = e.target.closest ? e.target : null; if(!t) return;
+      var b = t.closest("[data-vi]");
+      if(b){ var h0 = (pl.stops.length ? pl.stops[0].alts : pl.all)[+b.getAttribute("data-vi")]; vClose(); choosePt(vPt(h0.p)); return; }
+      if(t.closest("[data-vmulti]")){
+        vClose(); trip.multi = true; trip.multiCollect = false;
+        trip.stops = pl.stops.slice(0, -1).map(function(s){ return vPt(s.p); });
+        var last = pl.stops[pl.stops.length - 1].p; map.setView([last.lat, last.lng], 15); setDest(vPt(last)); return;
+      }
+      if(t.closest("[data-vone]")){ pl.stops = pl.stops.slice(0, 1); $("vHeard").textContent = vSentence(pl); $("vPickT").textContent = "اختار المكان الصح:"; $("vList").innerHTML = pl.stops[0].alts.map(function(h, i){ return vRow(h.p, i, "data-vi"); }).join(""); }
     };
     vShow("res");
   }
@@ -793,7 +831,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
       vRec = new SR(); vRec.lang = "ar-EG"; vRec.interimResults = true; vRec.continuous = false; vRec.maxAlternatives = 1;
       vRec.onresult = function(ev){
         var t = "", f = ""; for(var i = 0; i < ev.results.length; i++){ var r = ev.results[i]; t += r[0].transcript; if(r.isFinal) f += r[0].transcript; }
-        vText = t; vFinal = f || vFinal; $("vLive").textContent = t || "…";
+        vText = t; vFinal = f || vFinal; var lp = vPlan(t); $("vLive").textContent = lp.stops.length ? vSentence(lp) : "…";
       };
       vRec.onerror = function(ev){
         var er = ev && ev.error;
@@ -809,7 +847,7 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
   $("vAgain").addEventListener("click", vStart);
   $("vDone").addEventListener("click", vResults);
   $("vCancel").addEventListener("click", vClose);
-  $("vType").addEventListener("click", function(){ var t = vTokens(vFinal || vText).join(" "); vClose(); $("plSearch").value = t; renderList(); $("plSearch").focus(); });
+  $("vType").addEventListener("click", function(){ vClose(); $("plSearch").value = ""; renderList(); $("plSearch").focus(); });
   $("vBox").addEventListener("click", function(e){ if(e.target === this) vClose(); });
   function renderSugOld(){
     var list = state.places.filter(function(p){ return p.lat != null; });
