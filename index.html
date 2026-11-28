@@ -741,7 +741,9 @@ body.mh-matched .sheet{max-height:min(70vh, 560px)}
   function renderSug(){ if(step === "from" || step === "to") renderList(); }
 
   /* ---------- طلب الوجهة بالصوت (v109) — التعرّف على الكلام بيتم على الموبايل نفسه، ومش بنسجّل ولا بنحفظ الصوت ---------- */
-  var SR = window.SpeechRecognition || window.webkitSpeechRecognition, VOICE = !!SR, vRec = null, vText = "", vFinal = "";
+  /* تطبيق الآيفون: لازم إذن «التعرّف على الكلام» يتضاف في التطبيق الأول (NSSpeechRecognitionUsageDescription) — من غيره iOS بيقفل التطبيق، فبنخفي الزرار هناك لحد الإصدار الجاي */
+  var IOSAPP = !!(window.Capacitor && Capacitor.getPlatform && Capacitor.getPlatform() === "ios");
+  var SR = window.SpeechRecognition || window.webkitSpeechRecognition, VOICE = !!SR && !IOSAPP, vRec = null, vText = "", vFinal = "";
   var FILL = ["عايز","عاوز","عايزه","عاوزه","انا","اروح","روح","روحني","وديني","وصلني","خدني","على","علي","لحد","عند","الى","الي","ل","لـ","يا","اسطى","اسطي","لو","سمحت","من","فضلك","المكان","مكان","هناك","بتاع","بتاعه","اللي","في","هروح","رايح","رايحه","ممكن","توصلني","توديني","لي","ده","دي"];
   function vTokens(t){ return norm(t).replace(/[^\u0600-\u06FFa-z0-9 ]/g," ").split(/\s+/).filter(function(w){ return w && FILL.indexOf(w) < 0; }).map(function(w){ return w.replace(/^(وال|بال|فال|لل|ال|و)(?=..)/, ""); }).filter(function(w){ return w && FILL.indexOf(w) < 0; }); }
   var CATW = { health:["مستشفي","عياده","صيدليه","دكتور","طبيب","اسعاف","وحده"], transport:["موقف","محطه","مواصلات","عربيات","ميكروباص"], edu:["مدرسه","معهد","كليه","حضانه"], gov:["مجلس","بنك","بريد","مصلحه","سجل","شهر","قسم","مركز","محكمه"], market:["سوق","محل","سوبر","ماركت","مول"], public:["جامع","مسجد","كنيسه","نادي","حديقه","جنينه"] };
